@@ -1,5 +1,6 @@
 import { MOCK_PREFERENCES, MOCK_SELF } from '@/data/mock';
 import { requireSupabase, USE_MOCKS } from '@/lib/supabase';
+import { hydrateProfileMedia } from '@/api/profileMedia';
 import type { PrivatePreferences, Profile } from '@/types';
 
 export async function fetchMyProfile(): Promise<Profile> {
@@ -12,7 +13,7 @@ export async function fetchMyProfile(): Promise<Profile> {
     .eq('id', (await client.auth.getUser()).data.user?.id ?? '')
     .single();
   if (error) throw error;
-  return profileFromRow(data as Record<string, unknown>);
+  return hydrateProfileMedia(profileFromRow(data as Record<string, unknown>));
 }
 
 export async function updateMyProfile(patch: Partial<Profile>): Promise<void> {
@@ -104,15 +105,12 @@ function profilePatchToRow(patch: Partial<Profile>): Record<string, unknown> {
     ['city', 'city'],
     ['country', 'country'],
     ['bio', 'bio'],
-    ['photos', 'photos'],
     ['chips', 'chips'],
     ['religiousPractice', 'religious_practice'],
     ['timeline', 'timeline'],
     ['relocation', 'relocation'],
     ['familyGoals', 'family_goals'],
     ['languagesSpoken', 'languages_spoken'],
-    ['audioGreetingUrl', 'audio_greeting_url'],
-    ['audioDurationSeconds', 'audio_duration_seconds'],
   ];
   for (const [property, column] of fields) {
     if (patch[property] !== undefined) row[column] = patch[property];

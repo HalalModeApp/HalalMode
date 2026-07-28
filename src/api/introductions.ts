@@ -1,5 +1,6 @@
 import { buildMockRound } from '@/data/mock';
 import { requireSupabase, USE_MOCKS } from '@/lib/supabase';
+import { hydrateProfileMedia } from '@/api/profileMedia';
 import { TIER_LIMITS, type IntroductionRound, type MembershipTier } from '@/types';
 
 /**
@@ -19,7 +20,17 @@ export async function fetchCurrentRound(
   const client = requireSupabase();
   const { data, error } = await client.rpc('get_current_round');
   if (error) throw error;
-  return data as IntroductionRound;
+  const round = data as IntroductionRound;
+  if (!round) return round;
+  return {
+    ...round,
+    introductions: await Promise.all(
+      round.introductions.map(async (introduction) => ({
+        ...introduction,
+        profile: await hydrateProfileMedia(introduction.profile),
+      }))
+    ),
+  };
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   MOCK_THEIR_ANSWERS,
 } from '@/data/mock';
 import { requireSupabase, USE_MOCKS } from '@/lib/supabase';
+import { hydrateProfileMedia } from '@/api/profileMedia';
 import type { ChatMessage, Connection, QuestionAnswer } from '@/types';
 
 export async function fetchConnections(): Promise<Connection[]> {
@@ -12,7 +13,12 @@ export async function fetchConnections(): Promise<Connection[]> {
   const client = requireSupabase();
   const { data, error } = await client.rpc('get_connections');
   if (error) throw error;
-  return data as Connection[];
+  return Promise.all(
+    (data as Connection[]).map(async (connection) => ({
+      ...connection,
+      profile: await hydrateProfileMedia(connection.profile),
+    }))
+  );
 }
 
 export async function fetchConnection(id: string): Promise<Connection> {
@@ -25,7 +31,11 @@ export async function fetchConnection(id: string): Promise<Connection> {
   const client = requireSupabase();
   const { data, error } = await client.rpc('get_connection', { p_id: id });
   if (error) throw error;
-  const connection = data as Connection;
+  const rawConnection = data as Connection;
+  const connection: Connection = {
+    ...rawConnection,
+    profile: await hydrateProfileMedia(rawConnection.profile),
+  };
 
   if (connection.stage === 'recap' || connection.stage === 'open') {
     const { data: recap, error: recapError } = await client.rpc(
@@ -49,6 +59,9 @@ export async function submitQuestionPicks(
 ): Promise<void> {
   if (USE_MOCKS) {
     await new Promise((resolve) => setTimeout(resolve, 300));
+    const connection = MOCK_CONNECTIONS.find((item) => item.id === connectionId);
+    if (!connection) throw new Error('Connection not found.');
+    connection.myQuestionPicksSubmitted = true;
     return;
   }
 

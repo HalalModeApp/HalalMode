@@ -33,6 +33,13 @@ export type FamilyGoals =
 
 export type MembershipTier = 'free' | 'plus';
 
+export interface ProfileMediaSource {
+  /** Renderable HTTPS/mock URL. Private Storage paths are signed before use. */
+  displayUrl: string;
+  /** Bucket-relative path retained for owner mutation; absent for legacy URLs. */
+  storagePath?: string;
+}
+
 /** How many introductions a round contains, and how many may be kept. */
 export const TIER_LIMITS: Record<
   MembershipTier,
@@ -60,6 +67,8 @@ export interface Profile {
   country: string;
   bio: string;
   photos: string[];
+  /** Structured media references; `photos` remains the render-ready legacy key. */
+  photoMedia?: ProfileMediaSource[];
   chips: string[];
   religiousPractice: ReligiousPractice;
   timeline: MarriageTimeline;
@@ -68,6 +77,7 @@ export interface Profile {
   languagesSpoken: string[];
   isVerified: boolean;
   audioGreetingUrl?: string;
+  audioGreetingStoragePath?: string;
   audioDurationSeconds?: number;
 }
 
