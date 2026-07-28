@@ -33,7 +33,7 @@ export async function updateMyProfile(patch: Partial<Profile>): Promise<void> {
   // trigger also enforce this boundary, but the client should be correct too.
   const changes = profilePatchToRow(patch);
   if (Object.keys(changes).length === 0) return;
-  const { error } = await client.from('profiles').update(changes).eq('id', user.id);
+  const { error } = await client.rpc('update_my_profile', { p_patch: changes });
   if (error) throw error;
 }
 

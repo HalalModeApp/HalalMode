@@ -65,11 +65,8 @@ export async function releaseIntroduction(
   if (USE_MOCKS) return;
 
   const client = requireSupabase();
-  const { error } = await client
-    .from('introduction_selections')
-    .upsert(
-      { introduction_id: introductionId, decision: 'released' },
-      { onConflict: 'introduction_id' }
-    );
+  const { error } = await client.rpc('release_introduction', {
+    p_introduction_id: introductionId,
+  });
   if (error) throw error;
 }

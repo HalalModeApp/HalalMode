@@ -1,7 +1,6 @@
 /** Creates the daily introduction round at the planned Madinah Fajr time. */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-const CRON_SECRET = Deno.env.get('CRON_SECRET');
 const MADINAH_TIME_ZONE = 'Asia/Riyadh';
 
 function madinahParts(date = new Date()) {
@@ -53,14 +52,19 @@ async function planTomorrowFajr(now = new Date()) {
 }
 
 Deno.serve(async (request: Request) => {
-  const hasSecret = request.headers.get('x-cron-secret') === CRON_SECRET;
-  const hasPublishableKey = request.headers.get('authorization') === `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`;
-  if (!hasSecret && !hasPublishableKey) return new Response('Forbidden', { status: 403 });
+  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const client = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   );
+  const suppliedSecret = request.headers.get('x-cron-secret') ?? '';
+  const verified = await client.rpc('verify_round_scheduler_secret', {
+    p_secret: suppliedSecret,
+  });
+  if (verified.error || verified.data !== true) {
+    return new Response('Forbidden', { status: 403 });
+  }
   if (new URL(request.url).searchParams.get('mode') === 'plan') {
     const plan = await planTomorrowFajr();
     const result = await client.rpc('set_madinah_fajr_cron', { p_schedule: plan.schedule });
@@ -68,7 +72,7 @@ Deno.serve(async (request: Request) => {
     return Response.json({ plannedFor: plan.cycleDate, scheduleUtc: plan.schedule });
   }
   const timing = await madinahFajrWindow();
-  if (!hasSecret && !timing.due) {
+  if (!timing.due) {
     return Response.json({ skipped: 'Outside the Madinah Fajr window', cycleDate: timing.cycleDate });
   }
 
