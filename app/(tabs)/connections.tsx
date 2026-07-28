@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { fetchConnections } from '@/api/connections';
 import { BrandHeader } from '@/components/navigation/BrandHeader';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/AsyncState';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { queryKeys } from '@/lib/queryClient';
@@ -32,10 +33,11 @@ export default function ConnectionsScreen() {
   const { tier } = useSession();
   const limit = TIER_LIMITS[tier].openConnections;
 
-  const { data: connections = [] } = useQuery({
+  const connectionsQuery = useQuery({
     queryKey: queryKeys.connections,
     queryFn: fetchConnections,
   });
+  const connections = connectionsQuery.data ?? [];
 
   return (
     <Screen withTabBar>
@@ -56,17 +58,23 @@ export default function ConnectionsScreen() {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
       >
+        {connectionsQuery.isPending ? <LoadingState label="Loading your connections" /> : null}
+        {connectionsQuery.isError ? (
+          <ErrorState
+            title="Connections unavailable"
+            message="We couldn't load your connections. Your conversations are still safe."
+            onRetry={() => void connectionsQuery.refetch()}
+          />
+        ) : null}
         {connections.map((connection) => (
           <ConnectionRow key={connection.id} connection={connection} />
         ))}
 
-        {connections.length === 0 ? (
-          <View style={styles.empty}>
-            <Text variant="bodySmall" center>
-              Nothing open yet. Your first connection appears here once an
-              interest is mutual.
-            </Text>
-          </View>
+        {!connectionsQuery.isPending && !connectionsQuery.isError && connections.length === 0 ? (
+          <EmptyState
+            title="No connections yet"
+            message="When interest is mutual, your new connection will appear here."
+          />
         ) : null}
       </ScrollView>
     </Screen>
@@ -163,6 +171,4 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: color.gold,
   },
-
-  empty: { paddingVertical: 60, paddingHorizontal: 30 },
 });

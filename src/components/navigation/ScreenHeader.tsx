@@ -1,8 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { I18nManager, Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/ui/Text';
-import { alpha, color, font, space } from '@/theme/tokens';
+import { alpha, color, space } from '@/theme/tokens';
 
 export interface ScreenHeaderProps {
   /**
@@ -47,9 +48,17 @@ export function ScreenHeader({
           pressed && styles.pressed,
         ]}
       >
-        <Text style={[styles.glyph, dark ? styles.glyphDark : styles.glyphLight]}>
-          {action === 'back' ? '←' : '✕'}
-        </Text>
+        <Ionicons
+          name={
+            action === 'close'
+              ? 'close'
+              : I18nManager.isRTL
+                ? 'chevron-forward'
+                : 'chevron-back'
+          }
+          color={dark ? color.white : color.inkSoft}
+          size={20}
+        />
       </Pressable>
 
       {trailingLabel ? (
@@ -72,9 +81,9 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   button: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -89,8 +98,5 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(252,252,251,0.18)',
   },
   pressed: { opacity: 0.6, transform: [{ scale: 0.94 }] },
-  glyph: { fontFamily: font.body, fontSize: 15, lineHeight: 18 },
-  glyphLight: { color: color.inkSoft },
-  glyphDark: { color: color.white },
   labelDark: { color: 'rgba(252,252,251,0.6)' },
 });

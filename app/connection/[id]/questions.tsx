@@ -1,29 +1,33 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { fetchConnection, submitQuestionPicks } from '@/api/connections';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { Button } from '@/components/ui/Button';
+import { ErrorState, InlineNotice, LoadingState } from '@/components/ui/AsyncState';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { CATEGORY_LABELS, QUESTIONS_TO_PICK, QUESTION_LIBRARY } from '@/data/questions';
-import { queryKeys } from '@/lib/queryClient';
+import { queryClient, queryKeys } from '@/lib/queryClient';
 import { alpha, color, radius, space } from '@/theme/tokens';
 
 export default function QuestionSelectScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [picked, setPicked] = useState<string[]>([]);
 
-  const { data: connection } = useQuery({
+  const connectionQuery = useQuery({
     queryKey: queryKeys.connection(id),
     queryFn: () => fetchConnection(id),
   });
 
   const mutation = useMutation({
     mutationFn: () => submitQuestionPicks(id, picked),
-    onSuccess: () => router.push(`/connection/${id}/answers`),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.connection(id) });
+      router.replace(`/connection/${id}/waiting`);
+    },
   });
 
   const toggle = (questionId: string) => {
@@ -37,7 +41,29 @@ export default function QuestionSelectScreen() {
   };
 
   const complete = picked.length === QUESTIONS_TO_PICK;
-  const firstName = connection?.profile.firstName ?? '';
+  if (connectionQuery.isPending) {
+    return <Screen><LoadingState label="Loading the question library" /></Screen>;
+  }
+  if (connectionQuery.isError || !connectionQuery.data) {
+    return (
+      <Screen>
+        <ScreenHeader />
+        <ErrorState
+          title="Questions unavailable"
+          message="We couldn't load this connection."
+          onRetry={() => void connectionQuery.refetch()}
+        />
+      </Screen>
+    );
+  }
+
+  const connection = connectionQuery.data;
+  if (connection.stage === 'answering') return <Redirect href={`/connection/${id}/answers`} />;
+  if (connection.stage === 'recap') return <Redirect href={`/connection/${id}/recap`} />;
+  if (connection.stage === 'open') return <Redirect href={`/connection/${id}/chat`} />;
+  if (connection.myQuestionPicksSubmitted) return <Redirect href={`/connection/${id}/waiting`} />;
+
+  const firstName = connection.profile.firstName;
 
   return (
     <Screen>
@@ -87,6 +113,9 @@ export default function QuestionSelectScreen() {
         })}
       </ScrollView>
 
+      {mutation.isError ? (
+        <InlineNotice message="Your questions weren't saved. Please try again." />
+      ) : null}
       <View style={styles.footer}>
         <Text variant="bodySmall">
           {picked.length} of {QUESTIONS_TO_PICK} chosen

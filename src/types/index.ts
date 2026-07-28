@@ -173,6 +173,9 @@ export interface Connection {
   profile: Profile;
   createdAt: string;
   stage: ConnectionStage;
+  /** Server-derived progress for the two-sided question handoff. */
+  myQuestionPicksSubmitted?: boolean;
+  theirQuestionPicksSubmitted?: boolean;
   /** The five agreed questions, in display order. */
   questions: QuestionAnswer[];
   recap?: RecapItem[];

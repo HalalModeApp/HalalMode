@@ -1,17 +1,27 @@
+import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
+import { fetchConnections } from '@/api/connections';
+import { fetchMyProfile } from '@/api/profile';
 import { Confetti } from '@/components/introductions/Confetti';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { MOCK_PROFILES, MOCK_SELF } from '@/data/mock';
 import { color, font, radius, space } from '@/theme/tokens';
+import type { ConnectionStage } from '@/types';
+
+const NEXT_ROUTE: Record<ConnectionStage, string> = {
+  choosing_questions: 'questions',
+  answering: 'answers',
+  recap: 'recap',
+  open: 'chat',
+};
 
 /**
  * The mutual-interest reveal.
@@ -22,11 +32,70 @@ import { color, font, radius, space } from '@/theme/tokens';
  */
 export default function MatchScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const profile = MOCK_PROFILES.find((item) => item.id === id) ?? MOCK_PROFILES[0]!;
+  const matchId = Array.isArray(id) ? id[0] : id;
+  const {
+    data: match,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery({
+    queryKey: ['match-reveal', matchId],
+    enabled: !!matchId,
+    queryFn: async () => {
+      const [connections, self] = await Promise.all([
+        fetchConnections(),
+        fetchMyProfile(),
+      ]);
+      const connection = connections.find(
+        (item) => item.id === matchId || item.profile.id === matchId
+      );
+      return connection ? { connection, self } : null;
+    },
+    staleTime: 0,
+  });
 
   useEffect(() => {
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, []);
+    if (match) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }, [match]);
+
+  if (isLoading) {
+    return (
+      <MatchStatus
+        title="Preparing your match"
+        body="We’re opening the connection you both chose."
+        loading
+      />
+    );
+  }
+
+  if (isError) {
+    return (
+      <MatchStatus
+        title="We couldn’t open this match"
+        body="Your connection is still safe. Check your connection and try again."
+        actionLabel="Try again"
+        actionLoading={isFetching}
+        onAction={() => void refetch()}
+      />
+    );
+  }
+
+  if (!match) {
+    return (
+      <MatchStatus
+        title="This match isn’t available"
+        body="It may have expired or already moved to your Connections."
+        actionLabel="View connections"
+        onAction={() => router.replace('/(tabs)/connections')}
+      />
+    );
+  }
+
+  const { connection, self } = match;
+  const profile = connection.profile;
 
   return (
     <Screen>
@@ -49,7 +118,7 @@ export default function MatchScreen() {
         >
           <View style={[styles.plate, styles.plateLeft]}>
             <Image
-              source={MOCK_SELF.photos[0]}
+              source={self.photos[0]}
               style={styles.avatar}
               contentFit="cover"
               accessibilityIgnoresInvertColors
@@ -78,8 +147,16 @@ export default function MatchScreen() {
         </Text>
 
         <Button
-          label="Choose questions"
-          onPress={() => router.replace('/connection/conn-1/questions')}
+          label={
+            connection.stage === 'choosing_questions'
+              ? 'Choose questions'
+              : 'Continue connection'
+          }
+          onPress={() =>
+            router.replace(
+              `/connection/${connection.id}/${NEXT_ROUTE[connection.stage]}`
+            )
+          }
           style={styles.cta}
         />
         <Button
@@ -92,7 +169,58 @@ export default function MatchScreen() {
   );
 }
 
+function MatchStatus({
+  title,
+  body,
+  loading,
+  actionLabel,
+  actionLoading,
+  onAction,
+}: {
+  title: string;
+  body: string;
+  loading?: boolean;
+  actionLabel?: string;
+  actionLoading?: boolean;
+  onAction?: () => void;
+}) {
+  return (
+    <Screen>
+      <ScreenHeader
+        action="close"
+        onAction={() => router.replace('/(tabs)/connections')}
+      />
+      <View style={styles.status}>
+        {loading ? <ActivityIndicator color={color.ink} /> : null}
+        <Text variant="displaySmall" center>
+          {title}
+        </Text>
+        <Text variant="bodySmall" center style={styles.statusBody}>
+          {body}
+        </Text>
+        {actionLabel && onAction ? (
+          <Button
+            label={actionLabel}
+            loading={actionLoading}
+            onPress={onAction}
+            style={styles.statusAction}
+          />
+        ) : null}
+      </View>
+    </Screen>
+  );
+}
+
 const styles = StyleSheet.create({
+  status: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.md,
+    paddingHorizontal: 36,
+  },
+  statusBody: { maxWidth: 280 },
+  statusAction: { alignSelf: 'stretch', marginTop: space.sm },
   body: {
     flex: 1,
     alignItems: 'center',

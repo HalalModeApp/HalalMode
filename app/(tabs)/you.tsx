@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { fetchConnections } from '@/api/connections';
 import { fetchMyPreferences, fetchMyProfile } from '@/api/profile';
 import { BrandHeader } from '@/components/navigation/BrandHeader';
+import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
 import { Screen } from '@/components/ui/Screen';
 import { Segmented } from '@/components/ui/Segmented';
 import { Text } from '@/components/ui/Text';
@@ -20,38 +21,56 @@ type Tab = 'profile' | 'private' | 'settings';
 const SUBTITLES: Record<Tab, string> = {
   profile: 'What everyone in your set can see.',
   private: 'Only ever used to choose who you meet.',
-  settings: 'Pace, membership and safety.',
+  settings: 'Preferences, membership and safety.',
 };
 
 export default function YouScreen() {
   const [tab, setTab] = useState<Tab>('profile');
   const { live } = useRound();
 
-  const { data: profile } = useQuery({
+  const profileQuery = useQuery({
     queryKey: queryKeys.profile('me'),
     queryFn: fetchMyProfile,
   });
 
-  const { data: preferences } = useQuery({
+  const preferencesQuery = useQuery({
     queryKey: queryKeys.preferences,
     queryFn: fetchMyPreferences,
   });
 
-  const { data: connections = [] } = useQuery({
+  const connectionsQuery = useQuery({
     queryKey: queryKeys.connections,
     queryFn: fetchConnections,
   });
 
-  if (!profile || !preferences) {
+  if (profileQuery.isPending || preferencesQuery.isPending) {
     return (
       <Screen withTabBar>
         <BrandHeader />
-        <View style={styles.centred}>
-          <ActivityIndicator color={color.ink} />
-        </View>
+        <LoadingState label="Loading your profile" />
       </Screen>
     );
   }
+
+  if (profileQuery.isError || preferencesQuery.isError || !profileQuery.data || !preferencesQuery.data) {
+    return (
+      <Screen withTabBar>
+        <BrandHeader />
+        <ErrorState
+          title="Profile unavailable"
+          message="We couldn't load your profile or matching preferences."
+          onRetry={() => {
+            void profileQuery.refetch();
+            void preferencesQuery.refetch();
+          }}
+        />
+      </Screen>
+    );
+  }
+
+  const profile = profileQuery.data;
+  const preferences = preferencesQuery.data;
+  const connections = connectionsQuery.data ?? [];
 
   return (
     <Screen withTabBar>
@@ -63,7 +82,7 @@ export default function YouScreen() {
           onChange={setTab}
           options={[
             { value: 'profile', label: 'Profile' },
-            { value: 'private', label: 'Private' },
+            { value: 'private', label: 'Matching' },
             { value: 'settings', label: 'Settings' },
           ]}
         />
@@ -98,7 +117,6 @@ export default function YouScreen() {
 }
 
 const styles = StyleSheet.create({
-  centred: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   tabsRow: { paddingHorizontal: space.xl, paddingTop: 4 },
   content: { paddingHorizontal: space.xl, paddingTop: 20 },
 

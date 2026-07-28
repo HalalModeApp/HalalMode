@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
@@ -16,11 +16,13 @@ import { ArcCarousel } from '@/components/introductions/ArcCarousel';
 import { HeroCard } from '@/components/introductions/HeroCard';
 import { BrandHeader } from '@/components/navigation/BrandHeader';
 import { Button } from '@/components/ui/Button';
+import { EmptyState, ErrorState, InlineNotice, LoadingState } from '@/components/ui/AsyncState';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useCameraShake } from '@/hooks/useCameraShake';
 import { playPop, startShimmer, stopShimmer } from '@/lib/sound';
+import { USE_MOCKS } from '@/lib/supabase';
 import { useRound } from '@/state/round';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 
@@ -28,6 +30,8 @@ export default function DailyScreen() {
   const {
     round,
     isLoading,
+    error,
+    refresh,
     live,
     activeId,
     active,
@@ -39,9 +43,13 @@ export default function DailyScreen() {
     togglePopMode,
     setActive,
     release,
+    releaseError,
+    retryRelease,
+    clearReleaseError,
     submit,
     submitting,
     submitted,
+    submitError,
     reset,
   } = useRound();
 
@@ -95,16 +103,22 @@ export default function DailyScreen() {
   // hence its own confirmation.
   const handleLetGoFinal = useCallback(async () => {
     setConfirmLetGo(false);
-    const last = live[0];
-    if (last) release(last.id);
-    await submit();
-  }, [live, release, submit]);
+    try {
+      await submit([]);
+    } catch {
+      // The provider exposes the recoverable error without losing the round.
+    }
+  }, [submit]);
 
   const handleSubmit = useCallback(async () => {
     setConfirmOpen(false);
-    const mutual = await submit(interestTargetId ? [interestTargetId] : undefined);
-    if (mutual.length > 0 && mutual[0]) {
-      router.push(`/match/${mutual[0]}`);
+    try {
+      const mutual = await submit(interestTargetId ? [interestTargetId] : undefined);
+      if (mutual.length > 0 && mutual[0]) {
+        router.push(`/match/${mutual[0]}`);
+      }
+    } catch {
+      // The provider keeps the round open and exposes an actionable error.
     }
   }, [interestTargetId, submit]);
 
@@ -126,13 +140,36 @@ export default function DailyScreen() {
     [activeId, live, setActive]
   );
 
-  if (isLoading || !round) {
+  if (isLoading) {
     return (
       <Screen withTabBar>
         <BrandHeader />
-        <View style={styles.centred}>
-          <ActivityIndicator color={color.ink} />
-        </View>
+        <LoadingState label="Preparing today's introductions" />
+      </Screen>
+    );
+  }
+
+  if (error) {
+    return (
+      <Screen withTabBar>
+        <BrandHeader />
+        <ErrorState
+          title="Introductions unavailable"
+          message="We couldn't load today's introductions. Your choices have not changed."
+          onRetry={refresh}
+        />
+      </Screen>
+    );
+  }
+
+  if (!round) {
+    return (
+      <Screen withTabBar>
+        <BrandHeader />
+        <EmptyState
+          title="No introductions yet"
+          message="Your next reciprocal set will appear after Fajr in Madinah."
+        />
       </Screen>
     );
   }
@@ -158,15 +195,29 @@ export default function DailyScreen() {
             {round.introductions.length} introductions,{'\n'}one at a time.
           </Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Start the round again"
-          onPress={reset}
-          style={styles.resetButton}
-        >
-          <Text style={styles.resetGlyph}>↺</Text>
-        </Pressable>
+        {USE_MOCKS ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Start the demo round again"
+            onPress={reset}
+            style={styles.resetButton}
+          >
+            <Text style={styles.resetGlyph}>↺</Text>
+          </Pressable>
+        ) : null}
       </View>
+
+      {releaseError ? (
+        <InlineNotice
+          message="That choice wasn't saved, so the profile was restored."
+          actionLabel="Try again"
+          onAction={retryRelease}
+          onDismiss={clearReleaseError}
+        />
+      ) : null}
+      {submitError ? (
+        <InlineNotice message="We couldn't send your choices. Review them and try again." />
+      ) : null}
 
       <Animated.View style={[styles.stage, shakeStyle]}>
         {active ? (
@@ -282,7 +333,7 @@ export default function DailyScreen() {
         title={`Let go of ${finalName}?`}
         body="That ends today's round with no one kept. Nothing renews until Fajr."
         confirmLabel="Let go"
-        cancelLabel="Keep her"
+        cancelLabel={`Keep ${finalName}`}
         onConfirm={() => void handleLetGoFinal()}
         onCancel={() => setConfirmLetGo(false)}
       />
@@ -306,12 +357,14 @@ function SetCompleteState({ onReset }: { onReset: () => void }) {
         <Text variant="bodySmall" center style={styles.completeBody}>
           That was the whole set.{'\n'}Come back at Fajr for another round.
         </Text>
-        <Button
-          label="Start the demo again"
-          variant="quiet"
-          onPress={onReset}
-          style={styles.completeReset}
-        />
+        {USE_MOCKS ? (
+          <Button
+            label="Start the demo again"
+            variant="quiet"
+            onPress={onReset}
+            style={styles.completeReset}
+          />
+        ) : null}
       </Animated.View>
     </Screen>
   );

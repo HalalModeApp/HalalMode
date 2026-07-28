@@ -18,6 +18,7 @@ interface RoundValue {
   round: IntroductionRound | undefined;
   isLoading: boolean;
   error: Error | null;
+  refresh: () => void;
 
   /** Introductions still in play — released ones are filtered out. */
   live: Introduction[];
@@ -42,12 +43,16 @@ interface RoundValue {
 
   setActive: (id: string) => void;
   release: (id: string) => void;
+  releaseError: string | null;
+  retryRelease: () => void;
+  clearReleaseError: () => void;
 
   submitting: boolean;
   /** Commits the surviving introductions. Resolves with the mutual matches. */
   submit: (keptIntroductionIds?: string[]) => Promise<string[]>;
   /** True once keeps are submitted — drives the "Nothing more today" state. */
   submitted: boolean;
+  submitError: string | null;
 
   reset: () => void;
 }
@@ -69,11 +74,14 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [popMode, setPopMode] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [releasing, setReleasing] = useState<Record<string, true>>({});
+  const [releaseFailure, setReleaseFailure] = useState<{ id: string; message: string } | null>(null);
 
   const {
     data: round,
     isLoading,
     error,
+    refetch,
   } = useQuery({
     queryKey: [...queryKeys.round, tier],
     queryFn: () => fetchCurrentRound(tier),
@@ -110,12 +118,39 @@ export function RoundProvider({ children }: { children: ReactNode }) {
 
   const release = useCallback(
     (id: string) => {
-      // Optimistic by design: the burst plays now, the write reconciles after.
+      if (released[id] || releasing[id]) return;
+      setReleasing((current) => ({ ...current, [id]: true }));
+      setReleaseFailure(null);
       setReleased((current) => ({ ...current, [id]: true }));
-      releaseMutation.mutate(id);
+      releaseMutation.mutate(id, {
+        onError: (failure) => {
+          setReleased((current) => {
+            const next = { ...current };
+            delete next[id];
+            return next;
+          });
+          setReleaseFailure({
+            id,
+            message: failure instanceof Error
+              ? failure.message
+              : 'We could not save that choice. Nothing was changed.',
+          });
+        },
+        onSettled: () => {
+          setReleasing((current) => {
+            const next = { ...current };
+            delete next[id];
+            return next;
+          });
+        },
+      });
     },
-    [releaseMutation]
+    [released, releaseMutation, releasing]
   );
+
+  const retryRelease = useCallback(() => {
+    if (releaseFailure) release(releaseFailure.id);
+  }, [release, releaseFailure]);
 
   const submitMutation = useMutation({
     mutationFn: async (keptIntroductionIds: string[]) => {
@@ -138,6 +173,8 @@ export function RoundProvider({ children }: { children: ReactNode }) {
 
   const reset = useCallback(() => {
     setReleased({});
+    setReleasing({});
+    setReleaseFailure(null);
     setActiveId(null);
     setPopMode(false);
     setSubmitted(false);
@@ -149,6 +186,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       round,
       isLoading,
       error: (error as Error) ?? null,
+      refresh: () => void refetch(),
       live,
       activeId: resolvedActiveId,
       active,
@@ -165,15 +203,20 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       },
       setActive: setActiveId,
       release,
+      releaseError: releaseFailure?.message ?? null,
+      retryRelease,
+      clearReleaseError: () => setReleaseFailure(null),
       submitting: submitMutation.isPending,
       submit,
       submitted,
+      submitError: submitMutation.error instanceof Error ? submitMutation.error.message : null,
       reset,
     }),
     [
       round,
       isLoading,
       error,
+      refetch,
       live,
       resolvedActiveId,
       active,
@@ -182,9 +225,12 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       remaining,
       popMode,
       release,
+      releaseFailure,
+      retryRelease,
       submitMutation.isPending,
       submit,
       submitted,
+      submitMutation.error,
       reset,
     ]
   );

@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -14,6 +14,7 @@ import Animated, { FadeInUp } from 'react-native-reanimated';
 
 import { fetchConnection, submitAnswer } from '@/api/connections';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
+import { ErrorState, InlineNotice, LoadingState } from '@/components/ui/AsyncState';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
@@ -41,11 +42,12 @@ export default function AnswersScreen() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [revealed, setRevealed] = useState<Record<string, QuestionAnswer>>({});
 
-  const { data: connection } = useQuery({
+  const connectionQuery = useQuery({
     queryKey: queryKeys.connection(id),
     queryFn: () => fetchConnection(id),
   });
 
+  const connection = connectionQuery.data;
   const answers = connection?.questions ?? [];
   const current = answers[index];
 
@@ -61,12 +63,35 @@ export default function AnswersScreen() {
     },
   });
 
-  if (!connection || !current || !question) {
+  if (connectionQuery.isPending) {
+    return <Screen><LoadingState label="Loading your questions" /></Screen>;
+  }
+  if (connectionQuery.isError || !connection) {
     return (
       <Screen>
-        <View style={styles.centred}>
-          <Text variant="bodySmall">Loading your questions…</Text>
-        </View>
+        <ScreenHeader />
+        <ErrorState
+          title="Answers unavailable"
+          message="We couldn't load this connection. Your drafts are still on this device."
+          onRetry={() => void connectionQuery.refetch()}
+        />
+      </Screen>
+    );
+  }
+  if (connection.stage === 'choosing_questions') {
+    return <Redirect href={`/connection/${id}/${connection.myQuestionPicksSubmitted ? 'waiting' : 'questions'}`} />;
+  }
+  if (connection.stage === 'recap') return <Redirect href={`/connection/${id}/recap`} />;
+  if (connection.stage === 'open') return <Redirect href={`/connection/${id}/chat`} />;
+  if (!current || !question) {
+    return (
+      <Screen>
+        <ScreenHeader />
+        <ErrorState
+          title="Questions aren't ready"
+          message="Both question sets are saved, but the shared list is still being prepared."
+          onRetry={() => void connectionQuery.refetch()}
+        />
       </Screen>
     );
   }
@@ -151,8 +176,8 @@ export default function AnswersScreen() {
               <Text variant="micro">{firstName}’s answer</Text>
               <View style={styles.lockedWrap}>
                 <Text style={styles.lockedText}>
-                  She has answered already. Her words unlock the moment you
-                  commit to yours — no editing after reading.
+                  {firstName} has answered already. Their words unlock the moment
+                  you commit to yours — no editing after reading.
                 </Text>
                 <BlurView
                   intensity={22}
@@ -164,6 +189,10 @@ export default function AnswersScreen() {
             </View>
           )}
         </ScrollView>
+
+        {mutation.isError ? (
+          <InlineNotice message="Your answer wasn't saved. Check your connection and try again." />
+        ) : null}
 
         <View style={styles.footer}>
           <Button
@@ -193,8 +222,6 @@ export default function AnswersScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  centred: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-
   header: { paddingHorizontal: space.gutterWide, paddingTop: 8 },
   progress: { flexDirection: 'row', gap: 5, marginTop: 12 },
   progressTick: {

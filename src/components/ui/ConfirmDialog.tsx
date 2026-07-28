@@ -3,6 +3,7 @@ import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 
 import { Button } from '@/components/ui/Button';
 import { Text } from '@/components/ui/Text';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { alpha, color, radius, shadow, space } from '@/theme/tokens';
 
 export interface ConfirmDialogProps {
@@ -28,6 +29,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <Modal
       visible={visible}
@@ -35,13 +38,22 @@ export function ConfirmDialog({
       animationType="none"
       onRequestClose={onCancel}
     >
-      <Animated.View entering={FadeIn.duration(160)} style={styles.scrim}>
+      <Animated.View
+        accessibilityViewIsModal
+        entering={reducedMotion ? undefined : FadeIn.duration(160)}
+        style={styles.scrim}
+      >
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onCancel}
           accessibilityLabel={cancelLabel}
         />
-        <Animated.View entering={FadeInUp.duration(200)} style={styles.card}>
+        <Animated.View
+          accessible
+          accessibilityRole="alert"
+          entering={reducedMotion ? undefined : FadeInUp.duration(200)}
+          style={styles.card}
+        >
           <Text variant="displaySmall" center>
             {title}
           </Text>

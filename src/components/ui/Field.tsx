@@ -31,6 +31,8 @@ export function Field({
       </Text>
       <TextInput
         accessibilityLabel={label}
+        accessibilityHint={error || undefined}
+        aria-invalid={!!error}
         placeholderTextColor={color.whisper}
         multiline={multiline}
         style={[styles.input, multiline && styles.multiline, error && styles.inputError, style]}
@@ -55,11 +57,12 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     paddingHorizontal: 14,
     fontFamily: font.body,
-    fontSize: 12.5,
+    fontSize: 16,
+    minHeight: 48,
     color: color.ink,
     backgroundColor: color.surface,
   },
   multiline: { minHeight: 104, textAlignVertical: 'top', lineHeight: 21 },
   inputError: { borderColor: 'rgba(163,58,58,0.55)' },
-  error: { color: '#A33A3A' },
+  error: { color: '#8B2929' },
 });
