@@ -1,7 +1,4 @@
-/**
- * Runs every fifteen minutes, but creates a daily introduction round only in
- * the real Fajr window for Madinah (Umm al-Qura calculation).
- */
+/** Creates the daily introduction round at the planned Madinah Fajr time. */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const CRON_SECRET = Deno.env.get('CRON_SECRET');
@@ -17,10 +14,9 @@ function madinahParts(date = new Date()) {
   return { date: `${read('year')}-${read('month')}-${read('day')}`, hour: Number(read('hour')), minute: Number(read('minute')) };
 }
 
-async function madinahFajrWindow(now = new Date()) {
-  const current = madinahParts(now);
+async function fajrForMadinahDate(cycleDate: string) {
   const response = await fetch(
-    `https://api.aladhan.com/v1/timingsByCity/${current.date}?city=Medina&country=Saudi%20Arabia&method=4`
+    `https://api.aladhan.com/v1/timingsByCity/${cycleDate}?city=Medina&country=Saudi%20Arabia&method=4`
   );
   if (!response.ok) throw new Error('Could not retrieve Madinah prayer times');
   const payload = await response.json() as { data?: { timings?: { Fajr?: string } } };
@@ -28,9 +24,32 @@ async function madinahFajrWindow(now = new Date()) {
   const hour = pieces[0];
   const minute = pieces[1];
   if (hour === undefined || minute === undefined) throw new Error('Madinah Fajr time was unavailable');
+  return { hour, minute };
+}
+
+async function madinahFajrWindow(now = new Date()) {
+  const current = madinahParts(now);
+  const { hour, minute } = await fajrForMadinahDate(current.date);
   const currentMinutes = current.hour * 60 + current.minute;
   const fajrMinutes = hour * 60 + minute;
   return { cycleDate: current.date, due: currentMinutes >= fajrMinutes && currentMinutes < fajrMinutes + 15 };
+}
+
+async function planTomorrowFajr(now = new Date()) {
+  const today = madinahParts(now).date;
+  const tomorrow = new Date(`${today}T00:00:00+03:00`);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const timing = await madinahFajrWindow(tomorrow);
+  const response = await fetch(
+    `https://api.aladhan.com/v1/timingsByCity/${timing.cycleDate}?city=Medina&country=Saudi%20Arabia&method=4`
+  );
+  const payload = await response.json() as { data?: { timings?: { Fajr?: string } } };
+  const pieces = (payload.data?.timings?.Fajr ?? '').match(/\d{1,2}/g)?.map(Number) ?? [];
+  const hour = pieces[0];
+  const minute = pieces[1];
+  if (!response.ok || hour === undefined || minute === undefined) throw new Error('Tomorrow’s Madinah Fajr time was unavailable');
+  // Madinah is permanently UTC+3. pg_cron schedules in UTC on Supabase.
+  return { cycleDate: timing.cycleDate, schedule: `${minute} ${(hour + 21) % 24} * * *` };
 }
 
 Deno.serve(async (request: Request) => {
@@ -42,6 +61,12 @@ Deno.serve(async (request: Request) => {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   );
+  if (new URL(request.url).searchParams.get('mode') === 'plan') {
+    const plan = await planTomorrowFajr();
+    const result = await client.rpc('set_madinah_fajr_cron', { p_schedule: plan.schedule });
+    if (result.error) return Response.json({ error: result.error.message }, { status: 500 });
+    return Response.json({ plannedFor: plan.cycleDate, scheduleUtc: plan.schedule });
+  }
   const timing = await madinahFajrWindow();
   if (!hasSecret && !timing.due) {
     return Response.json({ skipped: 'Outside the Madinah Fajr window', cycleDate: timing.cycleDate });
