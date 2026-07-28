@@ -152,11 +152,10 @@ export async function sendMessage(
   } = await client.auth.getUser();
   if (authError) throw authError;
   if (!user) throw new Error('You must be signed in to send a message.');
-  const { data, error } = await client
-    .from('messages')
-    .insert({ connection_id: connectionId, sender_id: user.id, body: text })
-    .select()
-    .single();
+  const { data, error } = await client.rpc('send_message', {
+    p_connection_id: connectionId,
+    p_body: text,
+  });
   if (error) throw error;
   return messageFromRow(data as Record<string, unknown>, user.id);
 }
