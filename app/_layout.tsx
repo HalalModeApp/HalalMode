@@ -25,6 +25,7 @@ import { RoundProvider } from '@/state/round';
 import { SessionProvider } from '@/state/session';
 import { FeatureFlagsProvider } from '@/state/featureFlags';
 import { color } from '@/theme/tokens';
+import { AppRecoveryBoundary } from '@/components/ui/AppRecoveryBoundary';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -62,33 +63,35 @@ export default function RootLayout() {
               <SessionProvider>
                 <FeatureFlagsProvider>
                   <I18nProvider>
-                  <RoundProvider>
-                  <StatusBar style="dark" />
-                  <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: color.surface },
-                  animation: 'fade',
-                }}
-              >
-                    <Stack.Screen name="auth" />
-                    <Stack.Screen name="onboarding" />
-                    <Stack.Screen name="(tabs)" />
-                <Stack.Screen
-                  name="introduction/[id]"
-                  options={{ animation: 'slide_from_right' }}
-                />
-                <Stack.Screen
-                  name="match/[id]"
-                  options={{ animation: 'fade', gestureEnabled: false }}
-                />
-                <Stack.Screen name="connection/[id]" />
-                <Stack.Screen
-                  name="gallery/[id]"
-                  options={{ presentation: 'transparentModal', animation: 'fade' }}
-                />
-                  </Stack>
-                  </RoundProvider>
+                    <AppRecoveryBoundary>
+                      <RoundProvider>
+                        <StatusBar style="dark" />
+                        <Stack
+                          screenOptions={{
+                            headerShown: false,
+                            contentStyle: { backgroundColor: color.surface },
+                            animation: 'fade',
+                          }}
+                        >
+                          <Stack.Screen name="auth" />
+                          <Stack.Screen name="onboarding" />
+                          <Stack.Screen name="(tabs)" />
+                          <Stack.Screen
+                            name="introduction/[id]"
+                            options={{ animation: 'slide_from_right' }}
+                          />
+                          <Stack.Screen
+                            name="match/[id]"
+                            options={{ animation: 'fade', gestureEnabled: false }}
+                          />
+                          <Stack.Screen name="connection/[id]" />
+                          <Stack.Screen
+                            name="gallery/[id]"
+                            options={{ presentation: 'transparentModal', animation: 'fade' }}
+                          />
+                        </Stack>
+                      </RoundProvider>
+                    </AppRecoveryBoundary>
                   </I18nProvider>
                 </FeatureFlagsProvider>
               </SessionProvider>
