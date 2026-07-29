@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useI18n } from '@/i18n';
+import type { TranslationKey } from '@/i18n/catalog';
 import { useRound } from '@/state/round';
 import { alpha, color, radius, space } from '@/theme/tokens';
 
@@ -119,10 +120,10 @@ export default function IntroductionDetailScreen() {
           <Text variant="micro">{t('intro.agreements')}</Text>
           <View style={styles.agreementList}>
             {agreements.map((item) => (
-              <View key={item.label} style={[styles.agreementRow, isRTL && styles.rowRTL]}>
-                <Text variant="bodySmall">{item.label}</Text>
+              <View key={item.key ?? item.label} style={[styles.agreementRow, isRTL && styles.rowRTL]}>
+                <Text variant="bodySmall">{item.key ? t(agreementLabelKey[item.key]) : item.label}</Text>
                 <Text variant="label" style={styles.agreementValue}>
-                  {item.value}
+                  {item.key ? t(agreementValueKey[item.key]) : item.value}
                 </Text>
               </View>
             ))}
@@ -162,6 +163,20 @@ export default function IntroductionDetailScreen() {
     </Screen>
   );
 }
+
+const agreementLabelKey = {
+  marriage_timing: 'intro.agreementTiming',
+  family_plans: 'intro.agreementFamily',
+  same_city: 'intro.agreementLocation',
+  relocation: 'intro.agreementLocation',
+} as const satisfies Record<string, TranslationKey>;
+
+const agreementValueKey = {
+  marriage_timing: 'intro.agreementTimingValue',
+  family_plans: 'intro.agreementFamilyValue',
+  same_city: 'intro.agreementSameCityValue',
+  relocation: 'intro.agreementRelocationValue',
+} as const satisfies Record<string, TranslationKey>;
 
 const styles = StyleSheet.create({
   rtl: { direction: 'rtl' },

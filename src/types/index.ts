@@ -115,7 +115,7 @@ export interface Introduction {
   roundId: string;
   profile: Profile;
   /** Neutral overlap statements. Derived server-side from both private sets. */
-  agreements: { label: string; value: string }[];
+  agreements: { label?: string; value?: string; key?: 'marriage_timing' | 'family_plans' | 'same_city' | 'relocation' }[];
   /** Set locally the moment the member pops the balloon. */
   releasedAt?: string;
   /** Set locally when kept; confirmed by the server on submit. */
