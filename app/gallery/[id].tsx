@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/Text';
 import { useI18n } from '@/i18n';
+import { galleryImagePerformancePolicy, galleryListPerformancePolicy } from '@/lib/galleryPerformancePolicy';
 import { useRound } from '@/state/round';
 import { color, font, radius } from '@/theme/tokens';
 
@@ -75,6 +76,7 @@ export default function GalleryScreen() {
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onScroll}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+        {...galleryListPerformancePolicy}
         renderItem={({ item }) => (
           <View style={[styles.slide, { width }]}>
             <Image
@@ -82,6 +84,7 @@ export default function GalleryScreen() {
               style={styles.photo}
               contentFit="cover"
               transition={200}
+              {...galleryImagePerformancePolicy}
               accessibilityIgnoresInvertColors
             />
           </View>
