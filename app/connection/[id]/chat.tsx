@@ -387,8 +387,15 @@ export default function ChatScreen() {
           onContentSizeChange={() => {
             if (!shouldScrollToEndRef.current) return;
             listRef.current?.scrollToEnd({ animated: false });
-            shouldScrollToEndRef.current = false;
           }}
+          onScroll={(event) => {
+            const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+            // Keep a conversation anchored only while the member is already
+            // reading its newest messages; never pull them away from history.
+            shouldScrollToEndRef.current =
+              contentSize.height - contentOffset.y - layoutMeasurement.height < 64;
+          }}
+          scrollEventThrottle={32}
           ListHeaderComponent={
             messagesQuery.data?.hasMore ? (
               <Pressable
