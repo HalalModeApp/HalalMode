@@ -48,6 +48,10 @@ Repeat each relevant path in English and Arabic after a cold restart, at 200% fo
 
 ## Current release debt
 
+- `npm audit --omit=dev` has 20 high and 12 moderate advisories whose supported
+  remediation is a coordinated Expo 57 / React Native upgrade. See
+  `docs/DEPENDENCY_SECURITY.md`; this is a release blocker, not a candidate for
+  `npm audit fix --force`.
 - Stable `testID`s and source-controlled Maestro smoke contracts exist for authentication, daily introductions, recap, and chat; they have not yet run against a configured native build with controlled test accounts.
 - pgTAP exists but has not run through an isolated local CI database.
 - The Android/iOS matrix remains incomplete; a stale emulator bundle is not release evidence.
