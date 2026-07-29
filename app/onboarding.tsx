@@ -22,6 +22,11 @@ import {
   saveOnboardingDraft,
 } from '@/lib/onboardingDraftStorage';
 import { useAuth } from '@/state/auth';
+import {
+  birthDateValidationIssue,
+  formatBirthDate,
+  normaliseDecimalDigits,
+} from '@/lib/birthDate';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 
 type Gender = 'male' | 'female';
@@ -341,22 +346,25 @@ function BasicDetailsStep({ draft, errors, patch }: StepProps) {
         <Text variant="label">{t('onboarding.birthDate')}</Text>
         <View style={[styles.dateRow, isRTL && styles.rowReverse]}>
           <DatePart
+            kind="day"
             label={t('onboarding.day')}
             value={draft.birthDay}
             maxLength={2}
-            onChangeText={(value) => patch('birthDay', digits(value))}
+            onChangeText={(value) => patch('birthDay', normaliseDecimalDigits(value))}
           />
           <DatePart
+            kind="month"
             label={t('onboarding.month')}
             value={draft.birthMonth}
             maxLength={2}
-            onChangeText={(value) => patch('birthMonth', digits(value))}
+            onChangeText={(value) => patch('birthMonth', normaliseDecimalDigits(value))}
           />
           <DatePart
+            kind="year"
             label={t('onboarding.year')}
             value={draft.birthYear}
             maxLength={4}
-            onChangeText={(value) => patch('birthYear', digits(value))}
+            onChangeText={(value) => patch('birthYear', normaliseDecimalDigits(value))}
           />
         </View>
         {errors.birthDate ? <InlineError message={errors.birthDate} /> : null}
@@ -480,9 +488,11 @@ function Field({
   );
 }
 
-function DatePart(props: ComponentProps<typeof TextInput> & { label: string }) {
+function DatePart(
+  props: ComponentProps<typeof TextInput> & { label: string; kind: 'day' | 'month' | 'year' }
+) {
   const { t, isRTL } = useI18n();
-  const { label, ...inputProps } = props;
+  const { label, kind, ...inputProps } = props;
   return (
     <View style={styles.datePart}>
       <Text variant="caption">{label}</Text>
@@ -490,7 +500,7 @@ function DatePart(props: ComponentProps<typeof TextInput> & { label: string }) {
         {...inputProps}
         accessibilityLabel={t('onboarding.birthPartLabel', { part: label })}
         keyboardType="number-pad"
-        placeholder={label === 'Year' ? 'YYYY' : label === 'Month' ? 'MM' : 'DD'}
+        placeholder={kind === 'year' ? 'YYYY' : kind === 'month' ? 'MM' : 'DD'}
         placeholderTextColor={color.faintest}
         style={[styles.input, isRTL && styles.inputRTL]}
       />
@@ -565,38 +575,12 @@ function validateStep(step: number, draft: OnboardingDraft, t: Translate): Valid
 }
 
 function validateBirthDate(draft: OnboardingDraft, t: Translate): string | null {
-  const value = formatBirthDate(draft);
-  if (!value) return t('onboarding.error.birthIncomplete');
-  const date = new Date(`${value}T00:00:00`);
-  const [year, month, day] = value.split('-').map(Number);
-  if (
-    Number.isNaN(date.getTime()) ||
-    date.getFullYear() !== year ||
-    date.getMonth() + 1 !== month ||
-    date.getDate() !== day
-  ) {
-    return t('onboarding.error.birthInvalid');
-  }
-  const age = ageOnDate(date, new Date());
-  if (age < 18) return t('onboarding.error.tooYoung');
-  if (age > 100) return t('onboarding.error.birthYear');
+  const issue = birthDateValidationIssue(draft);
+  if (issue === 'incomplete') return t('onboarding.error.birthIncomplete');
+  if (issue === 'invalid') return t('onboarding.error.birthInvalid');
+  if (issue === 'too_young') return t('onboarding.error.tooYoung');
+  if (issue === 'too_old') return t('onboarding.error.birthYear');
   return null;
-}
-
-function formatBirthDate(draft: OnboardingDraft): string | null {
-  if (!draft.birthYear || !draft.birthMonth || !draft.birthDay) return null;
-  return `${draft.birthYear.padStart(4, '0')}-${draft.birthMonth.padStart(2, '0')}-${draft.birthDay.padStart(2, '0')}`;
-}
-
-function ageOnDate(birthDate: Date, today: Date): number {
-  let age = today.getFullYear() - birthDate.getFullYear();
-  if (
-    today.getMonth() < birthDate.getMonth() ||
-    (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())
-  ) {
-    age -= 1;
-  }
-  return age;
 }
 
 function readableDate(value: string, localeTag: string): string {
@@ -608,9 +592,6 @@ function readableDate(value: string, localeTag: string): string {
   }).format(new Date(`${value}T00:00:00Z`));
 }
 
-function digits(value: string): string {
-  return value.replace(/\D/g, '');
-}
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },

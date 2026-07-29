@@ -12,6 +12,7 @@
   "include": [
     "./*.test.ts",
     "../src/lib/arcLayout.ts",
+    "../src/lib/birthDate.ts",
     "../src/lib/roundInvariants.ts"
   ],
   "exclude": []
