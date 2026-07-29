@@ -12,6 +12,7 @@ export const testIds = {
     deleteDialog: 'settings-delete-dialog',
   },
   recap: { compatibility: 'compatibility-breakdown', open: 'recap-open-connection' },
+  gallery: { close: 'gallery-close', recovery: 'gallery-recovery' },
   chat: {
     call: 'chat-call',
     safety: 'chat-safety',

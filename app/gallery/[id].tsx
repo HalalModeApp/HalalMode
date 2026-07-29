@@ -1,12 +1,13 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Dimensions,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
+  useWindowDimensions,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
@@ -19,6 +20,8 @@ import {
   galleryListPerformancePolicy,
   galleryRetryKey,
 } from '@/lib/galleryPerformancePolicy';
+import { getGalleryState, safeGalleryIndex } from '@/lib/galleryState';
+import { testIds } from '@/lib/testIds';
 import { useRound } from '@/state/round';
 import { color, font, radius } from '@/theme/tokens';
 
@@ -26,33 +29,45 @@ export default function GalleryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { localeTag, isRTL, t } = useI18n();
   const insets = useSafeAreaInsets();
-  const { round } = useRound();
+  const { round, refresh } = useRound();
   const listRef = useRef<FlatList<string>>(null);
   const [index, setIndex] = useState(0);
-
-  const width = Dimensions.get('window').width;
+  const { width } = useWindowDimensions();
   const introduction = round?.introductions.find((item) => item.id === id);
   const photos = introduction?.profile.photos ?? [];
+  const galleryState = getGalleryState(!!introduction, photos.length);
+  const safeIndex = safeGalleryIndex(index, photos.length);
   const number = (value: number) => new Intl.NumberFormat(localeTag).format(value);
 
-  const onScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      setIndex(Math.round(event.nativeEvent.contentOffset.x / width));
-    },
-    [width]
-  );
+  useEffect(() => {
+    if (safeIndex !== index) setIndex(safeIndex);
+  }, [index, safeIndex]);
+
+  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    setIndex(safeGalleryIndex(Math.round(event.nativeEvent.contentOffset.x / width), photos.length));
+  };
 
   const goTo = useCallback((next: number) => {
     listRef.current?.scrollToIndex({ index: next, animated: true });
     setIndex(next);
   }, []);
 
-  if (!introduction) return null;
+  if (!introduction || galleryState !== 'ready') {
+    return (
+      <GalleryRecovery
+        title={galleryState === 'unavailable' ? t('gallery.unavailableTitle') : t('gallery.emptyTitle')}
+        message={galleryState === 'unavailable' ? t('gallery.unavailableBody') : t('gallery.emptyBody')}
+        onClose={() => router.back()}
+        onRetry={galleryState === 'unavailable' ? () => refresh() : undefined}
+      />
+    );
+  }
 
   return (
     <View style={[styles.backdrop, { paddingTop: insets.top }]}>
       <View style={[styles.header, isRTL && styles.rowRTL]}>
         <Pressable
+          testID={testIds.gallery.close}
           accessibilityRole="button"
           accessibilityLabel={t('gallery.close')}
           onPress={() => router.back()}
@@ -66,17 +81,19 @@ export default function GalleryScreen() {
         </Text>
         <View style={styles.counter}>
           <Text style={styles.counterLabel}>
-            {number(index + 1)} / {number(photos.length)}
+            {number(safeIndex + 1)} / {number(photos.length)}
           </Text>
         </View>
       </View>
 
       <FlatList
+        key={`gallery-${width}`}
         ref={listRef}
         data={photos}
         keyExtractor={(item) => item}
         horizontal
         pagingEnabled
+        initialScrollIndex={safeIndex}
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onScroll}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
@@ -86,14 +103,18 @@ export default function GalleryScreen() {
         )}
       />
 
-      <View style={[styles.thumbs, { paddingBottom: insets.bottom + 20 }]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[styles.thumbs, { paddingBottom: insets.bottom + 20 }]}
+      >
         {photos.map((photo, thumbIndex) => (
           <Pressable
             key={photo}
             accessibilityRole="button"
             accessibilityLabel={t('gallery.photoA11y', { count: number(thumbIndex + 1) })}
             onPress={() => goTo(thumbIndex)}
-            style={[styles.thumb, thumbIndex === index && styles.thumbActive]}
+            style={[styles.thumb, thumbIndex === safeIndex && styles.thumbActive]}
           >
             <Image
               source={photo}
@@ -103,6 +124,36 @@ export default function GalleryScreen() {
             />
           </Pressable>
         ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function GalleryRecovery({
+  title,
+  message,
+  onClose,
+  onRetry,
+}: {
+  title: string;
+  message: string;
+  onClose: () => void;
+  onRetry?: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <View testID={testIds.gallery.recovery} style={styles.backdrop}>
+      <View accessibilityRole="alert" style={styles.recovery}>
+        <Text variant="displaySmall" center style={styles.recoveryTitle}>{title}</Text>
+        <Text variant="bodySmall" center style={styles.recoveryBody}>{message}</Text>
+        {onRetry ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={t('common.tryAgain')} onPress={onRetry} style={styles.recoveryPrimary}>
+            <Text style={styles.recoveryPrimaryLabel}>{t('common.tryAgain')}</Text>
+          </Pressable>
+        ) : null}
+        <Pressable testID={testIds.gallery.close} accessibilityRole="button" accessibilityLabel={t('gallery.close')} onPress={onClose} style={styles.recoveryClose}>
+          <Text style={styles.recoveryCloseLabel}>{t('common.close')}</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -208,10 +259,10 @@ const styles = StyleSheet.create({
   retryLabel: { color: color.ink, fontFamily: font.bodyBold, fontSize: 11 },
 
   thumbs: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    alignItems: 'center',
     gap: 8,
     paddingTop: 10,
+    paddingHorizontal: 16,
   },
   thumb: {
     width: 44,
@@ -223,4 +274,11 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   thumbActive: { opacity: 1, borderColor: color.goldOnDark },
+  recovery: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 32 },
+  recoveryTitle: { color: color.white },
+  recoveryBody: { color: 'rgba(252,252,251,0.72)', maxWidth: 300 },
+  recoveryPrimary: { minHeight: 48, minWidth: 152, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, backgroundColor: color.white, paddingHorizontal: 22 },
+  recoveryPrimaryLabel: { color: color.ink, fontFamily: font.bodyBold, fontSize: 11 },
+  recoveryClose: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  recoveryCloseLabel: { color: color.white, fontFamily: font.bodySemi, fontSize: 12 },
 });
