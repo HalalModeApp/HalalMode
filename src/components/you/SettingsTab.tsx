@@ -177,9 +177,9 @@ export function SettingsTab({
         />
       </Section>
 
-      <Card tone="dark" style={styles.plusCard}>
+      <Card tone="dark" style={styles.premiumCard}>
         <View>
-          <Text style={styles.plusLabel}>{t('settings.membership')}</Text>
+          <Text style={styles.premiumLabel}>{t('settings.membership')}</Text>
           <Text style={styles.premiumTitle}>{t('settings.premium')}</Text>
         </View>
         <View style={styles.featureList}>
@@ -197,8 +197,8 @@ export function SettingsTab({
         />
       </Card>
 
-      <Card tone="filled" style={styles.plusDetails}>
-        <View style={[styles.plusDetailsHead, isRTL && styles.rowReverse]}>
+      <Card tone="filled" style={styles.premiumDetails}>
+        <View style={[styles.premiumDetailsHead, isRTL && styles.rowReverse]}>
           <View>
             <Text variant="microAccent">{t('settings.premium')}</Text>
             <Text variant="displaySmall" style={styles.premiumDetailsTitle}>
@@ -230,9 +230,9 @@ export function SettingsTab({
           />
         </View>
 
-        <View style={[styles.plusRule, isRTL && styles.rowReverse]}>
-          <Text style={styles.plusRuleMark}>◌</Text>
-          <Text variant="caption" style={styles.plusRuleText}>
+        <View style={[styles.premiumRule, isRTL && styles.rowReverse]}>
+          <Text style={styles.premiumRuleMark}>◌</Text>
+          <Text variant="caption" style={styles.premiumRuleText}>
             {t('settings.premiumPrivacy')}
           </Text>
         </View>
@@ -476,8 +476,8 @@ const styles = StyleSheet.create({
   languagePillLabel: { fontFamily: font.bodyBold, fontSize: 10, letterSpacing: 1, color: color.ink },
   restartNotice: { color: color.gold, marginTop: 8 },
 
-  plusCard: { gap: 14, borderRadius: radius.panel },
-  plusLabel: {
+  premiumCard: { gap: 14, borderRadius: radius.panel },
+  premiumLabel: {
     fontFamily: font.bodyBold,
     fontSize: 9,
     letterSpacing: 2.4,
@@ -495,8 +495,8 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: 'rgba(252,252,251,0.88)',
   },
-  plusDetails: { gap: 16, borderRadius: radius.panel, padding: 18 },
-  plusDetailsHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  premiumDetails: { gap: 16, borderRadius: radius.panel, padding: 18 },
+  premiumDetailsHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   premiumDetailsTitle: { marginTop: 6, fontSize: 20, lineHeight: 26, flexShrink: 1 },
   planBadge: {
     borderWidth: 1,
@@ -535,14 +535,14 @@ const styles = StyleSheet.create({
   benefitText: { flex: 1, gap: 3 },
   benefitTitle: { fontFamily: font.bodyBold, fontSize: 12.5, color: color.ink },
   benefitDetail: { lineHeight: 18, color: color.muted },
-  plusRule: {
+  premiumRule: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
     paddingTop: 2,
   },
-  plusRuleMark: { color: color.gold, fontFamily: font.bodyBold, fontSize: 14 },
-  plusRuleText: { flex: 1, lineHeight: 18, color: color.muted },
+  premiumRuleMark: { color: color.gold, fontFamily: font.bodyBold, fontSize: 14 },
+  premiumRuleText: { flex: 1, lineHeight: 18, color: color.muted },
   paceCard: { backgroundColor: color.sand, borderRadius: radius.lg, padding: 14, gap: 7 },
   paceBody: { fontSize: 11.5, lineHeight: 19 },
   version: { color: color.faint, marginTop: -4 },
