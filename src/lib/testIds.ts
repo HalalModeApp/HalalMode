@@ -19,6 +19,7 @@ export const testIds = {
     countrySearch: 'matching-country-search',
     countryApply: 'matching-country-apply',
     photoGuide: 'profile-photo-guide',
+    updateLocation: 'profile-update-location',
   },
   settings: {
     blocked: 'settings-blocked-members',

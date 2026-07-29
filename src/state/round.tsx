@@ -9,7 +9,8 @@ import {
   type ReactNode,
 } from 'react';
 
-import { fetchCurrentRound, releaseIntroduction, submitKeeps } from '@/api/introductions';
+import { fetchCurrentRoundState, releaseIntroduction, submitKeeps } from '@/api/introductions';
+import type { DailyRoundEmptyReason } from '@/lib/dailyRoundState';
 import { queryKeys } from '@/lib/queryClient';
 import { getRoundInteractionState, resolveActiveId } from '@/lib/roundInvariants';
 import { useAuth } from '@/state/auth';
@@ -18,6 +19,7 @@ import { TIER_LIMITS, type Introduction, type IntroductionRound } from '@/types'
 
 interface RoundValue {
   round: IntroductionRound | undefined;
+  emptyReason: DailyRoundEmptyReason | null;
   isLoading: boolean;
   error: Error | null;
   refresh: () => void;
@@ -85,14 +87,19 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   const [releaseFailure, setReleaseFailure] = useState<{ id: string; message: string } | null>(null);
 
   const {
-    data: round,
+    data: roundState,
     isLoading,
     error,
     refetch,
   } = useQuery({
     queryKey: [...queryKeys.round, tier],
-    queryFn: () => fetchCurrentRound(tier),
+    queryFn: () => fetchCurrentRoundState(tier),
   });
+
+  const round = roundState?.round;
+  const emptyReason = roundState?.status && roundState.status !== 'ready'
+    ? roundState.status
+    : null;
 
   const keepLimit = TIER_LIMITS[tier].keeps;
 
@@ -207,6 +214,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   const value = useMemo<RoundValue>(
     () => ({
       round,
+      emptyReason,
       isLoading,
       error: (error as Error) ?? null,
       refresh: () => void refetch(),
@@ -238,6 +246,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     }),
     [
       round,
+      emptyReason,
       isLoading,
       error,
       refetch,

@@ -46,6 +46,7 @@ export default function DailyScreen() {
   });
   const {
     round,
+    emptyReason,
     isLoading,
     error,
     refresh,
@@ -206,9 +207,13 @@ export default function DailyScreen() {
     );
   }
 
-  if (!round && readinessQuery.data && !readinessQuery.data.ready) {
-    const onlyPreferencesMissing = readinessQuery.data.missing.length === 1
-      && readinessQuery.data.missing[0] === 'preferences';
+  if (
+    (!round || round.introductions.length === 0)
+    && (emptyReason === 'profile_not_ready' || (readinessQuery.data && !readinessQuery.data.ready))
+  ) {
+    const missingReadinessItems = readinessQuery.data?.missing ?? [];
+    const onlyPreferencesMissing = missingReadinessItems.length === 1
+      && missingReadinessItems[0] === 'preferences';
     return (
       <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
         <BrandHeader />
@@ -226,13 +231,18 @@ export default function DailyScreen() {
     );
   }
 
-  if (!round) {
+  if (!round || round.introductions.length === 0) {
+    const matchingInputsUnavailable = emptyReason === 'matching_inputs_unavailable';
     return (
       <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
         <BrandHeader />
         <EmptyState
-          title={t('daily.emptyTitle')}
-          message={t('daily.emptyBody')}
+          title={t(matchingInputsUnavailable
+            ? 'daily.matchingInputsUnavailableTitle'
+            : 'daily.noSuitableTitle')}
+          message={t(matchingInputsUnavailable
+            ? 'daily.matchingInputsUnavailableBody'
+            : 'daily.noSuitableBody')}
         />
       </Screen>
     );

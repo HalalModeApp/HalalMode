@@ -9,12 +9,13 @@ import {
 } from 'expo-audio';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, View } from 'react-native';
 import { z } from 'zod';
 
-import { fetchMyProfileReadiness, updateMyProfile } from '@/api/profile';
+import { fetchMyProfileReadiness, updateMyLocation, updateMyProfile } from '@/api/profile';
 import {
   createProfileMediaSignedUrl,
   deleteProfilePhoto,
@@ -34,6 +35,7 @@ import { queryKeys } from '@/lib/queryClient';
 import { testIds } from '@/lib/testIds';
 import { PRACTICE_LABELS, TIMELINE_LABELS } from '@/data/preferences';
 import { getProfileReadiness, type ProfileReadinessIssue } from '@/lib/profileReadiness';
+import { deviceLocationFromReverseGeocode } from '@/lib/deviceLocation';
 import { useI18n, type Translate } from '@/i18n';
 import { USE_MOCKS } from '@/lib/supabase';
 import { alpha, color, font, radius } from '@/theme/tokens';
@@ -43,8 +45,6 @@ function profileSchema(t: Translate) {
   return z.object({
     name: z.string().min(2, t('profile.validation.name')),
     firstName: z.string().min(1, t('profile.validation.firstName')),
-    city: z.string().min(2, t('profile.validation.city')),
-    country: z.string().min(2, t('profile.validation.country')),
     occupation: z.string().min(2, t('profile.validation.occupation')),
     education: z.string().max(120, t('profile.validation.education')),
     bio: z.string().min(80, t('profile.validation.bioShort')).max(600, t('profile.validation.bioLong')),
@@ -70,10 +70,14 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
   const [photosDirty, setPhotosDirty] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [deletingPhoto, setDeletingPhoto] = useState<string | null>(null);
+  const [updatingLocation, setUpdatingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const loadedProfileId = useRef<string | null>(null);
   const finishingRecording = useRef(false);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 250);
+  const currentLocation = [profile.city, profile.country].filter(Boolean).join(', ')
+    || t('profile.locationNotSet');
 
   const {
     control,
@@ -85,8 +89,6 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
     defaultValues: {
       name: profile.name,
       firstName: profile.firstName,
-      city: profile.city,
-      country: profile.country,
       occupation: profile.occupation,
       education: profile.education ?? '',
       bio: profile.bio,
@@ -100,12 +102,12 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
   const draftReadiness = useMemo(
     () => getProfileReadiness({
       firstName: draft.firstName,
-      city: draft.city,
-      country: draft.country,
+      city: profile.city,
+      country: profile.country,
       bio: draft.bio,
       photoCount: photos.length,
     }),
-    [draft.bio, draft.city, draft.country, draft.firstName, photos.length]
+    [draft.bio, draft.firstName, photos.length, profile.city, profile.country]
   );
   const serverReadinessQuery = useQuery({
     queryKey: queryKeys.profileReadiness,
@@ -128,8 +130,6 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
     reset({
       name: profile.name,
       firstName: profile.firstName,
-      city: profile.city,
-      country: profile.country,
       occupation: profile.occupation,
       education: profile.education ?? '',
       bio: profile.bio,
@@ -228,8 +228,6 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
       const patch: Partial<Profile> = {
         name: values.name.trim(),
         firstName: values.firstName.trim(),
-        city: values.city.trim(),
-        country: values.country.trim(),
         occupation: values.occupation.trim(),
         // The server converts an empty string to NULL, so members can clear it.
         education: values.education.trim(),
@@ -259,6 +257,48 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
       setPhotosDirty(false);
     },
   });
+
+  const refreshDeviceLocation = useCallback(async () => {
+    if (updatingLocation) return;
+    setUpdatingLocation(true);
+    setLocationError(null);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== 'granted') {
+        setLocationError(t('profile.locationPermissionRequired'));
+        if (!permission.canAskAgain) {
+          showPermissionRecovery(
+            false,
+            t,
+            t('profile.locationPermissionTitle'),
+            t('profile.locationPermissionRequired')
+          );
+        }
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const [place] = await Location.reverseGeocodeAsync(position.coords);
+      const resolved = deviceLocationFromReverseGeocode(place, position.coords);
+      if (!resolved) {
+        setLocationError(t('profile.locationUnavailable'));
+        return;
+      }
+
+      await updateMyLocation(resolved);
+      queryClient.setQueryData<Profile>(queryKeys.profile('me'), (current) =>
+        current ? { ...current, city: resolved.city, country: resolved.country } : current
+      );
+      void queryClient.invalidateQueries({ queryKey: queryKeys.profileReadiness });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.round });
+    } catch {
+      setLocationError(t('profile.locationUpdateError'));
+    } finally {
+      setUpdatingLocation(false);
+    }
+  }, [queryClient, t, updatingLocation]);
 
   const addPhoto = async (source: 'camera' | 'library') => {
     if (photos.length >= 6) {
@@ -607,32 +647,32 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
               />
             )}
           />
-          <Controller
-            control={control}
-            name="city"
-            render={({ field }) => (
-              <Field
-                label={t('profile.city')}
-                value={field.value}
-                onChangeText={field.onChange}
-                error={errors.city?.message}
-              />
-            )}
-          />
         </View>
 
-        <Controller
-          control={control}
-          name="country"
-          render={({ field }) => (
-            <Field
-              label={t('profile.country')}
-              value={field.value}
-              onChangeText={field.onChange}
-              error={errors.country?.message}
-            />
-          )}
-        />
+        <View style={styles.locationBlock}>
+          <Text variant="micro">{t('profile.locationCurrent')}</Text>
+          <Text
+            accessibilityLabel={`${t('profile.locationCurrent')}: ${currentLocation}`}
+            variant="label"
+          >
+            {currentLocation}
+          </Text>
+          <Text variant="caption" style={styles.locationPrivacy}>
+            {t('profile.locationPrivacy')}
+          </Text>
+          <Button
+            testID={testIds.you.updateLocation}
+            label={t('profile.updateLocation')}
+            variant="secondary"
+            loading={updatingLocation}
+            onPress={() => void refreshDeviceLocation()}
+          />
+          {locationError ? (
+            <Text accessibilityRole="alert" variant="caption" style={styles.locationError}>
+              {locationError}
+            </Text>
+          ) : null}
+        </View>
 
         <Controller
           control={control}
@@ -943,6 +983,9 @@ const styles = StyleSheet.create({
   voiceNote: { marginTop: 10 },
 
   formCard: { gap: 14 },
+  locationBlock: { gap: 8 },
+  locationPrivacy: { color: color.inkSoft },
+  locationError: { color: color.inkSoft },
   profileChoice: { gap: 9 },
   choiceChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   formRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },

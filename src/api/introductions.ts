@@ -1,7 +1,16 @@
 import { buildMockRound } from '@/data/mock';
 import { requireSupabase, USE_MOCKS } from '@/lib/supabase';
 import { hydrateProfileMedia } from '@/api/profileMedia';
+import {
+  normalizeDailyRoundStatus,
+  type DailyRoundStatus,
+} from '@/lib/dailyRoundState';
 import { TIER_LIMITS, type IntroductionRound, type MembershipTier } from '@/types';
+
+export interface CurrentRoundState {
+  status: DailyRoundStatus;
+  round: IntroductionRound | undefined;
+}
 
 /**
  * Fetches the member's current round.
@@ -10,26 +19,42 @@ import { TIER_LIMITS, type IntroductionRound, type MembershipTier } from '@/type
  * here, this member appears in theirs for the same round. That symmetry is the
  * reason this cannot be a client-side query over a profiles table.
  */
-export async function fetchCurrentRound(
+export async function fetchCurrentRoundState(
   tier: MembershipTier
-): Promise<IntroductionRound> {
+): Promise<CurrentRoundState> {
   if (USE_MOCKS) {
-    return buildMockRound(TIER_LIMITS[tier].introductions);
+    return {
+      status: 'ready',
+      round: buildMockRound(TIER_LIMITS[tier].introductions),
+    };
   }
 
   const client = requireSupabase();
-  const { data, error } = await client.rpc('get_current_round');
+  const { data, error } = await client.rpc('get_current_round_state');
   if (error) throw error;
-  const round = data as IntroductionRound;
-  if (!round) return round;
+  const payload = data && typeof data === 'object'
+    ? data as { status?: unknown; round?: IntroductionRound | null }
+    : {};
+  const round = payload.round ?? undefined;
+  const status = normalizeDailyRoundStatus(payload.status);
+  if (!round) {
+    return {
+      // A contradictory `ready` response must not render an empty carousel.
+      status: status === 'ready' ? 'no_suitable_introductions' : status,
+      round: undefined,
+    };
+  }
   return {
-    ...round,
-    introductions: await Promise.all(
-      round.introductions.map(async (introduction) => ({
-        ...introduction,
-        profile: await hydrateProfileMedia(introduction.profile),
-      }))
-    ),
+    status: round.introductions.length > 0 ? 'ready' : status,
+    round: {
+      ...round,
+      introductions: await Promise.all(
+        round.introductions.map(async (introduction) => ({
+          ...introduction,
+          profile: await hydrateProfileMedia(introduction.profile),
+        }))
+      ),
+    },
   };
 }
 

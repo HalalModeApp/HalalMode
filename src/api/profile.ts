@@ -3,6 +3,8 @@ import { requireSupabase, USE_MOCKS } from '@/lib/supabase';
 import { hydrateProfileMedia } from '@/api/profileMedia';
 import type { PrivatePreferences, Profile } from '@/types';
 import type { ProfileReadinessIssue } from '@/lib/profileReadiness';
+import type { DeviceLocationUpdate } from '@/lib/deviceLocation';
+import { profilePatchToRow } from '@/lib/profilePatch';
 
 export interface ProfileReadinessStatus {
   ready: boolean;
@@ -55,6 +57,23 @@ export async function updateMyProfile(patch: Partial<Profile>): Promise<void> {
   const changes = profilePatchToRow(patch);
   if (Object.keys(changes).length === 0) return;
   const { error } = await client.rpc('update_my_profile', { p_patch: changes });
+  if (error) throw error;
+}
+
+/** Location changes are accepted only from the explicit device-location flow. */
+export async function updateMyLocation(location: DeviceLocationUpdate): Promise<void> {
+  if (USE_MOCKS) {
+    Object.assign(MOCK_SELF, { city: location.city, country: location.country });
+    return;
+  }
+
+  const client = requireSupabase();
+  const { error } = await client.rpc('update_my_location', {
+    p_city: location.city,
+    p_country: location.country,
+    p_latitude: location.latitude,
+    p_longitude: location.longitude,
+  });
   if (error) throw error;
 }
 
@@ -111,29 +130,6 @@ function profileFromRow(row: Record<string, unknown>): Profile {
     audioGreetingUrl: row.audio_greeting_url as string | undefined,
     audioDurationSeconds: row.audio_duration_seconds as number | undefined,
   };
-}
-
-function profilePatchToRow(patch: Partial<Profile>): Record<string, unknown> {
-  const row: Record<string, unknown> = {};
-  const fields: [keyof Profile, string][] = [
-    ['name', 'name'],
-    ['firstName', 'first_name'],
-    ['occupation', 'occupation'],
-    ['education', 'education'],
-    ['city', 'city'],
-    ['country', 'country'],
-    ['bio', 'bio'],
-    ['chips', 'chips'],
-    ['religiousPractice', 'religious_practice'],
-    ['timeline', 'timeline'],
-    ['relocation', 'relocation'],
-    ['familyGoals', 'family_goals'],
-    ['languagesSpoken', 'languages_spoken'],
-  ];
-  for (const [property, column] of fields) {
-    if (patch[property] !== undefined) row[column] = patch[property];
-  }
-  return row;
 }
 
 function preferencesFromRow(row: Record<string, unknown>): PrivatePreferences {
