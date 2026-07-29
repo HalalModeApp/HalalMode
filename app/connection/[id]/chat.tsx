@@ -23,6 +23,7 @@ import {
   messageFromRow,
   sendMessage,
 } from '@/api/connections';
+import { blockConnectionMember, reportConnectionMember, type ReportReason } from '@/api/safety';
 import { AudioGreeting } from '@/components/introductions/AudioGreeting';
 import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
 import { Screen } from '@/components/ui/Screen';
@@ -197,6 +198,20 @@ export default function ChatScreen() {
     },
   });
 
+  const report = useMutation({
+    mutationFn: (reason: ReportReason) => reportConnectionMember(id, reason),
+    onSuccess: () => Alert.alert(t('chat.reportedTitle'), t('chat.reportedBody')),
+    onError: () => Alert.alert(t('chat.safetyErrorTitle'), t('chat.safetyErrorBody')),
+  });
+  const block = useMutation({
+    mutationFn: () => blockConnectionMember(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.connections });
+      router.replace('/(tabs)/connections');
+    },
+    onError: () => Alert.alert(t('chat.safetyErrorTitle'), t('chat.safetyErrorBody')),
+  });
+
   const confirmClose = () => {
     Alert.alert(
       t('chat.closeTitle'),
@@ -210,6 +225,29 @@ export default function ChatScreen() {
         },
       ]
     );
+  };
+
+  const chooseReportReason = () => {
+    Alert.alert(t('chat.reportTitle'), t('chat.reportBody'), [
+      { text: t('chat.reportHarassment'), onPress: () => report.mutate('harassment') },
+      { text: t('chat.reportMisrepresentation'), onPress: () => report.mutate('misrepresentation') },
+      { text: t('settings.notNow'), style: 'cancel' },
+    ]);
+  };
+
+  const openSafety = () => {
+    Alert.alert(t('chat.safetyTitle'), t('chat.safetyBody'), [
+      { text: t('chat.reportAction'), onPress: chooseReportReason },
+      {
+        text: t('chat.blockAction'),
+        style: 'destructive',
+        onPress: () => Alert.alert(t('chat.blockTitle'), t('chat.blockBody', { name: connection?.profile.firstName ?? '' }), [
+          { text: t('settings.notNow'), style: 'cancel' },
+          { text: t('chat.blockConfirm'), style: 'destructive', onPress: () => block.mutate() },
+        ]),
+      },
+      { text: t('settings.notNow'), style: 'cancel' },
+    ]);
   };
 
   const conversation = useMemo<ConversationItem[]>(() => {
@@ -305,6 +343,16 @@ export default function ChatScreen() {
             style={styles.callButton}
           >
             <Text style={styles.callGlyph}>☎</Text>
+          </Pressable>
+
+          <Pressable
+            testID={testIds.chat.safety}
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.safetyTitle')}
+            onPress={openSafety}
+            style={styles.safetyButton}
+          >
+            <Text style={styles.safetyGlyph}>···</Text>
           </Pressable>
 
           <Pressable
@@ -691,6 +739,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   callGlyph: { fontFamily: font.body, fontSize: 16, color: color.inkSoft },
+  safetyButton: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
+  safetyGlyph: { fontFamily: font.bodyMedium, fontSize: 18, color: color.inkSoft, letterSpacing: 1 },
 
   messages: { paddingHorizontal: space.xl, paddingVertical: 16, gap: 10 },
   loadEarlier: { alignSelf: 'center', paddingHorizontal: space.md, paddingVertical: space.sm },

@@ -4,5 +4,5 @@ export const testIds = {
   onboarding: { next: 'onboarding-next', back: 'onboarding-back', submit: 'onboarding-submit' },
   daily: { reset: 'daily-reset', pop: 'daily-pop-mode', primary: 'daily-primary-action' },
   recap: { compatibility: 'compatibility-breakdown', open: 'recap-open-connection' },
-  chat: { call: 'chat-call', composer: 'chat-composer', send: 'chat-send' },
+  chat: { call: 'chat-call', safety: 'chat-safety', composer: 'chat-composer', send: 'chat-send' },
 } as const;
