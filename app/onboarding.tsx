@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
+import { CountrySheet } from '@/components/you/CountrySheet';
 import { useI18n, type Translate } from '@/i18n';
 import { requireSupabase } from '@/lib/supabase';
 import {
@@ -28,6 +29,7 @@ import {
   normaliseDecimalDigits,
 } from '@/lib/birthDate';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
+import { testIds } from '@/lib/testIds';
 
 type Gender = 'male' | 'female';
 
@@ -69,6 +71,7 @@ export default function OnboardingScreen() {
   const [completed, setCompleted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [countrySheetOpen, setCountrySheetOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -236,7 +239,12 @@ export default function OnboardingScreen() {
             <BasicDetailsStep draft={draft} errors={errors} patch={patch} />
           ) : null}
           {step === 3 ? (
-            <LocationStep draft={draft} errors={errors} patch={patch} />
+            <LocationStep
+              draft={draft}
+              errors={errors}
+              patch={patch}
+              onChooseCountry={() => setCountrySheetOpen(true)}
+            />
           ) : null}
           {step === 4 ? <ReviewStep draft={draft} birthDate={birthDate} /> : null}
 
@@ -271,6 +279,17 @@ export default function OnboardingScreen() {
             style={styles.next}
           />
         </View>
+        <CountrySheet
+          visible={countrySheetOpen}
+          selected={draft.country ? [draft.country] : []}
+          selectionMode="single"
+          eyebrow={t('onboarding.locationTitle')}
+          title={t('onboarding.country')}
+          applyLabel={t('common.continue')}
+          testID={testIds.onboarding.countrySheet}
+          onChange={(next) => patch('country', next[0] ?? '')}
+          onClose={() => setCountrySheetOpen(false)}
+        />
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -397,7 +416,12 @@ function BasicDetailsStep({ draft, errors, patch }: StepProps) {
   );
 }
 
-function LocationStep({ draft, errors, patch }: StepProps) {
+function LocationStep({
+  draft,
+  errors,
+  patch,
+  onChooseCountry,
+}: StepProps & { onChooseCountry: () => void }) {
   const { t } = useI18n();
   return (
     <View>
@@ -414,14 +438,23 @@ function LocationStep({ draft, errors, patch }: StepProps) {
           autoComplete="postal-address-locality"
           error={errors.city}
         />
-        <Field
-          label={t('onboarding.country')}
-          value={draft.country}
-          onChangeText={(value) => patch('country', value)}
-          autoCapitalize="words"
-          autoComplete="country"
-          error={errors.country}
-        />
+        <View style={styles.field}>
+          <Text variant="label">{t('onboarding.country')}</Text>
+          <Pressable
+            testID={testIds.onboarding.country}
+            accessibilityRole="button"
+            accessibilityLabel={t('onboarding.country')}
+            accessibilityHint={t('country.search')}
+            onPress={onChooseCountry}
+            style={styles.countryPicker}
+          >
+            <Text style={[styles.countryPickerLabel, !draft.country && styles.countryPickerPlaceholder]}>
+              {draft.country || t('country.search')}
+            </Text>
+            <Text style={styles.countryPickerArrow}>›</Text>
+          </Pressable>
+          {errors.country ? <InlineError message={errors.country} /> : null}
+        </View>
       </View>
     </View>
   );
@@ -641,6 +674,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   inputError: { borderColor: '#A33A3A' },
+  countryPicker: {
+    minHeight: 52,
+    borderWidth: 1,
+    borderColor: alpha.lineStrong,
+    borderRadius: radius.lg,
+    paddingHorizontal: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: color.surface,
+  },
+  countryPickerLabel: { fontFamily: font.body, fontSize: 16, color: color.ink },
+  countryPickerPlaceholder: { color: color.faintest },
+  countryPickerArrow: { fontFamily: font.body, fontSize: 22, color: color.inkSoft },
   inputRTL: { textAlign: 'right', writingDirection: 'rtl' },
   errorText: { fontFamily: font.bodyMedium, fontSize: 12, lineHeight: 18, color: '#A33A3A' },
   dateRow: { flexDirection: 'row', gap: 9 },

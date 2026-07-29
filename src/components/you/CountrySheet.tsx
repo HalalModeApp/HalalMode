@@ -15,6 +15,7 @@ import { Text } from '@/components/ui/Text';
 import { COUNTRIES } from '@/data/preferences';
 import { useI18n } from '@/i18n';
 import { testIds } from '@/lib/testIds';
+import { toggleCountrySelection } from '@/lib/countrySelection';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 
 export interface CountrySheetProps {
@@ -22,6 +23,11 @@ export interface CountrySheetProps {
   selected: string[];
   onChange: (next: string[]) => void;
   onClose: () => void;
+  selectionMode?: 'single' | 'multiple';
+  title?: string;
+  eyebrow?: string;
+  applyLabel?: string;
+  testID?: string;
 }
 
 /** Normalises accents so "Cote d'Ivoire" finds "Côte d’Ivoire". */
@@ -38,11 +44,17 @@ export function CountrySheet({
   selected,
   onChange,
   onClose,
+  selectionMode = 'multiple',
+  title,
+  eyebrow,
+  applyLabel,
+  testID = testIds.you.countrySheet,
 }: CountrySheetProps) {
   const { t, isRTL } = useI18n();
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
   const [pending, setPending] = useState(selected);
+  const isSingle = selectionMode === 'single';
 
   useEffect(() => {
     if (visible) {
@@ -58,11 +70,7 @@ export function CountrySheet({
   }, [search]);
 
   const toggle = (country: string) => {
-    setPending(
-      pending.includes(country)
-        ? pending.filter((item) => item !== country)
-        : [...pending, country]
-    );
+    setPending((current) => toggleCountrySelection(current, country, selectionMode));
   };
 
   return (
@@ -85,14 +93,14 @@ export function CountrySheet({
           entering={FadeInDown.duration(280)}
           style={styles.sheet}
           accessibilityViewIsModal
-          testID={testIds.you.countrySheet}
+          testID={testID}
         >
           <View style={styles.head}>
             <View style={[styles.headTop, isRTL && styles.rowReverse]}>
               <View>
-                <Text variant="microAccent">{t('country.eyebrow')}</Text>
+                <Text variant="microAccent">{eyebrow ?? t('country.eyebrow')}</Text>
                 <Text variant="displaySmall" style={styles.headTitle}>
-                  {t('country.title')}
+                  {title ?? t('country.title')}
                 </Text>
               </View>
               <Pressable
@@ -116,13 +124,15 @@ export function CountrySheet({
             />
 
             <View style={[styles.headMeta, isRTL && styles.rowReverse]}>
-              <View style={styles.countPill}>
-                <Text style={styles.countLabel}>{pending.length}</Text>
-              </View>
+              {!isSingle ? (
+                <View style={styles.countPill}>
+                  <Text style={styles.countLabel}>{pending.length}</Text>
+                </View>
+              ) : null}
               <Text variant="caption" style={styles.resultLabel} numberOfLines={1}>
                 {t('country.shown', { count: results.length })}
               </Text>
-              <View style={[styles.bulkActions, isRTL && styles.rowReverse]}>
+              {!isSingle ? <View style={[styles.bulkActions, isRTL && styles.rowReverse]}>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('country.selectAll')}
@@ -134,7 +144,7 @@ export function CountrySheet({
                 <Pressable accessibilityRole="button" accessibilityLabel={t('country.clearAll')} onPress={() => setPending([])} style={styles.bulkTarget}>
                   <Text style={styles.bulkQuiet}>{t('country.clearAll')}</Text>
                 </Pressable>
-              </View>
+              </View> : null}
             </View>
           </View>
 
@@ -149,8 +159,8 @@ export function CountrySheet({
               const isSelected = pending.includes(country);
               return (
                 <Pressable
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: isSelected }}
+                  accessibilityRole={isSingle ? 'radio' : 'checkbox'}
+                  accessibilityState={isSingle ? { selected: isSelected } : { checked: isSelected }}
                   accessibilityLabel={country}
                   onPress={() => toggle(country)}
                   style={[styles.row, isRTL && styles.rowReverse, isSelected && styles.rowSelected]}
@@ -174,15 +184,16 @@ export function CountrySheet({
           <View style={[styles.foot, { paddingBottom: insets.bottom + 20 }]}>
             <Button
               label={
-                pending.length === 0
+                applyLabel ?? (pending.length === 0
                   ? t('country.anywhere')
-                  : t('country.useSelected', { count: pending.length })
+                  : t('country.useSelected', { count: pending.length }))
               }
               onPress={() => {
                 onChange(pending);
                 onClose();
               }}
               testID={testIds.you.countryApply}
+              disabled={isSingle && pending.length === 0}
             />
           </View>
         </Animated.View>

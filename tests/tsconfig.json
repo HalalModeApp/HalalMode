@@ -13,6 +13,7 @@
     "./*.test.ts",
     "../src/lib/arcLayout.ts",
     "../src/lib/birthDate.ts",
+    "../src/lib/countrySelection.ts",
     "../src/lib/roundInvariants.ts"
   ],
   "exclude": []
