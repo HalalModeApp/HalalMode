@@ -32,6 +32,7 @@ import { useI18n } from '@/i18n';
 import { queryKeys } from '@/lib/queryClient';
 import { trackProductEvent } from '@/lib/analytics';
 import { enqueueMessage, getPendingMessages, removePendingMessage } from '@/lib/messageOutbox';
+import { retryAllInOrder } from '@/lib/retryPolicy';
 import { supabase, USE_MOCKS } from '@/lib/supabase';
 import { testIds } from '@/lib/testIds';
 import { useAuth } from '@/state/auth';
@@ -56,6 +57,7 @@ export default function ChatScreen() {
   >(null);
   const [now, setNow] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+  const [retryFailed, setRetryFailed] = useState(false);
   const outboxMemberId = USE_MOCKS ? 'mock' : user?.id;
 
   const refreshPendingCount = useCallback(async () => {
@@ -185,15 +187,14 @@ export default function ChatScreen() {
     mutationFn: async () => {
       if (!outboxMemberId) throw new Error('Your session is not ready to send a message.');
       const pending = await getPendingMessages(outboxMemberId, id);
-      const delivered: ChatMessage[] = [];
-      for (const item of pending) {
+      return retryAllInOrder(pending, async (item) => {
         const message = await sendMessage(id, item.body, item.id);
         void removePendingMessage(outboxMemberId, item.id).catch(() => {});
-        delivered.push(message);
-      }
-      return delivered;
+        return message;
+      });
     },
-    onSuccess: (delivered) => {
+    onMutate: () => setRetryFailed(false),
+    onSuccess: ({ delivered, failedCount }) => {
       queryClient.setQueryData<MessagePage>(queryKeys.messages(id), (current) => ({
         messages: [...(current?.messages ?? []), ...delivered]
           .filter((message, index, all) => all.findIndex((item) => item.id === message.id) === index)
@@ -201,7 +202,9 @@ export default function ChatScreen() {
         hasMore: current?.hasMore ?? false,
         ...(current?.nextCursor ? { nextCursor: current.nextCursor } : {}),
       }));
+      setRetryFailed(failedCount > 0);
     },
+    onError: () => setRetryFailed(true),
     onSettled: () => { void refreshPendingCount(); },
   });
 
@@ -379,6 +382,7 @@ export default function ChatScreen() {
           </Pressable>
 
           <Pressable
+            testID={testIds.chat.retry}
             accessibilityRole="button"
             accessibilityLabel={t('chat.closeA11y')}
             accessibilityState={{ busy: close.isPending }}
@@ -449,6 +453,11 @@ export default function ChatScreen() {
               {retryPending.isPending ? t('common.loading') : t('chat.retryPending', { count: pendingCount })}
             </Text>
           </Pressable>
+        ) : null}
+        {retryFailed ? (
+          <Text accessibilityRole="alert" variant="caption" style={styles.sendError}>
+            {t('chat.retrySomeFailed')}
+          </Text>
         ) : null}
 
         <ScrollView

@@ -12,5 +12,11 @@ export const testIds = {
     deleteDialog: 'settings-delete-dialog',
   },
   recap: { compatibility: 'compatibility-breakdown', open: 'recap-open-connection' },
-  chat: { call: 'chat-call', safety: 'chat-safety', composer: 'chat-composer', send: 'chat-send' },
+  chat: {
+    call: 'chat-call',
+    safety: 'chat-safety',
+    composer: 'chat-composer',
+    send: 'chat-send',
+    retry: 'chat-retry-pending',
+  },
 } as const;
