@@ -55,11 +55,15 @@ select is(
   'values',
   'the authenticated member receives a topic, not a private explanation'
 );
+with connection_dto as (
+  select get_connection('00000000-0000-0000-0000-000000002201'::uuid) as payload
+)
 select ok(
-  not (get_connection('00000000-0000-0000-0000-000000002201)::text like '%score%')
-  and not (get_connection('00000000-0000-0000-0000-000000002201)::text like '%preferred_countries%'),
+  position('score' in payload::text) = 0
+  and position('preferred_countries' in payload::text) = 0,
   'the connection DTO does not disclose score or private country settings'
-);
+)
+from connection_dto;
 select ok(
   jsonb_array_length(get_connection('00000000-0000-0000-0000-000000002201')->'compatibilityBreakdown') = 5,
   'the client contract has a stable five-topic shape'

@@ -16,6 +16,10 @@ security definer
 set search_path = public, halal_mode_private as $$
 begin
   if auth.uid() is null then raise exception 'Authentication required' using errcode = '42501'; end if;
+  -- Pausing a member is normally server-controlled. Account deletion is a
+  -- reviewed account-control action, so it uses the same scoped bypass as the
+  -- explicit pause RPC rather than weakening the profile guard.
+  perform set_config('app.account_control_rpc', 'true', true);
   update profiles set is_paused = true, updated_at = now() where id = auth.uid();
   if not found then raise exception 'Profile not found' using errcode = 'P0002'; end if;
   update connections

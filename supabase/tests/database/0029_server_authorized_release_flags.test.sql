@@ -39,7 +39,7 @@ select ok(
   'an outsider is not enabled by a zero-percent rollout'
 );
 select throws_ok(
-  $$ select halal_mode_private.set_release_flag('controlled_beta', true, 100) $$,
+  $$ select halal_mode_private.set_release_flag('controlled_beta', true, 100::smallint) $$,
   '42501', 'Release flags require service role', 'members cannot change release rollout'
 );
 

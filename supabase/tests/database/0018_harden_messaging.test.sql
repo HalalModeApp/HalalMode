@@ -53,36 +53,36 @@ do $$ begin
 end $$;
 
 select is(
-  send_message('00000000-0000-0000-0000-000000001810', '  Salaam  ')->>'body',
+  send_message('00000000-0000-0000-0000-000000001810', '  Salaam  ', 'message_test_001')->>'body',
   'Salaam',
   'the server trims message text'
 );
 select is(
-  send_message('00000000-0000-0000-0000-000000001810', 'Second')->>'sender_id',
+  send_message('00000000-0000-0000-0000-000000001810', 'Second', 'message_test_002')->>'sender_id',
   '00000000-0000-0000-0000-000000000181',
   'the server owns sender identity'
 );
 select ok(
-  (send_message('00000000-0000-0000-0000-000000001810', 'Unread')->>'read_at') is null,
+  (send_message('00000000-0000-0000-0000-000000001810', 'Unread', 'message_test_003')->>'read_at') is null,
   'the server owns the initial read state'
 );
 select throws_ok(
-  $$ select send_message('00000000-0000-0000-0000-000000001810', '   ') $$,
+  $$ select send_message('00000000-0000-0000-0000-000000001810', '   ', null) $$,
   '22023', 'Message cannot be empty',
   'blank messages are rejected'
 );
 select throws_ok(
-  $$ select send_message('00000000-0000-0000-0000-000000001810', repeat('x', 2001)) $$,
+  $$ select send_message('00000000-0000-0000-0000-000000001810', repeat('x', 2001), null) $$,
   '22001', 'Message is too long',
   'oversized messages are rejected'
 );
 select throws_ok(
-  $$ select send_message('00000000-0000-0000-0000-000000001811', 'Too early') $$,
+  $$ select send_message('00000000-0000-0000-0000-000000001811', 'Too early', null) $$,
   '42501', 'Connection is not available',
   'messages cannot be sent before the connection is open'
 );
 select throws_ok(
-  $$ select send_message('00000000-0000-0000-0000-000000009999', 'Not mine') $$,
+  $$ select send_message('00000000-0000-0000-0000-000000009999', 'Not mine', null) $$,
   '42501', 'Connection is not available',
   'messages cannot be sent to a missing or unrelated connection'
 );
@@ -95,7 +95,7 @@ select '00000000-0000-0000-0000-000000001810',
        'seed ' || n, now()
 from generate_series(1, 17) n;
 select throws_ok(
-  $$ select send_message('00000000-0000-0000-0000-000000001810', 'One too many') $$,
+  $$ select send_message('00000000-0000-0000-0000-000000001810', 'One too many', null) $$,
   'P0001', 'Please wait before sending more messages',
   'the rolling per-minute limit is enforced'
 );
@@ -112,7 +112,7 @@ select ok(
   'a block immediately closes an existing connection'
 );
 select throws_ok(
-  $$ select send_message('00000000-0000-0000-0000-000000001810', 'Blocked') $$,
+  $$ select send_message('00000000-0000-0000-0000-000000001810', 'Blocked', null) $$,
   '42501', 'Connection is not available',
   'a blocked connection cannot send messages'
 );

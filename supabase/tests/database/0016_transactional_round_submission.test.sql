@@ -99,9 +99,9 @@ select is(
   submit_round_selections(
     '00000000-0000-0000-0000-000000001002',
     array['00000000-0000-0000-0000-000000002002']::uuid[]
-  ),
-  '{"mutualProfileIds": []}'::jsonb,
-  'the first one-sided keep does not create a mutual'
+  )->'mutualProfileIds',
+  '[]'::jsonb,
+  'the first one-sided keep does not activate a mutual'
 );
 
 do $$ begin
@@ -111,9 +111,9 @@ select is(
   submit_round_selections(
     '00000000-0000-0000-0000-000000001001',
     array['00000000-0000-0000-0000-000000002001']::uuid[]
-  ),
-  '{"mutualProfileIds": ["00000000-0000-0000-0000-0000000000b2"]}'::jsonb,
-  'linked reciprocal keeps create one mutual'
+  )->'mutualProfileIds',
+  '["00000000-0000-0000-0000-0000000000b2"]'::jsonb,
+  'linked reciprocal keeps activate one mutual'
 );
 select is(
   (select row(times_shown, times_kept)::text from selection_scores where user_id = '00000000-0000-0000-0000-0000000000b2'),
