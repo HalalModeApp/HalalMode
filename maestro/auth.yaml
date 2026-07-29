@@ -1,0 +1,10 @@
+appId: com.halalmode.app
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    id: auth-email
+- tapOn:
+    id: auth-language
+- assertVisible:
+    id: auth-email

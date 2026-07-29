@@ -6,6 +6,7 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useI18n } from '@/i18n';
 import { requireSupabase } from '@/lib/supabase';
+import { testIds } from '@/lib/testIds';
 import { useSession } from '@/state/session';
 import { color, radius, space } from '@/theme/tokens';
 
@@ -44,6 +45,7 @@ export default function AuthScreen() {
       >
         <View>
           <Pressable
+            testID={testIds.auth.language}
             accessibilityRole="button"
             accessibilityLabel={t('auth.switchLanguageLabel')}
             onPress={() => setLanguage(language === 'en' ? 'ar' : 'en')}
@@ -60,6 +62,7 @@ export default function AuthScreen() {
         <View style={styles.form}>
           <Text variant="label" style={isRTL ? styles.rtlText : undefined}>{t('auth.email')}</Text>
           <TextInput
+            testID={testIds.auth.email}
             accessibilityLabel={t('auth.email')}
             autoCapitalize="none"
             autoComplete="email"
@@ -70,7 +73,7 @@ export default function AuthScreen() {
             onChangeText={setEmail}
             style={[styles.input, isRTL && styles.inputRTL]}
           />
-          <Button label={t('auth.send')} loading={sending} onPress={() => void sendLink()} />
+          <Button testID={testIds.auth.submit} label={t('auth.send')} loading={sending} onPress={() => void sendLink()} />
         </View>
       </KeyboardAvoidingView>
     </Screen>

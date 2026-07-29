@@ -23,8 +23,10 @@ import { Text } from '@/components/ui/Text';
 import { useCameraShake } from '@/hooks/useCameraShake';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useI18n } from '@/i18n';
+import { trackProductEvent } from '@/lib/analytics';
 import { playPop, startShimmer, stopShimmer } from '@/lib/sound';
 import { USE_MOCKS } from '@/lib/supabase';
+import { testIds } from '@/lib/testIds';
 import { useRound } from '@/state/round';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 
@@ -62,6 +64,13 @@ export default function DailyScreen() {
   const { shake, style: shakeStyle } = useCameraShake();
   const reducedMotion = useReducedMotion();
   const popPulse = useSharedValue(0);
+  const roundId = round?.id;
+  const introductionCount = round?.introductions.length;
+
+  useEffect(() => {
+    if (!roundId || introductionCount === undefined) return;
+    trackProductEvent('daily_round_viewed', { introduction_count: introductionCount });
+  }, [roundId, introductionCount]);
 
   useEffect(() => {
     if (!popMode || reducedMotion) {
@@ -201,6 +210,7 @@ export default function DailyScreen() {
         </View>
         {USE_MOCKS ? (
           <Pressable
+            testID={testIds.daily.reset}
             accessibilityRole="button"
             accessibilityLabel={t('daily.demoResetLabel')}
             onPress={reset}
@@ -269,6 +279,7 @@ export default function DailyScreen() {
             />
           ) : (
             <Pressable
+              testID={testIds.daily.pop}
               accessibilityRole="switch"
               accessibilityState={{ checked: popMode, disabled: !canPop }}
               accessibilityLabel={t('daily.popLabel')}
@@ -296,6 +307,7 @@ export default function DailyScreen() {
           )}
 
           <Button
+            testID={testIds.daily.primary}
             label={
               inChosenZone
                 ? t('daily.sendInterest')

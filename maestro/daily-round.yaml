@@ -1,0 +1,9 @@
+appId: com.halalmode.app
+---
+- launchApp
+- assertVisible:
+    id: daily-primary-action
+- tapOn:
+    id: daily-pop-mode
+- assertVisible:
+    id: daily-primary-action

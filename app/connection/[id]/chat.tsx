@@ -28,7 +28,9 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useI18n } from '@/i18n';
 import { queryKeys } from '@/lib/queryClient';
+import { trackProductEvent } from '@/lib/analytics';
 import { supabase, USE_MOCKS } from '@/lib/supabase';
+import { testIds } from '@/lib/testIds';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 import type { ChatMessage } from '@/types';
 
@@ -94,6 +96,7 @@ export default function ChatScreen() {
   const send = useMutation({
     mutationFn: (text: string) => sendMessage(id, text),
     onSuccess: (message) => {
+      trackProductEvent('message_sent');
       queryClient.setQueryData<ChatMessage[]>(queryKeys.messages(id), (current) => [
         ...(current ?? []),
         message,
@@ -216,6 +219,7 @@ export default function ChatScreen() {
           </View>
 
           <Pressable
+            testID={testIds.chat.call}
             accessibilityRole="button"
             accessibilityLabel={t('chat.callA11y', { name: connection.profile.firstName })}
             onPress={() =>
@@ -226,8 +230,8 @@ export default function ChatScreen() {
             <Text style={styles.callGlyph}>☎</Text>
           </Pressable>
 
-          <Pressable
-            accessibilityRole="button"
+            <Pressable
+              accessibilityRole="button"
             accessibilityLabel={t('chat.closeA11y')}
             accessibilityState={{ busy: close.isPending }}
             disabled={close.isPending}
@@ -275,6 +279,7 @@ export default function ChatScreen() {
 
         <View style={styles.composer}>
           <TextInput
+            testID={testIds.chat.composer}
             accessibilityLabel={t('chat.messageA11y')}
             value={draft}
             onChangeText={setDraft}
@@ -299,6 +304,7 @@ export default function ChatScreen() {
             <Text style={styles.recordGlyph}>●</Text>
           </Pressable>
           <Pressable
+            testID={testIds.chat.send}
             accessibilityRole="button"
             accessibilityLabel={t('chat.sendA11y')}
             disabled={!draft.trim() || send.isPending}

@@ -1,0 +1,10 @@
+appId: com.halalmode.app
+---
+- launchApp
+# This flow starts from a seeded reciprocal recap state in the isolated test app.
+- assertVisible:
+    id: compatibility-breakdown
+- tapOn:
+    id: recap-open-connection
+- assertVisible:
+    id: chat-composer

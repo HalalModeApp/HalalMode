@@ -1,0 +1,8 @@
+/** Stable semantic selectors for native automation; do not use coordinates. */
+export const testIds = {
+  auth: { email: 'auth-email', submit: 'auth-send-link', language: 'auth-language' },
+  onboarding: { next: 'onboarding-next', back: 'onboarding-back', submit: 'onboarding-submit' },
+  daily: { reset: 'daily-reset', pop: 'daily-pop-mode', primary: 'daily-primary-action' },
+  recap: { compatibility: 'compatibility-breakdown', open: 'recap-open-connection' },
+  chat: { call: 'chat-call', composer: 'chat-composer', send: 'chat-send' },
+} as const;

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { fetchConnection, openConnection } from '@/api/connections';
@@ -10,6 +11,8 @@ import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { queryKeys } from '@/lib/queryClient';
+import { trackProductEvent } from '@/lib/analytics';
+import { testIds } from '@/lib/testIds';
 import { sanitizeCompatibilityBreakdown } from '@/lib/compatibilityBreakdown';
 import { useI18n } from '@/i18n';
 import type { TranslationKey } from '@/i18n/catalog';
@@ -28,11 +31,20 @@ export default function RecapScreen() {
   const connection = connectionQuery.data;
 
   const recap = connection?.recap ?? [];
+  const connectionId = connection?.id;
   const compatibilityBreakdown = sanitizeCompatibilityBreakdown(connection?.compatibilityBreakdown);
   const alignedCount = recap.filter((item) => item.verdict === 'aligned').length;
+  useEffect(() => {
+    if (!connectionId) return;
+    trackProductEvent('compatibility_recap_viewed', {
+      aligned_count: alignedCount,
+      topic_count: compatibilityBreakdown.length,
+    });
+  }, [connectionId, alignedCount, compatibilityBreakdown.length]);
   const openMutation = useMutation({
     mutationFn: () => openConnection(id),
     onSuccess: async () => {
+      trackProductEvent('connection_opened');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.connection(id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.connections }),
@@ -69,7 +81,7 @@ export default function RecapScreen() {
         </View>
 
         {compatibilityBreakdown.length > 0 ? (
-          <View testID="compatibility-breakdown" style={styles.compatibilitySection}>
+          <View testID={testIds.recap.compatibility} style={styles.compatibilitySection}>
             <Text variant="label" style={styles.compatibilityTitle}>{t('recap.compatibilityTitle')}</Text>
             <Text variant="bodySmall" style={styles.compatibilityBody}>{t('recap.compatibilityBody')}</Text>
             <View style={styles.compatibilityList}>
@@ -89,6 +101,7 @@ export default function RecapScreen() {
 
         <View style={styles.actions}>
           <Button
+            testID={testIds.recap.open}
             label={t('recap.open')}
             loading={openMutation.isPending}
             onPress={() => openMutation.mutate()}
