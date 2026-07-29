@@ -1,6 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import 'react-native-url-polyfill/auto';
+
+import { authStorage } from './authStorage';
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -13,14 +14,15 @@ export const USE_MOCKS =
   process.env.EXPO_PUBLIC_USE_MOCKS === '1' || !url || !anonKey;
 
 /**
- * Single Supabase client. Sessions persist in AsyncStorage; there is no URL
- * session detection because React Native has no address bar to read back from.
+ * Single Supabase client. Native bearer sessions persist in the OS secure
+ * store; Expo web uses its browser adapter. There is no URL session detection
+ * because React Native has no address bar to read back from.
  */
 export const supabase: SupabaseClient | null = USE_MOCKS
   ? null
   : createClient(url!, anonKey!, {
       auth: {
-        storage: AsyncStorage,
+        storage: authStorage,
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: false,
