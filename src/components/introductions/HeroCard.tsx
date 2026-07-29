@@ -15,6 +15,8 @@ import type { SharedValue } from 'react-native-reanimated';
 import { Text } from '@/components/ui/Text';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useI18n } from '@/i18n';
+import { deckDirectionForAccessibilityAction } from '@/lib/roundInvariants';
+import { testIds } from '@/lib/testIds';
 import { color, radius } from '@/theme/tokens';
 import type { Profile } from '@/types';
 
@@ -119,6 +121,7 @@ export function HeroCard({
             chosen={chosen}
             reducedMotion={reducedMotion}
             onPress={onPress}
+            onSwipe={onSwipe}
           />
         ))}
       </View>
@@ -137,6 +140,7 @@ interface DeckCardProps {
   chosen: boolean;
   reducedMotion: boolean;
   onPress: () => void;
+  onSwipe: (direction: 'previous' | 'next') => void;
 }
 
 function DeckCard({
@@ -150,6 +154,7 @@ function DeckCard({
   chosen,
   reducedMotion,
   onPress,
+  onSwipe,
 }: DeckCardProps) {
   const { t, isRTL } = useI18n();
   const pivotDepth = Math.max(cardWidth * 2.7, 780);
@@ -217,8 +222,17 @@ function DeckCard({
       />
       {isActive ? (
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('daily.openProfileA11y', { name: profile.firstName })}
+          testID={testIds.daily.deck}
+          accessibilityRole="adjustable"
+          accessibilityLabel={t('daily.deckA11y', { name: profile.firstName, current: index + 1, total: count })}
+          accessibilityHint={t('daily.deckHint')}
+          accessibilityValue={{ min: 1, max: count, now: index + 1 }}
+          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+          onAccessibilityAction={({ nativeEvent }) => {
+            if (nativeEvent.actionName === 'increment' || nativeEvent.actionName === 'decrement') {
+              onSwipe(deckDirectionForAccessibilityAction(nativeEvent.actionName));
+            }
+          }}
           onPress={onPress}
           style={StyleSheet.absoluteFill}
         />

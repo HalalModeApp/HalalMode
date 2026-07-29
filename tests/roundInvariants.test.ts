@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  deckDirectionForAccessibilityAction,
   getRoundInteractionState,
   resolveActiveId,
 } from '../src/lib/roundInvariants';
@@ -13,6 +14,11 @@ test('Premium Pop mode remains available in the chosen zone until one remains', 
     canPop: true,
   });
   assert.equal(getRoundInteractionState(1, 3).canPop, false);
+});
+
+test('screen-reader deck actions follow the same circular navigation directions', () => {
+  assert.equal(deckDirectionForAccessibilityAction('increment'), 'next');
+  assert.equal(deckDirectionForAccessibilityAction('decrement'), 'previous');
 });
 
 test('remaining releases never becomes negative', () => {

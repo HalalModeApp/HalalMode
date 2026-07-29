@@ -28,3 +28,10 @@ export function resolveActiveId<T extends { id: string }>(
   }
   return live[0]?.id ?? null;
 }
+
+/** Maps platform adjustable-control actions to the circular deck direction. */
+export function deckDirectionForAccessibilityAction(
+  action: 'increment' | 'decrement'
+): 'next' | 'previous' {
+  return action === 'increment' ? 'next' : 'previous';
+}
