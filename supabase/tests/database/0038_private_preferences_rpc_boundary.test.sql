@@ -1,0 +1,14 @@
+begin;
+set local search_path = public, extensions;
+select plan(9);
+select ok(not has_table_privilege('authenticated', 'public.private_preferences', 'SELECT, UPDATE, INSERT, DELETE'), 'members cannot read or mutate raw private preference rows');
+select is((select count(*)::int from pg_policies where schemaname = 'public' and tablename = 'private_preferences'), 0, 'private preferences have no direct member policy');
+select ok(has_function_privilege('authenticated', 'public.get_my_private_preferences()', 'EXECUTE') and has_function_privilege('authenticated', 'public.update_my_private_preferences(jsonb)', 'EXECUTE'), 'members can use only scoped preference RPCs');
+select ok(not has_function_privilege('anon', 'public.get_my_private_preferences()', 'EXECUTE') and not has_function_privilege('anon', 'public.update_my_private_preferences(jsonb)', 'EXECUTE'), 'anonymous callers cannot access preference RPCs');
+select ok(position('''min_age'', ''max_age''' in pg_get_functiondef('public.update_my_private_preferences(jsonb)'::regprocedure)) > 0, 'the update RPC has an explicit field allowlist');
+select ok(position('v_min_age not between 18 and 70' in pg_get_functiondef('public.update_my_private_preferences(jsonb)'::regprocedure)) > 0, 'the update RPC validates age ranges');
+select ok(position('v_distance not between 10 and 500' in pg_get_functiondef('public.update_my_private_preferences(jsonb)'::regprocedure)) > 0, 'the update RPC validates distance');
+select ok(position('jsonb_array_length(p_patch->''preferred_countries'') > 200' in pg_get_functiondef('public.update_my_private_preferences(jsonb)'::regprocedure)) > 0, 'the update RPC bounds country selections');
+select ok(position('where user_id = auth.uid()' in pg_get_functiondef('public.update_my_private_preferences(jsonb)'::regprocedure)) > 0, 'the update RPC scopes access to the signed-in member');
+select * from finish();
+rollback;

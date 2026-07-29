@@ -71,10 +71,7 @@ export async function fetchMyPreferences(): Promise<PrivatePreferences> {
   if (USE_MOCKS) return MOCK_PREFERENCES;
 
   const client = requireSupabase();
-  const { data, error } = await client
-    .from('private_preferences')
-    .select('*')
-    .single();
+  const { data, error } = await client.rpc('get_my_private_preferences');
   if (error) throw error;
   return preferencesFromRow(data as Record<string, unknown>);
 }
@@ -90,7 +87,7 @@ export async function updateMyPreferences(
   const client = requireSupabase();
   const changes = preferencesPatchToRow(patch);
   if (Object.keys(changes).length === 0) return;
-  const { error } = await client.from('private_preferences').update(changes);
+  const { error } = await client.rpc('update_my_private_preferences', { p_patch: changes });
   if (error) throw error;
 }
 
