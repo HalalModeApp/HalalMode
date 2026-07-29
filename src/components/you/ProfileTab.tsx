@@ -9,7 +9,7 @@ import {
 } from 'expo-audio';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { z } from 'zod';
@@ -30,6 +30,7 @@ import { Card } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
 import { Text } from '@/components/ui/Text';
 import { queryKeys } from '@/lib/queryClient';
+import { getProfileReadiness, type ProfileReadinessIssue } from '@/lib/profileReadiness';
 import { useI18n, type Translate } from '@/i18n';
 import { USE_MOCKS } from '@/lib/supabase';
 import { alpha, color, font, radius } from '@/theme/tokens';
@@ -84,6 +85,17 @@ export function ProfileTab({ profile }: { profile: Profile }) {
       bio: profile.bio,
     },
   });
+  const draft = useWatch({ control });
+  const readiness = useMemo(
+    () => getProfileReadiness({
+      firstName: draft.firstName,
+      city: draft.city,
+      country: draft.country,
+      bio: draft.bio,
+      photoCount: photos.length,
+    }),
+    [draft.bio, draft.city, draft.country, draft.firstName, photos.length]
+  );
 
   useEffect(() => {
     setPhotos(profile.photos);
@@ -357,6 +369,14 @@ export function ProfileTab({ profile }: { profile: Profile }) {
 
   return (
     <View style={[styles.wrap, isRTL && styles.rtl]}>
+      <Card tone="filled" style={styles.readinessCard}>
+        <Text variant="label">{readiness.ready ? t('profile.readinessReadyTitle') : t('profile.readinessTitle')}</Text>
+        <Text variant="caption" style={styles.readinessBody}>
+          {readiness.ready
+            ? t('profile.readinessReadyBody')
+            : t('profile.readinessBody', { items: readiness.missing.map((item) => t(readinessKey[item])).join(', ') })}
+        </Text>
+      </Card>
       <Card>
         <View style={[styles.cardHead, isRTL && styles.rowRTL]}>
           <Text variant="micro">{t('profile.gallery')}</Text>
@@ -581,10 +601,19 @@ export function ProfileTab({ profile }: { profile: Profile }) {
   );
 }
 
+const readinessKey: Record<ProfileReadinessIssue, 'profile.readinessName' | 'profile.readinessLocation' | 'profile.readinessBio' | 'profile.readinessPhoto'> = {
+  name: 'profile.readinessName',
+  location: 'profile.readinessLocation',
+  bio: 'profile.readinessBio',
+  photo: 'profile.readinessPhoto',
+};
+
 const styles = StyleSheet.create({
   rtl: { direction: 'rtl' },
   rowRTL: { flexDirection: 'row-reverse' },
   wrap: { gap: 12, paddingBottom: 24 },
+  readinessCard: { gap: 5 },
+  readinessBody: { color: color.inkSoft },
 
   cardHead: {
     flexDirection: 'row',

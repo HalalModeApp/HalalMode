@@ -517,6 +517,14 @@ export const en = {
   'profile.bio': 'Biography and values',
   'profile.save': 'Save profile changes',
   'profile.saveError': 'We could not save your changes. Check your connection and try again.',
+  'profile.readinessTitle': 'Finish your introduction',
+  'profile.readinessBody': 'Add {{items}} so your introduction gives someone a genuine sense of you.',
+  'profile.readinessReadyTitle': 'Your introduction is ready',
+  'profile.readinessReadyBody': 'Your essentials are in place. Keep your details current as your plans change.',
+  'profile.readinessName': 'your first name',
+  'profile.readinessLocation': 'your location',
+  'profile.readinessBio': 'a short biography',
+  'profile.readinessPhoto': 'a clear photo',
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -1034,4 +1042,12 @@ export const ar: TranslationCatalog = {
   'profile.bio': 'النبذة والقيم',
   'profile.save': 'حفظ تغييرات الملف',
   'profile.saveError': 'لم نتمكن من حفظ تغييراتك. تحقق من اتصالك وحاول مرة أخرى.',
+  'profile.readinessTitle': 'أكمل تقديمك',
+  'profile.readinessBody': 'أضف {{items}} حتى يمنح تقديمك انطباعاً حقيقياً عنك.',
+  'profile.readinessReadyTitle': 'تقديمك جاهز',
+  'profile.readinessReadyBody': 'الأساسيات مكتملة. حافظ على تحديث تفاصيلك عندما تتغير خططك.',
+  'profile.readinessName': 'اسمك الأول',
+  'profile.readinessLocation': 'موقعك',
+  'profile.readinessBio': 'نبذة قصيرة',
+  'profile.readinessPhoto': 'صورة واضحة',
 };
