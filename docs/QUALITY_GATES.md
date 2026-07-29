@@ -16,7 +16,7 @@ The GitHub workflow at `.github/workflows/quality.yml` runs the client gate and 
 
 ## Database contract gate: required before production database changes
 
-The repository contains pgTAP tests through migration `0032`, but they are not yet wired to CI because there is no committed local Supabase configuration. Do not point tests at the linked project.
+The repository contains pgTAP tests through migration `0035`, but they are not yet wired to CI because there is no committed local Supabase configuration. Do not point tests at the linked project.
 
 When local Supabase configuration and Docker are deliberately added, enable this sequence in CI against an isolated local database:
 
@@ -59,3 +59,4 @@ Repeat each relevant path in English and Arabic after a cold restart, at 200% fo
 - Calling and in-chat voice-note sending are not production features. Profile voice introductions use private storage and must be tested against real permissions and signed-URL expiry.
 - Subscription purchase, entitlement verification, restore, cancellation, and localized pricing are not implemented. A mock membership preview cannot be marketed as Halal Mode Premium.
 - Account deletion requests immediately pause a profile and close connections. The service-only finalizer is coded but must not be deployed or scheduled before retention/support approval and worker-secret configuration.
+- Blocked-member management, notification-consent registration, and profile-readiness guidance have server contracts and pgTAP coverage, but still require isolated database and native-device validation.

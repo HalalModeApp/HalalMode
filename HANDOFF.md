@@ -19,7 +19,7 @@ or production verification.
 - Profile voice introductions use `expo-audio` and private storage. Chat voice
   sending and actual calling remain unavailable by design until a provider,
   consent model, abuse controls, and retention policy are approved.
-- Migrations through `0032` and matching pgTAP contracts are committed locally.
+- Migrations through `0035` and matching pgTAP contracts are committed locally.
   They still need isolated pgTAP validation, deployment, and remote verification
   before their server-side changes can be called live.
 
