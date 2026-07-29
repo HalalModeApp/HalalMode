@@ -6,12 +6,15 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import type { User } from '@supabase/supabase-js';
 
 import { requireSupabase, supabase, USE_MOCKS } from '@/lib/supabase';
+import { hasAuthPrincipalChanged } from '@/lib/authSessionScope';
+import { queryClient } from '@/lib/queryClient';
 
 interface AuthValue {
   user: User | null;
@@ -30,6 +33,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(USE_MOCKS);
   const [onboardingComplete, setOnboardingComplete] = useState(USE_MOCKS);
   const [authError, setAuthError] = useState<'invalid_link' | null>(null);
+  const activeUserId = useRef<string | null>(null);
+
+  const adoptUser = useCallback((nextUser: User | null) => {
+    if (hasAuthPrincipalChanged(activeUserId.current, nextUser?.id ?? null)) {
+      // Query keys intentionally do not contain an account id. Clear every
+      // in-memory result before a different member can render it.
+      queryClient.clear();
+      setOnboardingComplete(false);
+    }
+    activeUserId.current = nextUser?.id ?? null;
+    setUser(nextUser);
+  }, []);
 
   const refreshProfileStatus = useCallback(async () => {
     if (USE_MOCKS) return;
@@ -71,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (initialUrl) await exchangeCode(initialUrl);
       const { data } = await client.auth.getUser();
       if (active) {
-        setUser(data.user);
+        adoptUser(data.user);
         setReady(true);
       }
     };
@@ -79,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const subscription = client.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
-      setUser(session?.user ?? null);
+      adoptUser(session?.user ?? null);
       if (session?.user) setAuthError(null);
       setReady(true);
     });
@@ -89,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.data.subscription.unsubscribe();
       linking.remove();
     };
-  }, []);
+  }, [adoptUser]);
 
   useEffect(() => {
     if (!ready || USE_MOCKS) return;
@@ -102,6 +117,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (!USE_MOCKS) await requireSupabase().auth.signOut();
+    // Covers mock mode and an auth provider that does not emit an event before
+    // the route changes.
+    queryClient.clear();
+    activeUserId.current = null;
+    setUser(null);
+    setOnboardingComplete(false);
   }, []);
 
   const clearAuthError = useCallback(() => setAuthError(null), []);
