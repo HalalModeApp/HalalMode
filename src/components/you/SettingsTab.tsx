@@ -199,11 +199,17 @@ export function SettingsTab({
             </View>
           ))}
         </View>
-        <Button
-          label={isPremium ? t('settings.managePremium') : t('settings.explorePremium')}
-          variant="onDark"
-          onPress={() => setPremiumConfirm(true)}
-        />
+        {USE_MOCKS ? (
+          <Button
+            label={isPremium ? t('settings.managePremium') : t('settings.explorePremium')}
+            variant="onDark"
+            onPress={() => setPremiumConfirm(true)}
+          />
+        ) : (
+          <Text variant="caption" style={styles.premiumUnavailable}>
+            {t('settings.purchaseUnavailable')}
+          </Text>
+        )}
       </Card>
 
       <Card tone="filled" style={styles.premiumDetails}>
@@ -318,22 +324,20 @@ export function SettingsTab({
         onCancel={() => setDeleteConfirm(false)}
       />
 
-      <ConfirmDialog
-        visible={premiumConfirm}
-        title={isPremium ? t('settings.leavePremium') : t('settings.tryPremium')}
-        body={USE_MOCKS
-          ? (isPremium
-            ? t('settings.demoFree')
-            : t('settings.demoPremium'))
-          : t('settings.purchaseUnavailable')}
-        confirmLabel={USE_MOCKS ? (isPremium ? t('settings.useFree') : t('settings.activatePremium')) : t('settings.okay')}
-        cancelLabel={t('settings.notNow')}
-        onConfirm={() => {
-          if (USE_MOCKS) setTier(isPremium ? 'free' : 'premium');
-          setPremiumConfirm(false);
-        }}
-        onCancel={() => setPremiumConfirm(false)}
-      />
+      {USE_MOCKS ? (
+        <ConfirmDialog
+          visible={premiumConfirm}
+          title={isPremium ? t('settings.leavePremium') : t('settings.tryPremium')}
+          body={isPremium ? t('settings.demoFree') : t('settings.demoPremium')}
+          confirmLabel={isPremium ? t('settings.useFree') : t('settings.activatePremium')}
+          cancelLabel={t('settings.notNow')}
+          onConfirm={() => {
+            setTier(isPremium ? 'free' : 'premium');
+            setPremiumConfirm(false);
+          }}
+          onCancel={() => setPremiumConfirm(false)}
+        />
+      ) : null}
       <BlockedMembersSheet visible={blockedOpen} onClose={() => setBlockedOpen(false)} />
     </View>
   );
@@ -494,6 +498,7 @@ const styles = StyleSheet.create({
     color: color.goldOnDark,
   },
   premiumTitle: { marginTop: 8, fontFamily: font.display, fontSize: 20, color: color.white },
+  premiumUnavailable: { color: 'rgba(252,252,251,0.72)', lineHeight: 18 },
   featureList: { gap: 9 },
   featureRow: { flexDirection: 'row', gap: 9, alignItems: 'flex-start' },
   featureMark: { color: color.goldOnDark, fontSize: 11, marginTop: 3 },
