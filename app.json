@@ -3,6 +3,9 @@
     "name": "Halal Mode",
     "slug": "halal-mode",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "scheme": "halalmode",
     "userInterfaceStyle": "light",
