@@ -18,6 +18,8 @@ import {
   hasAuthPrincipalChanged,
   MEMBER_SIGN_OUT_SCOPE,
 } from '@/lib/authSessionScope';
+import { clearPrivateMediaCache } from '@/lib/privateMediaCache';
+import { shouldClearPrivateMediaCache } from '@/lib/privateMediaCachePolicy';
 import { queryClient } from '@/lib/queryClient';
 
 interface AuthValue {
@@ -41,13 +43,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const profileStatusRequest = useRef(0);
 
   const adoptUser = useCallback((nextUser: User | null) => {
-    if (hasAuthPrincipalChanged(activeUserId.current, nextUser?.id ?? null)) {
+    const nextUserId = nextUser?.id ?? null;
+    if (hasAuthPrincipalChanged(activeUserId.current, nextUserId)) {
       // Query keys intentionally do not contain an account id. Clear every
       // in-memory result before a different member can render it.
       queryClient.clear();
       setOnboardingComplete(false);
     }
-    activeUserId.current = nextUser?.id ?? null;
+    if (shouldClearPrivateMediaCache(activeUserId.current, nextUserId)) {
+      void clearPrivateMediaCache();
+    }
+    activeUserId.current = nextUserId;
     setUser(nextUser);
   }, []);
 
@@ -139,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Covers mock mode and an auth provider that does not emit an event before
     // the route changes.
     queryClient.clear();
+    void clearPrivateMediaCache();
     activeUserId.current = null;
     setUser(null);
     setOnboardingComplete(false);
