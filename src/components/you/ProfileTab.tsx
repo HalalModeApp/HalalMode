@@ -438,6 +438,7 @@ export function ProfileTab({ profile }: { profile: Profile }) {
         <View style={[styles.photoActions, isRTL && styles.rowRTL]}>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={t('profile.camera')}
             accessibilityState={{ busy: uploadingPhoto, disabled: uploadingPhoto }}
             disabled={uploadingPhoto}
             onPress={() => void addPhoto('camera')}
@@ -449,6 +450,7 @@ export function ProfileTab({ profile }: { profile: Profile }) {
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={t('profile.files')}
             accessibilityState={{ busy: uploadingPhoto, disabled: uploadingPhoto }}
             disabled={uploadingPhoto}
             onPress={() => void addPhoto('library')}
@@ -466,6 +468,8 @@ export function ProfileTab({ profile }: { profile: Profile }) {
             <AudioGreeting durationSeconds={voiceDuration} url={voiceUrl} />
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={t('profile.recordAgain')}
+              accessibilityState={{ busy: savingVoice, disabled: savingVoice }}
               disabled={savingVoice}
               onPress={() => void startVoiceRecording()}
               style={styles.recordAgain}
