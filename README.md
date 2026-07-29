@@ -22,8 +22,7 @@ disclosure, endless browsing, and paid visibility.
   account controls have server-side boundaries in migrations.
 - Profile voice introductions can record, upload to private storage, and play.
   In-chat voice-note sending and real calling are not production features.
-- Halal Mode Premium is the member-facing name. The current `plus` tier key is
-  an internal schema compatibility detail, not product copy.
+- Halal Mode Premium is the member-facing and server-side membership tier.
 
 See [release gates](docs/QUALITY_GATES.md) and the
 [release checklist](docs/RELEASE_CHECKLIST.md) for what is actually verified.

@@ -285,7 +285,7 @@ export function buildMockRound(size: number): IntroductionRound {
     id: 'round-1',
     opensAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + 20 * 3600 * 1000).toISOString(),
-    tier: size > 5 ? 'plus' : 'free',
+    tier: size > 5 ? 'premium' : 'free',
     introductions,
     submitted: false,
   };

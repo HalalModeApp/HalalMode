@@ -34,7 +34,7 @@ export type FamilyGoals =
   | 'open_to_children'
   | 'no_children';
 
-export type MembershipTier = 'free' | 'plus';
+export type MembershipTier = 'free' | 'premium';
 
 export interface ProfileMediaSource {
   /** Renderable HTTPS/mock URL. Private Storage paths are signed before use. */
@@ -49,7 +49,7 @@ export const TIER_LIMITS: Record<
   { introductions: number; keeps: number; openConnections: number }
 > = {
   free: { introductions: 5, keeps: 1, openConnections: 5 },
-  plus: { introductions: 10, keeps: 3, openConnections: 10 },
+  premium: { introductions: 10, keeps: 3, openConnections: 10 },
 };
 
 /**

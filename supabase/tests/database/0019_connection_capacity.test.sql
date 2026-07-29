@@ -4,7 +4,7 @@ set local search_path = public, extensions;
 select plan(28);
 
 select is((select open_connections from tier_limits('free')), 5, 'free members have five conversation slots');
-select is((select open_connections from tier_limits('plus')), 10, 'Plus members have ten conversation slots');
+select is((select open_connections from tier_limits('premium')), 10, 'Premium members have ten conversation slots');
 select ok(
   (select relrowsecurity from pg_class where oid = 'public.mutual_connection_queue'::regclass),
   'the waiting-mutual queue has RLS enabled'
@@ -26,12 +26,12 @@ select ok(
 );
 
 insert into auth.users (id, email) values
-  ('00000000-0000-0000-0000-000000000191', 'capacity-plus@example.test'),
+  ('00000000-0000-0000-0000-000000000191', 'capacity-premium@example.test'),
   ('00000000-0000-0000-0000-000000000192', 'capacity-b@example.test'),
   ('00000000-0000-0000-0000-000000000193', 'capacity-c@example.test'),
   ('00000000-0000-0000-0000-000000000194', 'capacity-d@example.test');
 insert into profiles (id, name, first_name, birth_date, gender, tier, onboarding_complete) values
-  ('00000000-0000-0000-0000-000000000191', 'Capacity Plus', 'Plus', '1990-01-01', 'male', 'plus', true),
+  ('00000000-0000-0000-0000-000000000191', 'Capacity Premium', 'Premium', '1990-01-01', 'male', 'premium', true),
   ('00000000-0000-0000-0000-000000000192', 'Capacity B', 'B', '1990-01-01', 'female', 'free', true),
   ('00000000-0000-0000-0000-000000000193', 'Capacity C', 'C', '1990-01-01', 'female', 'free', true),
   ('00000000-0000-0000-0000-000000000194', 'Capacity D', 'D', '1990-01-01', 'female', 'free', true);
@@ -48,7 +48,7 @@ select least('00000000-0000-0000-0000-000000000191'::uuid, id),
 from capacity_fillers;
 
 insert into rounds (id, user_id, tier, expires_at, submitted_at) values
-  ('00000000-0000-0000-0000-000000001901', '00000000-0000-0000-0000-000000000191', 'plus', now() + interval '1 hour', null),
+  ('00000000-0000-0000-0000-000000001901', '00000000-0000-0000-0000-000000000191', 'premium', now() + interval '1 hour', null),
   ('00000000-0000-0000-0000-000000001902', '00000000-0000-0000-0000-000000000192', 'free', now() + interval '1 hour', now()),
   ('00000000-0000-0000-0000-000000001903', '00000000-0000-0000-0000-000000000193', 'free', now() + interval '1 hour', now());
 insert into introductions (id, round_id, viewer_id, subject_id, reciprocal_id) values
@@ -73,7 +73,7 @@ insert into capacity_result values (submit_round_selections(
 select is(
   (select payload->'mutualProfileIds' from capacity_result),
   '["00000000-0000-0000-0000-000000000192"]'::jsonb,
-  'only the first simultaneous mutual activates into the final Plus slot'
+  'only the first simultaneous mutual activates into the final Premium slot'
 );
 select is(
   (select payload->'waitingMutualProfileIds' from capacity_result),
@@ -84,7 +84,7 @@ select is(
   (select count(*)::int from connections
    where closed_at is null and (user_a = '00000000-0000-0000-0000-000000000191' or user_b = '00000000-0000-0000-0000-000000000191')),
   10,
-  'simultaneous mutuals cannot exceed the Plus capacity'
+  'simultaneous mutuals cannot exceed the Premium capacity'
 );
 select is(
   (select count(*)::int from connections

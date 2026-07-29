@@ -52,9 +52,9 @@ or production verification.
 3. Run the release checklist for the pending migrations and current client work.
 4. Validate native builds on the four-size matrix rather than trusting stale
    emulator content or browser previews.
-5. Keep UI copy member-facing as **Halal Mode Premium**. The `plus` database
-   enum/key remains only until a separately planned, backward-compatible schema
-   migration is approved.
+5. Keep **Halal Mode Premium** consistent in member-facing copy and server-side
+   tier values; the local session migration accepts the retired `plus` value
+   only to upgrade older installed clients safely.
 
 ## Working conventions
 

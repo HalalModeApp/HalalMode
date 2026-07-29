@@ -40,13 +40,13 @@ export function SettingsTab({
   const { tier, setTier, language, setLanguage } = useSession();
   const [settings, setSettings] = useState<LocalSettings>(DEFAULT_SETTINGS);
   const [pauseConfirm, setPauseConfirm] = useState(false);
-  const [plusConfirm, setPlusConfirm] = useState(false);
+  const [premiumConfirm, setPremiumConfirm] = useState(false);
   const limits = TIER_LIMITS[tier];
-  const isPlus = tier === 'plus';
-  const plusFeatures = [
-    t('settings.plus.f1'),
-    t('settings.plus.f2'),
-    t('settings.plus.f4'),
+  const isPremium = tier === 'premium';
+  const premiumFeatures = [
+    t('settings.premium.f1'),
+    t('settings.premium.f2'),
+    t('settings.premium.f4'),
   ];
 
   useEffect(() => {
@@ -153,10 +153,10 @@ export function SettingsTab({
       <Card tone="dark" style={styles.plusCard}>
         <View>
           <Text style={styles.plusLabel}>{t('settings.membership')}</Text>
-          <Text style={styles.plusTitle}>{t('settings.plus')}</Text>
+          <Text style={styles.premiumTitle}>{t('settings.premium')}</Text>
         </View>
         <View style={styles.featureList}>
-          {plusFeatures.map((feature) => (
+          {premiumFeatures.map((feature) => (
             <View key={feature} style={[styles.featureRow, isRTL && styles.rowReverse]}>
               <Text style={styles.featureMark}>✦</Text>
               <Text style={styles.featureText}>{feature}</Text>
@@ -164,23 +164,23 @@ export function SettingsTab({
           ))}
         </View>
         <Button
-          label={isPlus ? t('settings.managePlus') : t('settings.explorePlus')}
+          label={isPremium ? t('settings.managePlus') : t('settings.explorePlus')}
           variant="onDark"
-          onPress={() => setPlusConfirm(true)}
+          onPress={() => setPremiumConfirm(true)}
         />
       </Card>
 
       <Card tone="filled" style={styles.plusDetails}>
         <View style={[styles.plusDetailsHead, isRTL && styles.rowReverse]}>
           <View>
-            <Text variant="microAccent">{t('settings.plus')}</Text>
-            <Text variant="displaySmall" style={styles.plusDetailsTitle}>
-              {t('settings.plusTitle')}
+            <Text variant="microAccent">{t('settings.premium')}</Text>
+            <Text variant="displaySmall" style={styles.premiumDetailsTitle}>
+              {t('settings.premiumTitle')}
             </Text>
           </View>
-          <View style={[styles.planBadge, isPlus && styles.planBadgeActive]}>
-            <Text style={[styles.planBadgeLabel, isPlus && styles.planBadgeLabelActive]}>
-              {isPlus ? t('settings.active') : t('settings.preview')}
+          <View style={[styles.planBadge, isPremium && styles.planBadgeActive]}>
+            <Text style={[styles.planBadgeLabel, isPremium && styles.planBadgeLabelActive]}>
+              {isPremium ? t('settings.active') : t('settings.preview')}
             </Text>
           </View>
         </View>
@@ -206,7 +206,7 @@ export function SettingsTab({
         <View style={[styles.plusRule, isRTL && styles.rowReverse]}>
           <Text style={styles.plusRuleMark}>◌</Text>
           <Text variant="caption" style={styles.plusRuleText}>
-            {t('settings.plusPrivacy')}
+            {t('settings.premiumPrivacy')}
           </Text>
         </View>
       </Card>
@@ -259,20 +259,20 @@ export function SettingsTab({
       />
 
       <ConfirmDialog
-        visible={plusConfirm}
-        title={isPlus ? t('settings.leavePlus') : t('settings.tryPlus')}
+        visible={premiumConfirm}
+        title={isPremium ? t('settings.leavePlus') : t('settings.tryPlus')}
         body={USE_MOCKS
-          ? (isPlus
+          ? (isPremium
             ? t('settings.demoFree')
             : t('settings.demoPlus'))
           : t('settings.purchaseUnavailable')}
-        confirmLabel={USE_MOCKS ? (isPlus ? t('settings.useFree') : t('settings.activatePlus')) : t('settings.okay')}
+        confirmLabel={USE_MOCKS ? (isPremium ? t('settings.useFree') : t('settings.activatePlus')) : t('settings.okay')}
         cancelLabel={t('settings.notNow')}
         onConfirm={() => {
-          if (USE_MOCKS) setTier(isPlus ? 'free' : 'plus');
-          setPlusConfirm(false);
+          if (USE_MOCKS) setTier(isPremium ? 'free' : 'premium');
+          setPremiumConfirm(false);
         }}
-        onCancel={() => setPlusConfirm(false)}
+        onCancel={() => setPremiumConfirm(false)}
       />
     </View>
   );
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: color.goldOnDark,
   },
-  plusTitle: { marginTop: 8, fontFamily: font.display, fontSize: 20, color: color.white },
+  premiumTitle: { marginTop: 8, fontFamily: font.display, fontSize: 20, color: color.white },
   featureList: { gap: 9 },
   featureRow: { flexDirection: 'row', gap: 9, alignItems: 'flex-start' },
   featureMark: { color: color.goldOnDark, fontSize: 11, marginTop: 3 },
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
   },
   plusDetails: { gap: 16, borderRadius: radius.panel, padding: 18 },
   plusDetailsHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
-  plusDetailsTitle: { marginTop: 6, fontSize: 20, lineHeight: 26, flexShrink: 1 },
+  premiumDetailsTitle: { marginTop: 6, fontSize: 20, lineHeight: 26, flexShrink: 1 },
   planBadge: {
     borderWidth: 1,
     borderColor: 'rgba(138,106,52,0.28)',

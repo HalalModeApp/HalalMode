@@ -14,11 +14,11 @@ export function BrandHeader() {
   return (
     <View style={styles.header}>
       <Wordmark width={110} />
-      {tier === 'plus' ? (
+      {tier === 'premium' ? (
         // Beiruti rather than the logo's own letterforms, and gold rather than
         // ink — so it reads as a tier badge attached to the mark, not as part
         // of the mark itself.
-        <Text testID="membership-premium-badge" accessibilityLabel={t('settings.premium')} style={styles.plus}>{t('settings.premiumBadge')}</Text>
+        <Text testID="membership-premium-badge" accessibilityLabel={t('settings.premium')} style={styles.premium}>{t('settings.premiumBadge')}</Text>
       ) : null}
     </View>
   );
@@ -33,7 +33,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingBottom: 4,
   },
-  plus: {
+  premium: {
     fontFamily: font.bodySemi,
     fontSize: 15,
     lineHeight: 17,

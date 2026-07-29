@@ -11,6 +11,7 @@ import {
 
 import type { Language, MembershipTier } from '@/types';
 import { isSupportedLocale } from '@/i18n/locales';
+import { normalizeMembershipTier } from '@/lib/membership';
 
 const STORAGE_KEY = 'halalmode.session.v1';
 
@@ -43,8 +44,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       .then((raw) => {
         if (cancelled || !raw) return;
         const parsed = JSON.parse(raw) as Partial<SessionValue>;
-        if (parsed.tier === 'plus' || parsed.tier === 'free') {
-          setTierState(parsed.tier);
+        const savedTier = normalizeMembershipTier(parsed.tier);
+        if (savedTier) {
+          setTierState(savedTier);
+          if (savedTier !== parsed.tier) {
+            void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+              tier: savedTier,
+              language: isSupportedLocale(parsed.language) ? parsed.language : 'en',
+            })).catch(() => {});
+          }
         }
         if (isSupportedLocale(parsed.language)) {
           setLanguageState(parsed.language);
