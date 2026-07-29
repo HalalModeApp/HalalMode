@@ -34,21 +34,27 @@ async function madinahFajrWindow(now = new Date()) {
   return { cycleDate: current.date, due: currentMinutes >= fajrMinutes && currentMinutes < fajrMinutes + 15 };
 }
 
+function nextMadinahDate(cycleDate: string) {
+  const tomorrow = new Date(`${cycleDate}T00:00:00+03:00`);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  return madinahParts(tomorrow).date;
+}
+
+function madinahInstant(cycleDate: string, hour: number, minute: number) {
+  return new Date(`${cycleDate}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+03:00`);
+}
+
 async function planTomorrowFajr(now = new Date()) {
   const today = madinahParts(now).date;
-  const tomorrow = new Date(`${today}T00:00:00+03:00`);
-  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-  const timing = await madinahFajrWindow(tomorrow);
-  const response = await fetch(
-    `https://api.aladhan.com/v1/timingsByCity/${timing.cycleDate}?city=Medina&country=Saudi%20Arabia&method=4`
-  );
-  const payload = await response.json() as { data?: { timings?: { Fajr?: string } } };
-  const pieces = (payload.data?.timings?.Fajr ?? '').match(/\d{1,2}/g)?.map(Number) ?? [];
-  const hour = pieces[0];
-  const minute = pieces[1];
-  if (!response.ok || hour === undefined || minute === undefined) throw new Error('Tomorrow’s Madinah Fajr time was unavailable');
+  const cycleDate = nextMadinahDate(today);
+  const { hour, minute } = await fajrForMadinahDate(cycleDate);
+  // fajrForMadinahDate validates the upstream response and parsed time.
   // Madinah is permanently UTC+3. pg_cron schedules in UTC on Supabase.
-  return { cycleDate: timing.cycleDate, schedule: `${minute} ${(hour + 21) % 24} * * *` };
+  return {
+    cycleDate,
+    schedule: `${minute} ${(hour + 21) % 24} * * *`,
+    startsAt: madinahInstant(cycleDate, hour, minute).toISOString(),
+  };
 }
 
 Deno.serve(async (request: Request) => {
@@ -83,7 +89,9 @@ Deno.serve(async (request: Request) => {
   }
   if (cycle.error) return Response.json({ error: cycle.error.message }, { status: 500 });
 
-  const expiresAt = new Date(Date.now() + 20 * 3600 * 1000).toISOString();
+  // Keep the round live until the next daily Madinah Fajr reset.
+  const nextFajr = await planTomorrowFajr();
+  const expiresAt = nextFajr.startsAt;
   const expired = await client.rpc('expire_stale_rounds');
   if (expired.error) {
     await client.from('round_generation_runs').delete().eq('cycle_date', timing.cycleDate);
