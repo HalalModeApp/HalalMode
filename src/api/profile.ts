@@ -2,6 +2,30 @@ import { MOCK_PREFERENCES, MOCK_SELF } from '@/data/mock';
 import { requireSupabase, USE_MOCKS } from '@/lib/supabase';
 import { hydrateProfileMedia } from '@/api/profileMedia';
 import type { PrivatePreferences, Profile } from '@/types';
+import type { ProfileReadinessIssue } from '@/lib/profileReadiness';
+
+export interface ProfileReadinessStatus {
+  ready: boolean;
+  missing: ProfileReadinessIssue[];
+}
+
+export async function fetchMyProfileReadiness(): Promise<ProfileReadinessStatus> {
+  if (USE_MOCKS) {
+    const profile = await fetchMyProfile();
+    const { getProfileReadiness } = await import('@/lib/profileReadiness');
+    return getProfileReadiness({ ...profile, photoCount: profile.photos.length });
+  }
+  const client = requireSupabase();
+  const { data, error } = await client.rpc('get_my_profile_readiness');
+  if (error) throw error;
+  const payload = (data ?? {}) as Record<string, unknown>;
+  const missing = Array.isArray(payload.missing)
+    ? payload.missing.filter((item): item is ProfileReadinessIssue =>
+      item === 'name' || item === 'location' || item === 'bio' || item === 'photo'
+    )
+    : [];
+  return { ready: payload.ready === true, missing };
+}
 
 export async function fetchMyProfile(): Promise<Profile> {
   if (USE_MOCKS) return MOCK_SELF;

@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { z } from 'zod';
 
-import { updateMyProfile } from '@/api/profile';
+import { fetchMyProfileReadiness, updateMyProfile } from '@/api/profile';
 import {
   createProfileMediaSignedUrl,
   deleteProfilePhoto,
@@ -86,7 +86,7 @@ export function ProfileTab({ profile }: { profile: Profile }) {
     },
   });
   const draft = useWatch({ control });
-  const readiness = useMemo(
+  const draftReadiness = useMemo(
     () => getProfileReadiness({
       firstName: draft.firstName,
       city: draft.city,
@@ -96,6 +96,16 @@ export function ProfileTab({ profile }: { profile: Profile }) {
     }),
     [draft.bio, draft.city, draft.country, draft.firstName, photos.length]
   );
+  const serverReadinessQuery = useQuery({
+    queryKey: queryKeys.profileReadiness,
+    queryFn: fetchMyProfileReadiness,
+    enabled: !USE_MOCKS,
+  });
+  // Drafts should react immediately. Once saved, the server contract is the
+  // source of truth so an older app cannot show a conflicting status.
+  const readiness = (!isDirty && !photosDirty && serverReadinessQuery.data)
+    ? serverReadinessQuery.data
+    : draftReadiness;
 
   useEffect(() => {
     setPhotos(profile.photos);
@@ -219,6 +229,7 @@ export function ProfileTab({ profile }: { profile: Profile }) {
         photos,
       };
       queryClient.setQueryData(queryKeys.profile('me'), saved);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.profileReadiness });
       reset(values);
       setPhotosDirty(false);
     },
@@ -295,6 +306,7 @@ export function ProfileTab({ profile }: { profile: Profile }) {
               }
             : current
         );
+        void queryClient.invalidateQueries({ queryKey: queryKeys.profileReadiness });
       } catch {
         Alert.alert(
           t('profile.uploadError'),
@@ -330,6 +342,7 @@ export function ProfileTab({ profile }: { profile: Profile }) {
             }
           : current
       );
+      void queryClient.invalidateQueries({ queryKey: queryKeys.profileReadiness });
     };
 
     if (USE_MOCKS) {
