@@ -11,7 +11,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, View } from 'react-native';
 import { z } from 'zod';
 
 import { fetchMyProfileReadiness, updateMyProfile } from '@/api/profile';
@@ -128,7 +128,9 @@ export function ProfileTab({ profile }: { profile: Profile }) {
   const startVoiceRecording = useCallback(async () => {
     const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(
+      showPermissionRecovery(
+        permission.canAskAgain,
+        t,
         t('profile.micTitle'),
         t('profile.micBody')
       );
@@ -246,7 +248,9 @@ export function ProfileTab({ profile }: { profile: Profile }) {
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert(
+      showPermissionRecovery(
+        permission.canAskAgain,
+        t,
         t('profile.permissionTitle'),
         t('profile.permissionBody')
       );
@@ -620,6 +624,25 @@ const readinessKey: Record<ProfileReadinessIssue, 'profile.readinessName' | 'pro
   bio: 'profile.readinessBio',
   photo: 'profile.readinessPhoto',
 };
+
+function showPermissionRecovery(
+  canAskAgain: boolean,
+  t: Translate,
+  title: string,
+  body: string
+) {
+  if (canAskAgain) {
+    Alert.alert(title, body);
+    return;
+  }
+  Alert.alert(title, body, [
+    { text: t('settings.notNow'), style: 'cancel' },
+    {
+      text: t('common.openSettings'),
+      onPress: () => { void Linking.openSettings().catch(() => {}); },
+    },
+  ]);
+}
 
 const styles = StyleSheet.create({
   rtl: { direction: 'rtl' },
