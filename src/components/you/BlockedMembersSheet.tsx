@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Text } from '@/components/ui/Text';
 import { useI18n } from '@/i18n';
 import { color, font, radius, space } from '@/theme/tokens';
+import { testIds } from '@/lib/testIds';
 
 export function BlockedMembersSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t, isRTL } = useI18n();
@@ -35,7 +36,7 @@ export function BlockedMembersSheet({ visible, onClose }: { visible: boolean; on
         <View style={[styles.sheet, isRTL && styles.rtl]}>
           <View style={[styles.header, isRTL && styles.rowReverse]}>
             <View style={styles.headerText}>
-              <Text variant="displaySmall">{t('settings.blocked')}</Text>
+              <Text testID={testIds.settings.blockedTitle} variant="displaySmall">{t('settings.blocked')}</Text>
               <Text variant="caption">{t('settings.blockedSheetBody')}</Text>
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel={t('common.dismiss')} onPress={onClose} style={styles.close}>

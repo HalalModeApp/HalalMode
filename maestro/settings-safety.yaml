@@ -10,4 +10,5 @@ appId: com.halalmode.app
     id: settings-blocked-members
 - tapOn:
     id: settings-blocked-members
-- assertVisible: Blocked people
+- assertVisible:
+    id: settings-blocked-title
