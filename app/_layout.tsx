@@ -8,16 +8,18 @@ import {
   PlayfairDisplay_400Regular,
   PlayfairDisplay_400Regular_Italic,
 } from '@expo-google-fonts/playfair-display';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '@/lib/queryClient';
+import { I18nProvider } from '@/i18n';
 import { AuthGate, AuthProvider } from '@/state/auth';
 import { RoundProvider } from '@/state/round';
 import { SessionProvider } from '@/state/session';
@@ -40,6 +42,14 @@ export default function RootLayout() {
     if (fontsLoaded || fontError) void SplashScreen.hideAsync();
   }, [fontsLoaded, fontError]);
 
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const subscription = AppState.addEventListener('change', (status) => {
+      focusManager.setFocused(status === 'active');
+    });
+    return () => subscription.remove();
+  }, []);
+
   if (!fontsLoaded && !fontError) return null;
 
   return (
@@ -49,7 +59,8 @@ export default function RootLayout() {
           <AuthProvider>
             <AuthGate>
               <SessionProvider>
-                <RoundProvider>
+                <I18nProvider>
+                  <RoundProvider>
                   <StatusBar style="dark" />
                   <Stack
                 screenOptions={{
@@ -75,7 +86,8 @@ export default function RootLayout() {
                   options={{ presentation: 'transparentModal', animation: 'fade' }}
                 />
                   </Stack>
-                </RoundProvider>
+                  </RoundProvider>
+                </I18nProvider>
               </SessionProvider>
             </AuthGate>
           </AuthProvider>

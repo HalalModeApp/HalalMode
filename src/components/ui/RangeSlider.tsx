@@ -19,6 +19,8 @@ export interface RangeSliderProps {
   /** Current [low, high]. The component keeps low <= high itself. */
   value: [number, number];
   onChange: (value: [number, number]) => void;
+  lowAccessibilityLabel: string;
+  highAccessibilityLabel: string;
 }
 
 /**
@@ -34,6 +36,8 @@ export function RangeSlider({
   step = 1,
   value,
   onChange,
+  lowAccessibilityLabel,
+  highAccessibilityLabel,
 }: RangeSliderProps) {
   const [width, setWidth] = useState(0);
   const usable = Math.max(width - THUMB, 1);
@@ -59,6 +63,24 @@ export function RangeSlider({
       onChange([low, high]);
     },
     [onChange]
+  );
+
+  const adjustLow = useCallback(
+    (direction: 1 | -1) => {
+      const next = Math.min(value[1], Math.max(min, value[0] + direction * step));
+      lowValue.value = next;
+      onChange([next, value[1]]);
+    },
+    [lowValue, min, onChange, step, value]
+  );
+
+  const adjustHigh = useCallback(
+    (direction: 1 | -1) => {
+      const next = Math.min(max, Math.max(value[0], value[1] + direction * step));
+      highValue.value = next;
+      onChange([value[0], next]);
+    },
+    [highValue, max, onChange, step, value]
   );
 
   const pan = Gesture.Pan()
@@ -118,14 +140,24 @@ export function RangeSlider({
         <Animated.View
           style={[styles.thumb, lowStyle]}
           accessibilityRole="adjustable"
-          accessibilityLabel="Minimum height"
+          accessibilityLabel={lowAccessibilityLabel}
           accessibilityValue={{ min, max, now: value[0] }}
+          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+          onAccessibilityAction={(event) => {
+            if (event.nativeEvent.actionName === 'increment') adjustLow(1);
+            if (event.nativeEvent.actionName === 'decrement') adjustLow(-1);
+          }}
         />
         <Animated.View
           style={[styles.thumb, highStyle]}
           accessibilityRole="adjustable"
-          accessibilityLabel="Maximum height"
+          accessibilityLabel={highAccessibilityLabel}
           accessibilityValue={{ min, max, now: value[1] }}
+          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+          onAccessibilityAction={(event) => {
+            if (event.nativeEvent.actionName === 'increment') adjustHigh(1);
+            if (event.nativeEvent.actionName === 'decrement') adjustHigh(-1);
+          }}
         />
       </View>
     </GestureDetector>
@@ -133,7 +165,7 @@ export function RangeSlider({
 }
 
 const styles = StyleSheet.create({
-  hitArea: { height: 40, justifyContent: 'center' },
+  hitArea: { height: 48, justifyContent: 'center' },
   track: {
     height: TRACK_HEIGHT,
     borderRadius: radius.pill,

@@ -1,20 +1,24 @@
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
+import { useI18n } from '@/i18n';
 import { requireSupabase } from '@/lib/supabase';
+import { useSession } from '@/state/session';
 import { color, radius, space } from '@/theme/tokens';
 
 export default function AuthScreen() {
+  const { t, isRTL } = useI18n();
+  const { language, setLanguage } = useSession();
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
 
   const sendLink = async () => {
     const cleanEmail = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(cleanEmail)) {
-      Alert.alert('Enter a valid email address');
+      Alert.alert(t('auth.invalidEmail'));
       return;
     }
     setSending(true);
@@ -24,9 +28,9 @@ export default function AuthScreen() {
         options: { emailRedirectTo: 'halalmode://auth' },
       });
       if (error) throw error;
-      Alert.alert('Check your email', 'We sent you a secure sign-in link.');
-    } catch (error) {
-      Alert.alert('Could not send the link', error instanceof Error ? error.message : 'Try again shortly.');
+      Alert.alert(t('auth.checkEmail'), t('auth.linkSent'));
+    } catch {
+      Alert.alert(t('auth.sendFailed'), t('auth.sendFailedBody'));
     } finally {
       setSending(false);
     }
@@ -36,28 +40,37 @@ export default function AuthScreen() {
     <Screen>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.content}
+        style={[styles.content, isRTL && styles.rtl]}
       >
         <View>
-          <Text variant="microAccent">Welcome</Text>
-          <Text variant="display" style={styles.title}>A considered way to meet.</Text>
-          <Text variant="body" style={styles.copy}>
-            Enter your email and we’ll send a secure link to sign in or create your account.
-          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('auth.switchLanguageLabel')}
+            onPress={() => setLanguage(language === 'en' ? 'ar' : 'en')}
+            style={[styles.language, isRTL && styles.languageRTL]}
+          >
+            <Text style={styles.languageLabel}>
+              {language === 'en' ? t('auth.switchArabic') : t('auth.switchEnglish')}
+            </Text>
+          </Pressable>
+          <Text variant="microAccent" style={isRTL ? styles.rtlText : undefined}>{t('auth.welcome')}</Text>
+          <Text variant="display" style={[styles.title, isRTL && styles.rtlText]}>{t('auth.title')}</Text>
+          <Text variant="body" style={[styles.copy, isRTL && styles.rtlText]}>{t('auth.body')}</Text>
         </View>
         <View style={styles.form}>
-          <Text variant="label">Email address</Text>
+          <Text variant="label" style={isRTL ? styles.rtlText : undefined}>{t('auth.email')}</Text>
           <TextInput
+            accessibilityLabel={t('auth.email')}
             autoCapitalize="none"
             autoComplete="email"
             keyboardType="email-address"
-            placeholder="you@example.com"
+            placeholder={t('auth.emailPlaceholder')}
             placeholderTextColor={color.faintest}
             value={email}
             onChangeText={setEmail}
-            style={styles.input}
+            style={[styles.input, isRTL && styles.inputRTL]}
           />
-          <Button label="Send secure sign-in link" loading={sending} onPress={() => void sendLink()} />
+          <Button label={t('auth.send')} loading={sending} onPress={() => void sendLink()} />
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -66,6 +79,13 @@ export default function AuthScreen() {
 
 const styles = StyleSheet.create({
   content: { flex: 1, justifyContent: 'space-between', padding: space.gutterWide, paddingBottom: 48 },
+  rtl: { direction: 'rtl' },
+  language: {
+    alignSelf: 'flex-end', borderWidth: 1, borderColor: '#D9D6CE', borderRadius: radius.pill,
+    paddingVertical: 7, paddingHorizontal: 12, marginBottom: 28,
+  },
+  languageRTL: { alignSelf: 'auto', marginRight: 'auto', marginLeft: 0 },
+  languageLabel: { fontFamily: 'Beiruti_600SemiBold', fontSize: 13, color: color.ink },
   title: { marginTop: 10, fontSize: 32, lineHeight: 38 },
   copy: { marginTop: 12, maxWidth: 310 },
   form: { gap: 10 },
@@ -73,4 +93,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#D9D6CE', borderRadius: radius.lg,
     paddingHorizontal: 15, height: 52, color: color.ink, fontFamily: 'Beiruti_400Regular', fontSize: 16,
   },
+  inputRTL: { textAlign: 'right', writingDirection: 'rtl' },
+  rtlText: { alignSelf: 'stretch', textAlign: 'right', writingDirection: 'rtl' },
 });

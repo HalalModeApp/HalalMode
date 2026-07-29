@@ -46,6 +46,15 @@ export function Slider({
     setWidth(event.nativeEvent.layout.width);
   }, []);
 
+  const adjust = useCallback(
+    (direction: 1 | -1) => {
+      const next = Math.min(max, Math.max(min, value + direction * step));
+      current.value = next;
+      onChange(next);
+    },
+    [current, max, min, onChange, step, value]
+  );
+
   const pan = Gesture.Pan()
     .minDistance(0)
     .onBegin(() => {
@@ -85,6 +94,11 @@ export function Slider({
           accessibilityRole="adjustable"
           accessibilityLabel={accessibilityLabel}
           accessibilityValue={{ min, max, now: value }}
+          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+          onAccessibilityAction={(event) => {
+            if (event.nativeEvent.actionName === 'increment') adjust(1);
+            if (event.nativeEvent.actionName === 'decrement') adjust(-1);
+          }}
         />
       </View>
     </GestureDetector>
@@ -92,7 +106,7 @@ export function Slider({
 }
 
 const styles = StyleSheet.create({
-  hitArea: { height: 40, justifyContent: 'center' },
+  hitArea: { height: 48, justifyContent: 'center' },
   track: {
     height: TRACK_HEIGHT,
     borderRadius: radius.pill,

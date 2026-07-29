@@ -37,15 +37,6 @@ export async function fetchConnection(id: string): Promise<Connection> {
     profile: await hydrateProfileMedia(rawConnection.profile),
   };
 
-  if (connection.stage === 'recap' || connection.stage === 'open') {
-    const { data: recap, error: recapError } = await client.rpc(
-      'get_connection_recap',
-      { p_connection_id: id }
-    );
-    if (recapError) throw recapError;
-    connection.recap = (recap ?? []) as Connection['recap'];
-  }
-
   return connection;
 }
 

@@ -3,7 +3,10 @@
  * `supabase/migrations` so rows map onto these types without a translation layer.
  */
 
-export type Language = 'en' | 'ar';
+import type { AppLocale } from '@/i18n/locales';
+
+/** @deprecated Use AppLocale from the central locale registry in new code. */
+export type Language = AppLocale;
 
 export type Gender = 'male' | 'female';
 
@@ -40,13 +43,13 @@ export interface ProfileMediaSource {
   storagePath?: string;
 }
 
-/** How many introductions a round contains, and how many may be kept. */
+/** Daily introduction, keep, and active-conversation limits by membership. */
 export const TIER_LIMITS: Record<
   MembershipTier,
   { introductions: number; keeps: number; openConnections: number }
 > = {
-  free: { introductions: 5, keeps: 1, openConnections: 3 },
-  plus: { introductions: 10, keeps: 3, openConnections: 5 },
+  free: { introductions: 5, keeps: 1, openConnections: 5 },
+  plus: { introductions: 10, keeps: 3, openConnections: 10 },
 };
 
 /**
@@ -163,6 +166,23 @@ export interface QuestionAnswer {
 
 export type RecapVerdict = 'aligned' | 'discuss';
 
+/**
+ * A high-level, server-derived compatibility signal shown after both members
+ * complete the icebreaker. It intentionally carries no preference values,
+ * ranking, or explanation of why either person was selected.
+ */
+export type CompatibilityTopic =
+  | 'values'
+  | 'marriage_timing'
+  | 'location_and_relocation'
+  | 'family_plans'
+  | 'conversation';
+
+export interface CompatibilityBreakdownItem {
+  topic: CompatibilityTopic;
+  verdict: RecapVerdict;
+}
+
 export interface RecapItem {
   questionId: string;
   /** Short neutral heading, e.g. "Prayer as rhythm". */
@@ -189,6 +209,11 @@ export interface Connection {
   /** The five agreed questions, in display order. */
   questions: QuestionAnswer[];
   recap?: RecapItem[];
+  /**
+   * Optional privacy-preserving signals calculated server-side. The client
+   * must never infer these from another member's private preferences.
+   */
+  compatibilityBreakdown?: CompatibilityBreakdownItem[];
   lastMessage?: string;
   lastMessageAt?: string;
   unread: boolean;

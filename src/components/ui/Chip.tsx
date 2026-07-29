@@ -30,8 +30,9 @@ export function Chip({ label, selected = false, onPress, showMark }: ChipProps) 
 
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={label}
       onPress={onPress}
       style={({ pressed }) => (pressed ? styles.pressed : undefined)}
     >
@@ -50,6 +51,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingVertical: 7,
     paddingHorizontal: 13,
+    minHeight: 44,
   },
   chipSelected: { backgroundColor: color.ink, borderColor: color.ink },
   label: { fontFamily: font.body, fontSize: 11.5, color: color.inkSoft },

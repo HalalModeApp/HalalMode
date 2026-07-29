@@ -10,16 +10,10 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/AsyncState
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { queryKeys } from '@/lib/queryClient';
+import { useI18n } from '@/i18n';
 import { useSession } from '@/state/session';
 import { alpha, color, radius, space } from '@/theme/tokens';
 import { TIER_LIMITS, type Connection, type ConnectionStage } from '@/types';
-
-const STAGE_LABEL: Record<ConnectionStage, string> = {
-  choosing_questions: 'Choose your five questions',
-  answering: 'Answering · double blind',
-  recap: 'Recap ready',
-  open: 'Conversation open',
-};
 
 /** Where a tap on each stage should land. */
 const STAGE_ROUTE: Record<ConnectionStage, string> = {
@@ -31,6 +25,7 @@ const STAGE_ROUTE: Record<ConnectionStage, string> = {
 
 export default function ConnectionsScreen() {
   const { tier } = useSession();
+  const { isRTL, t } = useI18n();
   const limit = TIER_LIMITS[tier].openConnections;
 
   const connectionsQuery = useQuery({
@@ -40,17 +35,16 @@ export default function ConnectionsScreen() {
   const connections = connectionsQuery.data ?? [];
 
   return (
-    <Screen withTabBar>
+    <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
       <BrandHeader />
 
       <View style={styles.header}>
-        <Text variant="micro">Connections</Text>
+        <Text variant="micro">{t('connections.eyebrow')}</Text>
         <Text variant="display" style={styles.title}>
-          Your connections.
+          {t('connections.title')}
         </Text>
         <Text variant="bodySmall" style={styles.subtitle}>
-          You can hold {limit} open conversations at once. Close one to start
-          another.
+          {t('connections.limit', { limit })}
         </Text>
       </View>
 
@@ -58,11 +52,11 @@ export default function ConnectionsScreen() {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
       >
-        {connectionsQuery.isPending ? <LoadingState label="Loading your connections" /> : null}
+        {connectionsQuery.isPending ? <LoadingState label={t('connections.loading')} /> : null}
         {connectionsQuery.isError ? (
           <ErrorState
-            title="Connections unavailable"
-            message="We couldn't load your connections. Your conversations are still safe."
+            title={t('connections.errorTitle')}
+            message={t('connections.errorBody')}
             onRetry={() => void connectionsQuery.refetch()}
           />
         ) : null}
@@ -72,8 +66,8 @@ export default function ConnectionsScreen() {
 
         {!connectionsQuery.isPending && !connectionsQuery.isError && connections.length === 0 ? (
           <EmptyState
-            title="No connections yet"
-            message="When interest is mutual, your new connection will appear here."
+            title={t('connections.emptyTitle')}
+            message={t('connections.emptyBody')}
           />
         ) : null}
       </ScrollView>
@@ -82,6 +76,7 @@ export default function ConnectionsScreen() {
 }
 
 function ConnectionRow({ connection }: { connection: Connection }) {
+  const { isRTL, t } = useI18n();
   const [now, setNow] = useState(0);
   useEffect(() => setNow(Date.now()), []);
   const days = Math.max(
@@ -92,13 +87,13 @@ function ConnectionRow({ connection }: { connection: Connection }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open your connection with ${connection.profile.firstName}`}
+      accessibilityLabel={t('connections.openA11y', { name: connection.profile.firstName })}
       onPress={() =>
         router.push(
           `/connection/${connection.id}/${STAGE_ROUTE[connection.stage]}`
         )
       }
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      style={({ pressed }) => [styles.row, isRTL && styles.rowRTL, pressed && styles.rowPressed]}
     >
       <Image
         source={connection.profile.photos[0]}
@@ -113,13 +108,13 @@ function ConnectionRow({ connection }: { connection: Connection }) {
             {connection.profile.firstName}
           </Text>
           <Text variant="caption" tone="label">
-            Day {days}
+            {t('connections.day', { count: days })}
           </Text>
         </View>
         <Text variant="bodySmall" numberOfLines={1}>
           {connection.lastMessage}
         </Text>
-        <Text style={styles.stage}>{STAGE_LABEL[connection.stage]}</Text>
+        <Text style={styles.stage}>{t(`connections.stage.${stageKey(connection.stage)}`)}</Text>
       </View>
 
       {connection.unread ? <View style={styles.unreadDot} /> : null}
@@ -128,6 +123,7 @@ function ConnectionRow({ connection }: { connection: Connection }) {
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
   header: { paddingHorizontal: space.gutterWide, paddingTop: 10 },
   title: { marginTop: 8 },
   subtitle: { marginTop: 10 },
@@ -149,6 +145,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
   },
   rowPressed: { borderColor: 'rgba(10,10,10,0.35)' },
+  rowRTL: { flexDirection: 'row-reverse' },
   avatar: { width: 48, height: 48, borderRadius: 24 },
   rowBody: { flex: 1, gap: 4 },
   rowTop: {
@@ -160,7 +157,7 @@ const styles = StyleSheet.create({
   rowName: { flex: 1 },
   stage: {
     fontFamily: 'Beiruti_500Medium',
-    fontSize: 9.5,
+    fontSize: 11,
     letterSpacing: 1.7,
     textTransform: 'uppercase',
     color: color.gold,
@@ -172,3 +169,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.gold,
   },
 });
+
+function stageKey(stage: ConnectionStage): 'questions' | 'answers' | 'recap' | 'open' {
+  return stage === 'choosing_questions' ? 'questions' : stage === 'answering' ? 'answers' : stage;
+}

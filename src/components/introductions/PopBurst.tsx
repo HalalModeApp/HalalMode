@@ -7,6 +7,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+
 const PARTICLE_COUNT = 22;
 
 /**
@@ -28,6 +29,7 @@ export interface PopBurstProps {
    */
   origin: { x: number; y: number };
   onComplete: () => void;
+  reducedMotion: boolean;
 }
 
 /**
@@ -37,11 +39,17 @@ export interface PopBurstProps {
  * coordinate space the carousel already computes. That avoids a measurement
  * pass and — more importantly — guarantees it fires from the face that popped.
  */
-export function PopBurst({ origin, onComplete }: PopBurstProps) {
+export function PopBurst({
+  origin,
+  onComplete,
+  reducedMotion,
+}: PopBurstProps) {
   useEffect(() => {
-    const timer = setTimeout(onComplete, 620);
+    const timer = setTimeout(onComplete, reducedMotion ? 0 : 620);
     return () => clearTimeout(timer);
-  }, [onComplete]);
+  }, [onComplete, reducedMotion]);
+
+  if (reducedMotion) return null;
 
   return (
     <Animated.View

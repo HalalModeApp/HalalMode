@@ -33,7 +33,9 @@ export interface VoiceIntroductionUpload {
 
 const PHOTO_LIMIT_BYTES = 10 * 1024 * 1024;
 const VOICE_LIMIT_BYTES = 15 * 1024 * 1024;
-const SIGNED_URL_SECONDS = 15 * 60;
+// Long enough for an uninterrupted foreground session. Returning to the app
+// also refetches stale queries, which rotates these URLs before reuse.
+const SIGNED_URL_SECONDS = 60 * 60;
 const PHOTO_STORAGE_PATH = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp|heic|heif)$/;
 const VOICE_STORAGE_PATH = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(m4a|aac|mp3|webm)$/;
 
@@ -64,14 +66,13 @@ export async function uploadProfilePhoto(
   return { path, photos: (data ?? []) as string[] };
 }
 
-/** Detaches first, then removes through Storage API so object bytes are not orphaned. */
+/** Detaches authoritatively; byte cleanup is best-effort and must not roll back UI state. */
 export async function deleteProfilePhoto(path: string): Promise<void> {
   if (USE_MOCKS) return;
   const client = requireSupabase();
   const { data, error } = await client.rpc('delete_profile_photo', { p_path: path });
   if (error) throw error;
-  const removed = await client.storage.from(PROFILE_PHOTO_BUCKET).remove([String(data)]);
-  if (removed.error) throw removed.error;
+  await client.storage.from(PROFILE_PHOTO_BUCKET).remove([String(data)]);
 }
 
 /** Replaces the private voice introduction and reports any old object needing cleanup. */
@@ -116,10 +117,7 @@ export async function deleteVoiceIntroduction(path: string): Promise<void> {
   const client = requireSupabase();
   const { data, error } = await client.rpc('delete_voice_introduction', { p_path: path });
   if (error) throw error;
-  const removed = await client.storage
-    .from(VOICE_INTRODUCTION_BUCKET)
-    .remove([String(data)]);
-  if (removed.error) throw removed.error;
+  await client.storage.from(VOICE_INTRODUCTION_BUCKET).remove([String(data)]);
 }
 
 /** Resolves a private path only while Storage RLS says the viewer may see it. */

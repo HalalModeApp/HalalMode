@@ -8,6 +8,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useReducedMotion } from '@/hooks/useReducedMotion';
+
 const PIECE_COUNT = 30;
 const COLORS = ['#C5A054', '#D6B469', '#0A0A0A', '#9C9891', '#EDEBE6'];
 
@@ -16,6 +18,7 @@ const COLORS = ['#C5A054', '#D6B469', '#0A0A0A', '#9C9891', '#EDEBE6'];
  * celebration turns a moment into a slot machine.
  */
 export function Confetti() {
+  const reducedMotion = useReducedMotion();
   const { width, height } = Dimensions.get('window');
 
   const pieces = Array.from({ length: PIECE_COUNT }, (_, i) => ({
@@ -26,6 +29,8 @@ export function Confetti() {
     color: COLORS[i % COLORS.length]!,
     spin: (i % 2 === 0 ? 1 : -1) * (240 + (i % 4) * 40),
   }));
+
+  if (reducedMotion) return null;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">

@@ -1,6 +1,7 @@
 import { Text as RNText, type TextProps as RNTextProps, StyleSheet } from 'react-native';
 
 import { color, font, microLabel } from '@/theme/tokens';
+import { useI18n } from '@/i18n';
 
 /**
  * The reference gives every string one of a handful of jobs. Naming those jobs
@@ -41,11 +42,13 @@ export function Text({
   style,
   ...rest
 }: TextProps) {
+  const { isRTL } = useI18n();
   return (
     <RNText
       {...rest}
       style={[
         styles[variant],
+        isRTL ? styles.rtl : null,
         tone ? { color: color[tone] } : null,
         center ? { textAlign: 'center' } : null,
         style,
@@ -55,6 +58,13 @@ export function Text({
 }
 
 const styles = StyleSheet.create({
+  rtl: {
+    fontFamily: font.body,
+    letterSpacing: 0,
+    textTransform: 'none',
+    writingDirection: 'rtl',
+    textAlign: 'right',
+  },
   display: {
     fontFamily: font.display,
     fontSize: 26,

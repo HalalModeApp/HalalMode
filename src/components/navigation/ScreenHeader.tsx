@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { I18nManager, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/ui/Text';
+import { useI18n } from '@/i18n';
 import { alpha, color, space } from '@/theme/tokens';
 
 export interface ScreenHeaderProps {
@@ -34,12 +35,13 @@ export function ScreenHeader({
   tone = 'light',
 }: ScreenHeaderProps) {
   const dark = tone === 'dark';
+  const { isRTL, t } = useI18n();
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, isRTL && styles.rowRTL]}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={action === 'back' ? 'Go back' : 'Close'}
+        accessibilityLabel={action === 'back' ? t('header.back') : t('header.close')}
         onPress={onAction ?? (() => router.back())}
         hitSlop={12}
         style={({ pressed }) => [
@@ -52,7 +54,7 @@ export function ScreenHeader({
           name={
             action === 'close'
               ? 'close'
-              : I18nManager.isRTL
+              : isRTL
                 ? 'chevron-forward'
                 : 'chevron-back'
           }
@@ -80,6 +82,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     minHeight: 50,
   },
+  rowRTL: { flexDirection: 'row-reverse' },
   button: {
     width: 44,
     height: 44,

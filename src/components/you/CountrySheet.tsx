@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui/Button';
 import { Text } from '@/components/ui/Text';
 import { COUNTRIES } from '@/data/preferences';
+import { useI18n } from '@/i18n';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 
 export interface CountrySheetProps {
@@ -37,8 +38,17 @@ export function CountrySheet({
   onChange,
   onClose,
 }: CountrySheetProps) {
+  const { t, isRTL } = useI18n();
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
+  const [pending, setPending] = useState(selected);
+
+  useEffect(() => {
+    if (visible) {
+      setPending(selected);
+      setSearch('');
+    }
+  }, [selected, visible]);
 
   const results = useMemo(() => {
     const query = normalise(search.trim());
@@ -47,30 +57,30 @@ export function CountrySheet({
   }, [search]);
 
   const toggle = (country: string) => {
-    onChange(
-      selected.includes(country)
-        ? selected.filter((item) => item !== country)
-        : [...selected, country]
+    setPending(
+      pending.includes(country)
+        ? pending.filter((item) => item !== country)
+        : [...pending, country]
     );
   };
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <View style={styles.scrim}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+      <View style={[styles.scrim, isRTL && styles.rtl]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={t('country.close')} />
 
         <Animated.View entering={FadeInDown.duration(280)} style={styles.sheet}>
           <View style={styles.head}>
-            <View style={styles.headTop}>
+            <View style={[styles.headTop, isRTL && styles.rowReverse]}>
               <View>
-                <Text variant="microAccent">Geographic filter</Text>
+                <Text variant="microAccent">{t('country.eyebrow')}</Text>
                 <Text variant="displaySmall" style={styles.headTitle}>
-                  Preferred countries
+                  {t('country.title')}
                 </Text>
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Close country filter"
+                accessibilityLabel={t('country.close')}
                 onPress={onClose}
                 style={styles.close}
               >
@@ -79,30 +89,32 @@ export function CountrySheet({
             </View>
 
             <TextInput
-              accessibilityLabel="Search countries"
+              accessibilityLabel={t('country.search')}
               value={search}
               onChangeText={setSearch}
-              placeholder="Search countries…"
+              placeholder={t('country.search')}
               placeholderTextColor={color.whisper}
-              style={styles.search}
+              style={[styles.search, isRTL && styles.searchRTL]}
             />
 
-            <View style={styles.headMeta}>
+            <View style={[styles.headMeta, isRTL && styles.rowReverse]}>
               <View style={styles.countPill}>
-                <Text style={styles.countLabel}>{selected.length}</Text>
+                <Text style={styles.countLabel}>{pending.length}</Text>
               </View>
               <Text variant="caption" style={styles.resultLabel} numberOfLines={1}>
-                {results.length} shown
+                {t('country.shown', { count: results.length })}
               </Text>
-              <View style={styles.bulkActions}>
+              <View style={[styles.bulkActions, isRTL && styles.rowReverse]}>
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => onChange([...results])}
+                  accessibilityLabel={t('country.selectAll')}
+                  onPress={() => setPending((current) => [...new Set([...current, ...results])])}
+                  style={styles.bulkTarget}
                 >
-                  <Text style={styles.bulkPrimary}>Select all</Text>
+                  <Text style={styles.bulkPrimary}>{t('country.selectAll')}</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" onPress={() => onChange([])}>
-                  <Text style={styles.bulkQuiet}>Clear all</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('country.clearAll')} onPress={() => setPending([])} style={styles.bulkTarget}>
+                  <Text style={styles.bulkQuiet}>{t('country.clearAll')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -114,14 +126,15 @@ export function CountrySheet({
             keyboardShouldPersistTaps="handled"
           >
             {results.map((country) => {
-              const isSelected = selected.includes(country);
+              const isSelected = pending.includes(country);
               return (
                 <Pressable
                   key={country}
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: isSelected }}
+                  accessibilityLabel={country}
                   onPress={() => toggle(country)}
-                  style={[styles.row, isSelected && styles.rowSelected]}
+                  style={[styles.row, isRTL && styles.rowReverse, isSelected && styles.rowSelected]}
                 >
                   <Text style={[styles.rowLabel, isSelected && styles.rowLabelSelected]}>
                     {country}
@@ -135,7 +148,7 @@ export function CountrySheet({
 
             {results.length === 0 ? (
               <Text variant="bodySmall" center style={styles.noResults}>
-                No country matches that spelling.
+                {t('country.noResults')}
               </Text>
             ) : null}
           </ScrollView>
@@ -143,11 +156,14 @@ export function CountrySheet({
           <View style={[styles.foot, { paddingBottom: insets.bottom + 20 }]}>
             <Button
               label={
-                selected.length === 0
-                  ? 'Anywhere is fine'
-                  : `Use these ${selected.length}`
+                pending.length === 0
+                  ? t('country.anywhere')
+                  : t('country.useSelected', { count: pending.length })
               }
-              onPress={onClose}
+              onPress={() => {
+                onChange(pending);
+                onClose();
+              }}
             />
           </View>
         </Animated.View>
@@ -157,6 +173,8 @@ export function CountrySheet({
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
+  rowReverse: { flexDirection: 'row-reverse' },
   scrim: { flex: 1, backgroundColor: alpha.scrim, justifyContent: 'flex-end' },
   sheet: {
     maxHeight: '88%',
@@ -179,9 +197,9 @@ const styles = StyleSheet.create({
   },
   headTitle: { marginTop: 7 },
   close: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: color.sand,
     alignItems: 'center',
     justifyContent: 'center',
@@ -200,10 +218,12 @@ const styles = StyleSheet.create({
     color: color.ink,
     backgroundColor: color.sandLight,
   },
+  searchRTL: { textAlign: 'right', writingDirection: 'rtl' },
 
   headMeta: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 9,
     marginTop: 12,
   },
@@ -214,8 +234,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
   },
   countLabel: { fontFamily: font.bodyBold, fontSize: 10, color: color.white },
-  resultLabel: { flex: 1 },
-  bulkActions: { flexDirection: 'row', gap: 14 },
+  resultLabel: { flexGrow: 1, flexShrink: 1, minWidth: 72 },
+  bulkActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+  bulkTarget: { minHeight: 44, justifyContent: 'center' },
   bulkPrimary: { fontFamily: font.bodySemi, fontSize: 11, color: color.gold },
   bulkQuiet: { fontFamily: font.bodySemi, fontSize: 11, color: color.faintest },
 

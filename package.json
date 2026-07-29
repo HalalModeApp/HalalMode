@@ -8,8 +8,11 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "test": "tsc -p tests/tsconfig.json && node --test .test-build/tests/*.test.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "verify:client": "npm run typecheck && npm run lint && npm test",
+    "export:android": "expo export --platform android --output-dir dist/ci-android",
     "db:push": "supabase db push",
     "db:reset": "supabase db reset"
   },

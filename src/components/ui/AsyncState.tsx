@@ -2,22 +2,25 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Text } from '@/components/ui/Text';
+import { useI18n } from '@/i18n';
 import { color, space } from '@/theme/tokens';
 
 interface LoadingStateProps {
   label?: string;
 }
 
-export function LoadingState({ label = 'Loading' }: LoadingStateProps) {
+export function LoadingState({ label }: LoadingStateProps) {
+  const { t } = useI18n();
+  const resolvedLabel = label ?? t('common.loading');
   return (
     <View
       accessible
-      accessibilityLabel={label}
+      accessibilityLabel={resolvedLabel}
       accessibilityLiveRegion="polite"
       style={styles.container}
     >
       <ActivityIndicator color={color.ink} />
-      <Text variant="bodySmall" center>{label}</Text>
+      <Text variant="bodySmall" center>{resolvedLabel}</Text>
     </View>
   );
 }
@@ -30,20 +33,21 @@ interface ErrorStateProps {
 }
 
 export function ErrorState({
-  title = 'Something went wrong',
+  title,
   message,
-  retryLabel = 'Try again',
+  retryLabel,
   onRetry,
 }: ErrorStateProps) {
+  const { t } = useI18n();
   return (
     <View accessibilityLiveRegion="assertive" style={styles.container}>
-      <Text variant="displaySmall" center>{title}</Text>
+      <Text variant="displaySmall" center>{title ?? t('common.errorTitle')}</Text>
       <Text variant="bodySmall" center style={styles.copy}>{message}</Text>
       {onRetry ? (
         <Button
-          accessibilityHint="Retries loading this screen"
+          accessibilityHint={t('common.retryHint')}
           block={false}
-          label={retryLabel}
+          label={retryLabel ?? t('common.tryAgain')}
           onPress={onRetry}
           style={styles.action}
         />
@@ -79,8 +83,9 @@ export function InlineNotice({
   onAction,
   onDismiss,
 }: InlineNoticeProps) {
+  const { t, isRTL } = useI18n();
   return (
-    <View accessibilityLiveRegion="assertive" style={styles.notice}>
+    <View accessibilityLiveRegion="assertive" style={[styles.notice, isRTL && styles.rowReverse]}>
       <Text variant="bodySmall" style={styles.noticeMessage}>{message}</Text>
       {actionLabel && onAction ? (
         <Pressable accessibilityRole="button" onPress={onAction} hitSlop={10}>
@@ -89,12 +94,12 @@ export function InlineNotice({
       ) : null}
       {onDismiss ? (
         <Pressable
-          accessibilityLabel="Dismiss message"
+          accessibilityLabel={t('common.dismiss')}
           accessibilityRole="button"
           hitSlop={10}
           onPress={onDismiss}
         >
-          <Text variant="label">Close</Text>
+          <Text variant="label">{t('common.close')}</Text>
         </Pressable>
       ) : null}
     </View>
@@ -102,6 +107,7 @@ export function InlineNotice({
 }
 
 const styles = StyleSheet.create({
+  rowReverse: { flexDirection: 'row-reverse' },
   container: {
     flex: 1,
     minHeight: 220,

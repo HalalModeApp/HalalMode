@@ -9,6 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+
 /**
  * A band of light sweeping diagonally across the chosen portrait.
  *
@@ -16,16 +17,26 @@ import Animated, {
  * frame, which already clips to a circle, so the band appears to travel under
  * the glass rather than over the top of it.
  */
-export function ShineWipe({ size }: { size: number }) {
+export function ShineWipe({
+  size,
+  reducedMotion,
+}: {
+  size: number;
+  reducedMotion: boolean;
+}) {
   const progress = useSharedValue(0);
 
   useEffect(() => {
+    if (reducedMotion) {
+      progress.value = 0;
+      return;
+    }
     progress.value = withRepeat(
       withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.ease) }),
       -1,
       false
     );
-  }, [progress]);
+  }, [progress, reducedMotion]);
 
   const style = useAnimatedStyle(() => ({
     transform: [
@@ -35,6 +46,8 @@ export function ShineWipe({ size }: { size: number }) {
       { rotateZ: '18deg' },
     ],
   }));
+
+  if (reducedMotion) return null;
 
   return (
     <Animated.View

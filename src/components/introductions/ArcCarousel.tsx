@@ -11,28 +11,13 @@ import { ChosenSparkles } from '@/components/introductions/ChosenSparkles';
 import { PinBadge } from '@/components/introductions/PinBadge';
 import { PopBurst } from '@/components/introductions/PopBurst';
 import { ShineWipe } from '@/components/introductions/ShineWipe';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useI18n } from '@/i18n';
+import { computeArcLayout as computeArcLayoutCore } from '@/lib/arcLayout';
 import { alpha, color, motion } from '@/theme/tokens';
 import type { Introduction } from '@/types';
 
-/**
- * Angular gap between adjacent faces, in radians. Straight from the reference
- * (`DPSI = 0.30`) — small enough that the arc reads as a gentle curve rather
- * than a wheel.
- */
-const DELTA_PSI = 0.3;
-
-/** How far the arc is allowed to dip. Keeps the strip inside its 86px band. */
-const Y_CAP = 16;
-
-/** Face diameter and centre-to-centre spacing when the set fits on one arc. */
 const ARC_BUTTON = 52;
-const ARC_STEP = 72;
-
-/** Width the strip may use before it wraps to the two-row grid. */
-const AVAILABLE_WIDTH = 330;
-
-/** Above this count the arc becomes unreadable, so Plus rounds go to a grid. */
-const ARC_MAX = 5;
 
 export interface ArcSlot {
   introduction: Introduction;
@@ -52,78 +37,15 @@ export interface ArcSlot {
  * or — once the set is larger than five — across two centred rows.
  *
  * This is the geometry from the reference prototype, extracted so it can be
- * unit-tested and reused by the Plus layout without duplication.
+ * unit-tested and reused by the Premium layout without duplication.
  */
 export function computeArcLayout(
   live: Introduction[],
   activeId: string
 ): { slots: ArcSlot[]; isGrid: boolean; stripHeight: number } {
-  const count = live.length || 1;
-  const isGrid = count > ARC_MAX;
-
-  const perRow = isGrid ? Math.ceil(count / 2) : count;
-  const step = isGrid ? Math.min(ARC_STEP, AVAILABLE_WIDTH / perRow) : ARC_STEP;
-  const size = isGrid
-    ? Math.max(34, Math.min(ARC_BUTTON, step * 0.72))
-    : ARC_BUTTON;
-
-  const radiusOfArc = step / (2 * Math.sin(DELTA_PSI / 2));
-  const activeIndex = Math.max(
-    0,
-    live.findIndex((item) => item.id === activeId)
-  );
-
-  const slots: ArcSlot[] = live.map((introduction, index) => {
-    const isActive = introduction.id === activeId;
-
-    if (isGrid) {
-      const row = Math.floor(index / perRow);
-      const col = index % perRow;
-      const rowCount = Math.min(perRow, count - row * perRow);
-      const rows = Math.ceil(count / perRow);
-      return {
-        introduction,
-        x: (col - (rowCount - 1) / 2) * step,
-        y: row * step - ((rows - 1) * step) / 2,
-        angle: 0,
-        scale: 1,
-        opacity: 1,
-        zIndex: isActive ? 100 : 1,
-        isActive,
-        size,
-      };
-    }
-
-    // Shortest-path slot offset, so the arc rotates the near way round.
-    let slot = ((index - activeIndex) % count + count) % count;
-    if (slot > count / 2) slot -= count;
-
-    const angle = slot * DELTA_PSI;
-    const distance = Math.abs(slot);
-    const depth = Math.max(0, 1 - (0.5 * distance) / 2.4);
-    const arcY = Math.min(radiusOfArc * (1 - Math.cos(angle)), Y_CAP);
-
-    return {
-      introduction,
-      x: radiusOfArc * Math.sin(angle),
-      // Lift the two neighbours of the centred face just enough to turn the
-      // five-person layout into a gentle arch instead of a pointed chevron.
-      y: distance === 1 ? Math.max(4, arcY - 5) : arcY,
-      angle,
-      scale: 0.62 + 0.38 * depth,
-      opacity: distance <= 2 ? 1 : Math.max(0, 1 - (distance - 2)),
-      zIndex: Math.round(depth * 100) + (isActive ? 100 : 0),
-      isActive,
-      size,
-    };
-  });
-
-  return {
-    slots,
-    isGrid,
-    stripHeight: isGrid ? size * 2 + 46 : 86,
-  };
+  return computeArcLayoutCore(live, activeId);
 }
+
 
 export interface ArcCarouselProps {
   live: Introduction[];
@@ -148,6 +70,7 @@ export function ArcCarousel({
   onSendInterest,
   onRelease,
 }: ArcCarouselProps) {
+  const reducedMotion = useReducedMotion();
   const { slots, isGrid, stripHeight } = useMemo(
     () => computeArcLayout(live, activeId),
     [live, activeId]
@@ -193,6 +116,7 @@ export function ArcCarousel({
           chosenZone={chosenZone}
           canRelease={live.length > 1}
           pinAmbientDelayMs={(index * 620 + slot.introduction.id.length * 80) % 2400}
+          reducedMotion={reducedMotion}
           onSelect={onSelect}
           onOpen={onOpen}
           onSendInterest={onSendInterest}
@@ -204,6 +128,7 @@ export function ArcCarousel({
         <PopBurst
           key={burst.key}
           origin={{ x: burst.x, y: burst.y }}
+          reducedMotion={reducedMotion}
           onComplete={() => clearBurst(burst.key)}
         />
       ))}
@@ -218,6 +143,7 @@ interface ArcFaceProps {
   chosenZone: boolean;
   canRelease: boolean;
   pinAmbientDelayMs: number;
+  reducedMotion: boolean;
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
   onSendInterest: (id: string) => void;
@@ -231,23 +157,31 @@ const ArcFace = memo(function ArcFace({
   chosenZone,
   canRelease,
   pinAmbientDelayMs,
+  reducedMotion,
   onSelect,
   onOpen,
   onSendInterest,
   onRelease,
 }: ArcFaceProps) {
+  const { t } = useI18n();
   const { introduction, isActive, size } = slot;
   const photo = introduction.profile.photos[0];
 
-  const x = useDerivedValue(() => withSpring(slot.x, motion.arc), [slot.x]);
-  const y = useDerivedValue(() => withSpring(slot.y, motion.arc), [slot.y]);
+  const x = useDerivedValue(
+    () => reducedMotion ? slot.x : withSpring(slot.x, motion.arc),
+    [reducedMotion, slot.x]
+  );
+  const y = useDerivedValue(
+    () => reducedMotion ? slot.y : withSpring(slot.y, motion.arc),
+    [reducedMotion, slot.y]
+  );
   const scale = useDerivedValue(
-    () => withSpring(slot.scale, motion.arc),
-    [slot.scale]
+    () => reducedMotion ? slot.scale : withSpring(slot.scale, motion.arc),
+    [reducedMotion, slot.scale]
   );
   const rotate = useDerivedValue(
-    () => withSpring(slot.angle, motion.arc),
-    [slot.angle]
+    () => reducedMotion ? slot.angle : withSpring(slot.angle, motion.arc),
+    [reducedMotion, slot.angle]
   );
 
   const wrapStyle = useAnimatedStyle(() => ({
@@ -296,15 +230,19 @@ const ArcFace = memo(function ArcFace({
     >
       <Animated.View style={[styles.frameWrap, frameStyle]}>
         {chosenZone ? (
-          <ChosenSparkles size={size} seed={introduction.id} />
+          <ChosenSparkles
+            size={size}
+            seed={introduction.id}
+            reducedMotion={reducedMotion}
+          />
         ) : null}
 
         <Pressable
           accessibilityRole="imagebutton"
           accessibilityLabel={
             isActive
-              ? `Open ${introduction.profile.firstName}'s profile`
-              : `Bring ${introduction.profile.firstName} to the centre`
+              ? t('daily.openProfileA11y', { name: introduction.profile.firstName })
+              : t('daily.centerProfileA11y', { name: introduction.profile.firstName })
           }
           onPress={handlePress}
           style={[
@@ -324,7 +262,9 @@ const ArcFace = memo(function ArcFace({
           {!isActive ? <View style={styles.desaturate} /> : null}
 
           {/* Inside the frame, so the band clips to the circle. */}
-          {chosenZone ? <ShineWipe size={size} /> : null}
+          {chosenZone ? (
+            <ShineWipe size={size} reducedMotion={reducedMotion} />
+          ) : null}
         </Pressable>
 
         {popMode && canRelease ? (
@@ -332,6 +272,7 @@ const ArcFace = memo(function ArcFace({
             onPress={() => onRelease(introduction.id)}
             size={size}
             ambientDelayMs={pinAmbientDelayMs}
+            reducedMotion={reducedMotion}
           />
         ) : null}
       </Animated.View>

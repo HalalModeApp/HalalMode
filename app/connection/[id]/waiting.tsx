@@ -9,10 +9,12 @@ import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { queryKeys } from '@/lib/queryClient';
+import { useI18n } from '@/i18n';
 import { color, space } from '@/theme/tokens';
 
 export default function WaitingForQuestionsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { isRTL, t } = useI18n();
   const connectionQuery = useQuery({
     queryKey: queryKeys.connection(id),
     queryFn: () => fetchConnection(id),
@@ -20,15 +22,15 @@ export default function WaitingForQuestionsScreen() {
   });
 
   if (connectionQuery.isPending) {
-    return <Screen><LoadingState label="Checking your connection" /></Screen>;
+    return <Screen><LoadingState label={t('waiting.loading')} /></Screen>;
   }
   if (connectionQuery.isError || !connectionQuery.data) {
     return (
       <Screen>
         <ScreenHeader />
         <ErrorState
-          title="Connection unavailable"
-          message="We couldn't check whether the questions are ready."
+          title={t('waiting.errorTitle')}
+          message={t('waiting.errorBody')}
           onRetry={() => void connectionQuery.refetch()}
         />
       </Screen>
@@ -42,27 +44,27 @@ export default function WaitingForQuestionsScreen() {
   if (!connection.myQuestionPicksSubmitted) return <Redirect href={`/connection/${id}/questions`} />;
 
   return (
-    <Screen>
+    <Screen style={isRTL ? styles.rtl : undefined}>
       <ScreenHeader onAction={() => router.replace('/(tabs)/connections')} />
       <View style={styles.content} accessibilityLiveRegion="polite">
         <View style={styles.mark}><Text style={styles.markLabel}>5</Text></View>
-        <Text variant="microAccent">Your questions are saved</Text>
+        <Text variant="microAccent">{t('waiting.saved')}</Text>
         <Text variant="display" center style={styles.title}>
-          Waiting for {connection.profile.firstName}.
+          {t('waiting.title', { name: connection.profile.firstName })}
         </Text>
         <Text variant="body" center style={styles.copy}>
-          You can leave this screen. We will keep your choices private and continue when both sets are ready.
+          {t('waiting.body')}
         </Text>
         <Button
           block={false}
-          label="Check again"
+          label={t('waiting.check')}
           loading={connectionQuery.isFetching}
           onPress={() => void connectionQuery.refetch()}
           style={styles.action}
         />
         <Button
           block={false}
-          label="Back to connections"
+          label={t('waiting.back')}
           variant="quiet"
           onPress={() => router.replace('/(tabs)/connections')}
         />
@@ -72,6 +74,7 @@ export default function WaitingForQuestionsScreen() {
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
   content: {
     flex: 1,
     alignItems: 'center',

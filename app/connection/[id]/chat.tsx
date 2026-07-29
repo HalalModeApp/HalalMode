@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -15,15 +16,17 @@ import {
 } from 'react-native';
 
 import {
+  closeConnection,
   fetchConnection,
   fetchMessages,
   markMessagesRead,
   sendMessage,
 } from '@/api/connections';
 import { AudioGreeting } from '@/components/introductions/AudioGreeting';
+import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { CONVERSATION_STARTERS } from '@/data/mock';
+import { useI18n } from '@/i18n';
 import { queryKeys } from '@/lib/queryClient';
 import { supabase, USE_MOCKS } from '@/lib/supabase';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
@@ -35,23 +38,31 @@ type ConversationItem =
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { isRTL, t } = useI18n();
   const queryClient = useQueryClient();
   const listRef = useRef<FlatList<ConversationItem>>(null);
   const [draft, setDraft] = useState('');
-  const [callState, setCallState] = useState<'calling' | 'connected' | null>(null);
+  const [callState, setCallState] = useState<
+    'calling' | 'connected' | 'unavailable' | null
+  >(null);
   const [now, setNow] = useState(0);
 
-  const { data: connection } = useQuery({
+  const connectionQuery = useQuery({
     queryKey: queryKeys.connection(id),
     queryFn: () => fetchConnection(id),
   });
 
-  const { data: messages = [] } = useQuery({
+  const messagesQuery = useQuery({
     queryKey: queryKeys.messages(id),
     queryFn: () => fetchMessages(id),
     // Conversation is the one place freshness matters.
     staleTime: 0,
   });
+  const connection = connectionQuery.data;
+  const messages = useMemo(
+    () => messagesQuery.data ?? [],
+    [messagesQuery.data]
+  );
 
   useEffect(() => {
     void markMessagesRead(id).then(() => {
@@ -92,6 +103,35 @@ export default function ChatScreen() {
     },
   });
 
+  const close = useMutation({
+    mutationFn: () => closeConnection(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.connections });
+      router.replace('/(tabs)/connections');
+    },
+    onError: () => {
+      Alert.alert(
+        t('chat.closeErrorTitle'),
+        t('chat.closeErrorBody')
+      );
+    },
+  });
+
+  const confirmClose = () => {
+    Alert.alert(
+      t('chat.closeTitle'),
+      t('chat.closeBody', { name: connection?.profile.firstName ?? '' }),
+      [
+        { text: t('chat.keep'), style: 'cancel' },
+        {
+          text: t('chat.closeConfirm'),
+          style: 'destructive',
+          onPress: () => close.mutate(),
+        },
+      ]
+    );
+  };
+
   const conversation = useMemo<ConversationItem[]>(() => {
     const lastOutgoingId = [...messages].reverse().find((message) => message.sender === 'me')?.id;
     return messages.flatMap((message, index) => {
@@ -110,7 +150,32 @@ export default function ChatScreen() {
     });
   }, [messages]);
 
-  if (!connection) return <Screen />;
+  if (connectionQuery.isPending || messagesQuery.isPending) {
+    return (
+      <Screen>
+        <LoadingState label={t('chat.loading')} />
+      </Screen>
+    );
+  }
+
+  if (
+    connectionQuery.isError ||
+    messagesQuery.isError ||
+    !connection
+  ) {
+    return (
+      <Screen>
+        <ErrorState
+          title={t('chat.errorTitle')}
+          message={t('chat.errorBody')}
+          onRetry={() => {
+            void connectionQuery.refetch();
+            void messagesQuery.refetch();
+          }}
+        />
+      </Screen>
+    );
+  }
 
   const answered = connection.questions.length;
   const days = Math.max(
@@ -119,21 +184,21 @@ export default function ChatScreen() {
   );
 
   return (
-    <Screen>
+    <Screen style={isRTL ? styles.rtl : undefined}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={8}
       >
-        <View style={styles.header}>
+        <View style={[styles.header, isRTL && styles.rowRTL]}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Back to connections"
+            accessibilityLabel={t('chat.backA11y')}
             onPress={() => router.replace('/(tabs)/connections')}
             hitSlop={12}
             style={styles.backButton}
           >
-            <Text style={styles.backGlyph}>←</Text>
+            <Text style={styles.backGlyph}>{isRTL ? '→' : '←'}</Text>
           </Pressable>
 
           <Image
@@ -146,14 +211,16 @@ export default function ChatScreen() {
           <View style={styles.headerText}>
             <Text variant="label">{connection.profile.firstName}</Text>
             <Text variant="caption">
-              Day {days} · {answered} questions answered
+              {t('chat.headerMeta', { days, count: answered })}
             </Text>
           </View>
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Call ${connection.profile.firstName}`}
-            onPress={() => setCallState('calling')}
+            accessibilityLabel={t('chat.callA11y', { name: connection.profile.firstName })}
+            onPress={() =>
+              setCallState(USE_MOCKS ? 'calling' : 'unavailable')
+            }
             style={styles.callButton}
           >
             <Text style={styles.callGlyph}>☎</Text>
@@ -161,10 +228,13 @@ export default function ChatScreen() {
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Pause this conversation"
+            accessibilityLabel={t('chat.closeA11y')}
+            accessibilityState={{ busy: close.isPending }}
+            disabled={close.isPending}
+            onPress={confirmClose}
             style={styles.pauseButton}
           >
-            <Text style={styles.pauseLabel}>Pause</Text>
+            <Text style={styles.pauseLabel}>{t('chat.pause')}</Text>
           </Pressable>
         </View>
 
@@ -189,38 +259,48 @@ export default function ChatScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.starters}
         >
-          {CONVERSATION_STARTERS.map((starter) => (
+          {(['chat.starter.relocation', 'chat.starter.family', 'chat.starter.call'] as const).map((key) => {
+            const starter = t(key);
+            return (
             <Pressable
-              key={starter}
+              key={key}
               accessibilityRole="button"
               onPress={() => setDraft(starter)}
               style={styles.starter}
             >
               <Text style={styles.starterLabel}>{starter}</Text>
             </Pressable>
-          ))}
+          );})}
         </ScrollView>
 
         <View style={styles.composer}>
           <TextInput
-            accessibilityLabel="Message"
+            accessibilityLabel={t('chat.messageA11y')}
             value={draft}
             onChangeText={setDraft}
-            placeholder="Write something you mean…"
+            placeholder={t('chat.placeholder')}
             placeholderTextColor={color.whisper}
             style={styles.input}
             multiline
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Record a voice note"
-            style={styles.recordButton}
+            accessibilityLabel={t('chat.recordUnavailable')}
+            accessibilityState={{ disabled: !USE_MOCKS }}
+            disabled={!USE_MOCKS}
+            onPress={() =>
+              Alert.alert(
+                t('chat.voiceTitle'),
+                t('chat.voiceBody')
+              )
+            }
+            style={[styles.recordButton, !USE_MOCKS && styles.controlDisabled]}
           >
             <Text style={styles.recordGlyph}>●</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Send message"
+            accessibilityLabel={t('chat.sendA11y')}
             disabled={!draft.trim() || send.isPending}
             onPress={() => send.mutate(draft.trim())}
             style={[styles.sendButton, !draft.trim() && styles.sendButtonIdle]}
@@ -228,6 +308,11 @@ export default function ChatScreen() {
             <Text style={styles.sendGlyph}>→</Text>
           </Pressable>
         </View>
+        {send.isError ? (
+          <Text accessibilityRole="alert" variant="caption" style={styles.sendError}>
+            {t('chat.sendError')}
+          </Text>
+        ) : null}
       </KeyboardAvoidingView>
 
       <CallOverlay
@@ -290,10 +375,11 @@ function MessageMeta({
   mine: boolean;
   isLastOutgoing: boolean;
 }) {
+  const { language } = useI18n();
   return (
     <View style={[styles.messageMeta, mine && styles.messageMetaMine]}>
       <Text style={[styles.messageTime, mine && styles.messageTimeMine]}>
-        {formatTime(message.createdAt)}
+        {formatTime(message.createdAt, language)}
       </Text>
       {mine ? (
         <Text style={[styles.tick, isLastOutgoing && message.readAt && styles.tickRead]}>
@@ -305,9 +391,10 @@ function MessageMeta({
 }
 
 function DayMarker({ date }: { date: string }) {
+  const { language, t } = useI18n();
   return (
     <View style={styles.dayMarker}>
-      <Text style={styles.dayMarkerLabel}>{formatDay(date)}</Text>
+      <Text style={styles.dayMarkerLabel}>{formatDay(date, language, t('chat.today'), t('chat.yesterday'))}</Text>
     </View>
   );
 }
@@ -321,49 +408,87 @@ function CallOverlay({
   onEnd,
 }: {
   visible: boolean;
-  state: 'calling' | 'connected' | null;
+  state: 'calling' | 'connected' | 'unavailable' | null;
   name: string;
   photo: string | undefined;
   onConnected: () => void;
   onEnd: () => void;
 }) {
+  const { isRTL, t } = useI18n();
+  const [muted, setMuted] = useState(false);
+  const [speakerOn, setSpeakerOn] = useState(false);
   useEffect(() => {
     if (state !== 'calling') return;
     const timer = setTimeout(onConnected, 1100);
     return () => clearTimeout(timer);
   }, [onConnected, state]);
+  useEffect(() => {
+    if (visible) return;
+    setMuted(false);
+    setSpeakerOn(false);
+  }, [visible]);
 
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onEnd}>
-      <View style={styles.callScreen}>
-        <Text variant="microAccent">Halal Mode call</Text>
+      <View style={[styles.callScreen, isRTL && styles.rtl]}>
+        <Text variant="microAccent">
+          {state === 'unavailable' ? t('chat.call.private') : t('chat.call.preview')}
+        </Text>
         <Image source={photo} style={styles.callAvatar} contentFit="cover" />
         <Text variant="displaySmall" style={styles.callName}>
           {name}
         </Text>
         <Text variant="bodySmall" style={styles.callStatus}>
-          {state === 'calling' ? 'Calling…' : 'Connected · voice only'}
+          {state === 'unavailable'
+            ? t('chat.call.unavailable')
+            : state === 'calling'
+              ? t('chat.call.calling')
+              : t('chat.call.connected')}
         </Text>
-        <View style={styles.callActions}>
-          <View style={styles.callUtility}>
-            <Text style={styles.callUtilityGlyph}>◉</Text>
-            <Text style={styles.callUtilityLabel}>Mute</Text>
-          </View>
+        {state === 'unavailable' ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="End call"
             onPress={onEnd}
-            style={styles.endCall}
+            style={styles.callUnavailableAction}
           >
-            <Text style={styles.endCallGlyph}>☎</Text>
+            <Text style={styles.callUnavailableLabel}>{t('chat.call.back')}</Text>
           </Pressable>
-          <View style={styles.callUtility}>
-            <Text style={styles.callUtilityGlyph}>◌</Text>
-            <Text style={styles.callUtilityLabel}>Speaker</Text>
+        ) : (
+          <View style={[styles.callActions, isRTL && styles.rowRTL]}>
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityLabel={t('chat.call.mute')}
+              accessibilityState={{ checked: muted }}
+              onPress={() => setMuted((current) => !current)}
+              style={[styles.callUtility, muted && styles.callUtilityActive]}
+            >
+              <Text style={styles.callUtilityGlyph}>◉</Text>
+              <Text style={styles.callUtilityLabel}>{t('chat.call.mute')}</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('chat.call.endA11y')}
+              onPress={onEnd}
+              style={styles.endCall}
+            >
+              <Text style={styles.endCallGlyph}>☎</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityLabel={t('chat.call.speaker')}
+              accessibilityState={{ checked: speakerOn }}
+              onPress={() => setSpeakerOn((current) => !current)}
+              style={[styles.callUtility, speakerOn && styles.callUtilityActive]}
+            >
+              <Text style={styles.callUtilityGlyph}>◌</Text>
+              <Text style={styles.callUtilityLabel}>{t('chat.call.speaker')}</Text>
+            </Pressable>
           </View>
-        </View>
+        )}
         <Text variant="caption" center style={styles.callNote}>
-          Calls are private to this connection. Live calling will connect once the calling service is enabled.
+          {state === 'unavailable'
+            ? t('chat.call.unavailableNote')
+            : t('chat.call.previewNote')}
         </Text>
       </View>
     </Modal>
@@ -375,24 +500,26 @@ function dayKey(value: string): string {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
-function formatTime(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(
+function formatTime(value: string, language: 'en' | 'ar'): string {
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar-SA-u-ca-gregory' : 'en', { hour: 'numeric', minute: '2-digit' }).format(
     new Date(value)
   );
 }
 
-function formatDay(value: string): string {
+function formatDay(value: string, language: 'en' | 'ar', todayLabel: string, yesterdayLabel: string): string {
   const date = new Date(value);
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
-  if (dayKey(value) === dayKey(today.toISOString())) return 'Today';
-  if (dayKey(value) === dayKey(yesterday.toISOString())) return 'Yesterday';
-  return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(date);
+  if (dayKey(value) === dayKey(today.toISOString())) return todayLabel;
+  if (dayKey(value) === dayKey(yesterday.toISOString())) return yesterdayLabel;
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar-SA-u-ca-gregory' : 'en', { day: 'numeric', month: 'short' }).format(date);
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  rtl: { direction: 'rtl' },
+  rowRTL: { flexDirection: 'row-reverse' },
 
   header: {
     flexDirection: 'row',
@@ -405,9 +532,9 @@ const styles = StyleSheet.create({
     borderBottomColor: alpha.lineFaint,
   },
   backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: color.sandDeep,
     borderWidth: 1,
     borderColor: alpha.line,
@@ -418,6 +545,7 @@ const styles = StyleSheet.create({
   avatar: { width: 34, height: 34, borderRadius: 17 },
   headerText: { flex: 1, gap: 2 },
   pauseButton: {
+    minHeight: 44,
     borderWidth: 1,
     borderColor: alpha.lineStrong,
     borderRadius: radius.pill,
@@ -432,9 +560,9 @@ const styles = StyleSheet.create({
     color: color.muted,
   },
   callButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: alpha.lineStrong,
     alignItems: 'center',
@@ -450,7 +578,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 11,
     fontFamily: font.bodyMedium,
-    fontSize: 10,
+    fontSize: 12,
     color: color.muted,
   },
   bubble: { maxWidth: '78%', paddingVertical: 13, paddingHorizontal: 15 },
@@ -469,27 +597,28 @@ const styles = StyleSheet.create({
   voiceBubble: { minWidth: 210 },
   bubbleText: {
     fontFamily: font.body,
-    fontSize: 12.5,
+    fontSize: 15,
     lineHeight: 21,
     color: color.inkSoft,
   },
   bubbleTextMine: { color: color.white },
   messageMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 },
   messageMetaMine: { justifyContent: 'flex-end' },
-  messageTime: { fontFamily: font.body, fontSize: 9.5, color: color.faint },
+  messageTime: { fontFamily: font.body, fontSize: 11, color: color.faint },
   messageTimeMine: { color: 'rgba(252,252,251,0.58)' },
-  tick: { fontFamily: font.bodyBold, fontSize: 10, letterSpacing: -2, color: 'rgba(252,252,251,0.48)' },
+  tick: { fontFamily: font.bodyBold, fontSize: 12, letterSpacing: -2, color: 'rgba(252,252,251,0.48)' },
   tickRead: { color: color.goldOnDark },
 
   starters: { paddingHorizontal: space.xl, gap: 7, paddingBottom: 4 },
   starter: {
+    minHeight: 44,
     borderWidth: 1,
     borderColor: alpha.lineStrong,
     borderRadius: radius.pill,
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 13,
   },
-  starterLabel: { fontFamily: font.body, fontSize: 11, color: color.inkSoft },
+  starterLabel: { fontFamily: font.body, fontSize: 13, color: color.inkSoft },
 
   composer: {
     flexDirection: 'row',
@@ -508,7 +637,7 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     paddingHorizontal: 17,
     fontFamily: font.body,
-    fontSize: 12.5,
+    fontSize: 15,
     color: color.ink,
   },
   recordButton: {
@@ -520,6 +649,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  controlDisabled: { opacity: 0.35 },
   recordGlyph: { fontFamily: font.body, fontSize: 15, color: color.inkSoft },
   sendButton: {
     width: 44,
@@ -531,6 +661,12 @@ const styles = StyleSheet.create({
   },
   sendButtonIdle: { opacity: 0.3 },
   sendGlyph: { fontFamily: font.body, fontSize: 15, color: color.white },
+  sendError: {
+    paddingHorizontal: space.xl,
+    paddingBottom: 8,
+    textAlign: 'center',
+    color: color.inkSoft,
+  },
 
   callScreen: {
     flex: 1,
@@ -550,9 +686,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
   },
-  callUtility: { alignItems: 'center', gap: 8, width: 68 },
+  callUnavailableAction: {
+    marginTop: 36,
+    minHeight: 48,
+    borderRadius: radius.pill,
+    backgroundColor: color.white,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+  },
+  callUnavailableLabel: {
+    color: color.ink,
+    fontFamily: font.bodyBold,
+    fontSize: 12,
+  },
+  callUtility: { alignItems: 'center', justifyContent: 'center', gap: 8, width: 68, minHeight: 68, borderRadius: 34 },
+  callUtilityActive: { backgroundColor: 'rgba(252,252,251,0.14)' },
   callUtilityGlyph: { fontFamily: font.body, fontSize: 22, color: color.white },
-  callUtilityLabel: { fontFamily: font.bodyMedium, fontSize: 10, color: 'rgba(252,252,251,0.76)' },
+  callUtilityLabel: { fontFamily: font.bodyMedium, fontSize: 12, color: 'rgba(252,252,251,0.76)' },
   endCall: {
     width: 68,
     height: 68,

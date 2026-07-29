@@ -13,6 +13,8 @@ import Animated, {
 import type { SharedValue } from 'react-native-reanimated';
 
 import { Text } from '@/components/ui/Text';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useI18n } from '@/i18n';
 import { color, radius } from '@/theme/tokens';
 import type { Profile } from '@/types';
 
@@ -39,6 +41,7 @@ export function HeroCard({
   onPress,
   onSwipe,
 }: HeroCardProps) {
+  const reducedMotion = useReducedMotion();
   const { width } = useWindowDimensions();
   const cardWidth = width - 60;
   const activeIndex = Math.max(0, profiles.findIndex((profile) => profile.id === activeId));
@@ -67,13 +70,16 @@ export function HeroCard({
       let offset = activeIndex - normalized;
       if (offset > profiles.length / 2) offset -= profiles.length;
       if (offset < -profiles.length / 2) offset += profiles.length;
-      centerIndex.value = withSpring(current + offset, {
-        damping: 18,
-        stiffness: 165,
-        mass: 0.8,
-      });
+      const target = current + offset;
+      centerIndex.value = reducedMotion
+        ? target
+        : withSpring(target, {
+            damping: 18,
+            stiffness: 165,
+            mass: 0.8,
+          });
     }
-  }, [activeIndex, centerIndex, profiles.length]);
+  }, [activeIndex, centerIndex, profiles.length, reducedMotion]);
 
   const swipe = Gesture.Pan()
     .activeOffsetX([-12, 12])
@@ -88,11 +94,13 @@ export function HeroCard({
       const direction = event.translationX < -56 ? 'next' : event.translationX > 56 ? 'previous' : null;
       const target = dragStart.value + (direction === 'next' ? 1 : direction === 'previous' ? -1 : 0);
       if (direction) runOnJS(commitSwipe)(direction);
-      centerIndex.value = withSpring(target, {
-        damping: direction ? 17 : 20,
-        stiffness: direction ? 155 : 180,
-        mass: 0.8,
-      });
+      centerIndex.value = reducedMotion
+        ? target
+        : withSpring(target, {
+            damping: direction ? 17 : 20,
+            stiffness: direction ? 155 : 180,
+            mass: 0.8,
+          });
     });
 
   return (
@@ -109,6 +117,7 @@ export function HeroCard({
             isActive={profile.id === activeId}
             popMode={popMode}
             chosen={chosen}
+            reducedMotion={reducedMotion}
             onPress={onPress}
           />
         ))}
@@ -126,6 +135,7 @@ interface DeckCardProps {
   isActive: boolean;
   popMode: boolean;
   chosen: boolean;
+  reducedMotion: boolean;
   onPress: () => void;
 }
 
@@ -138,18 +148,24 @@ function DeckCard({
   isActive,
   popMode,
   chosen,
+  reducedMotion,
   onPress,
 }: DeckCardProps) {
+  const { t, isRTL } = useI18n();
   const pivotDepth = Math.max(cardWidth * 2.7, 780);
   const settleScale = useSharedValue(1);
 
   useEffect(() => {
     if (!isActive) return;
+    if (reducedMotion) {
+      settleScale.value = 1;
+      return;
+    }
     settleScale.value = withSequence(
       withSpring(1.018, { damping: 16, stiffness: 240, mass: 0.55 }),
       withSpring(1, { damping: 16, stiffness: 190, mass: 0.65 })
     );
-  }, [isActive, settleScale]);
+  }, [isActive, reducedMotion, settleScale]);
 
   const cardStyle = useAnimatedStyle(() => {
     const centre = ((centerIndex.value % count) + count) % count;
@@ -202,12 +218,12 @@ function DeckCard({
       {isActive ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Read ${profile.firstName}'s profile`}
+          accessibilityLabel={t('daily.openProfileA11y', { name: profile.firstName })}
           onPress={onPress}
           style={StyleSheet.absoluteFill}
         />
       ) : null}
-      <View style={styles.caption} pointerEvents="none">
+      <View style={[styles.caption, isRTL && styles.rtl]} pointerEvents="none">
         <Text style={styles.name}>{profile.name}</Text>
         <Text style={styles.line}>
           {profile.age} · {profile.city} · {profile.occupation}
@@ -215,7 +231,7 @@ function DeckCard({
       </View>
       {isActive && popMode ? (
         <View style={styles.popBadge} pointerEvents="none">
-          <Text style={styles.popBadgeLabel}>Pop mode</Text>
+          <Text style={styles.popBadgeLabel}>{t('daily.popLabel')}</Text>
         </View>
       ) : null}
     </Animated.View>
@@ -223,6 +239,7 @@ function DeckCard({
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
   deck: {
     flex: 1,
     marginHorizontal: 30,

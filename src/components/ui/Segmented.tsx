@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/ui/Text';
+import { useI18n } from '@/i18n';
 import { color, font, radius } from '@/theme/tokens';
 
 export interface SegmentedProps<T extends string> {
@@ -15,8 +16,9 @@ export function Segmented<T extends string>({
   value,
   onChange,
 }: SegmentedProps<T>) {
+  const { isRTL } = useI18n();
   return (
-    <View style={styles.track} accessibilityRole="tablist">
+    <View style={[styles.track, isRTL && styles.rowReverse]} accessibilityRole="tablist">
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -38,6 +40,7 @@ export function Segmented<T extends string>({
 }
 
 const styles = StyleSheet.create({
+  rowReverse: { flexDirection: 'row-reverse' },
   track: {
     flexDirection: 'row',
     gap: 2,

@@ -11,6 +11,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/Text';
+import { useI18n } from '@/i18n';
 import { color, font, motion, radius } from '@/theme/tokens';
 
 const RAIL_HEIGHT = 62;
@@ -22,12 +23,6 @@ const MARKS: Record<string, string> = {
   you: '✿',
 };
 
-const LABELS: Record<string, string> = {
-  daily: 'Daily',
-  connections: 'Connections',
-  you: 'You',
-};
-
 /**
  * Floating navigation rail.
  *
@@ -36,6 +31,7 @@ const LABELS: Record<string, string> = {
  * translucent rail lands in the same place visually and costs nothing per frame.
  */
 export function TabBar({ state, navigation }: BottomTabBarProps) {
+  const { t, isRTL } = useI18n();
   const insets = useSafeAreaInsets();
   const railWidth = useSharedValue(0);
   const index = useSharedValue(state.index);
@@ -52,7 +48,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
     const slot = railWidth.value / count;
     return {
       width: slot - 14,
-      transform: [{ translateX: index.value * slot + 7 }],
+      transform: [{ translateX: (isRTL ? count - 1 - index.value : index.value) * slot + 7 }],
     };
   });
 
@@ -65,7 +61,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
       />
 
       <View
-        style={styles.rail}
+        style={[styles.rail, isRTL && styles.rowReverse]}
         onLayout={(event) => {
           railWidth.value = event.nativeEvent.layout.width;
         }}
@@ -80,8 +76,8 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
               key={route.key}
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}
-              accessibilityLabel={LABELS[route.name] ?? route.name}
-              style={styles.tab}
+              accessibilityLabel={tabLabel(route.name, t)}
+              style={[styles.tab, isRTL && styles.rowReverse]}
               onPress={() => {
                 const event = navigation.emit({
                   type: 'tabPress',
@@ -97,20 +93,26 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
                 {MARKS[route.name] ?? '•'}
               </Text>
               <Text style={[styles.label, focused && styles.labelActive]}>
-                {LABELS[route.name] ?? route.name}
+                {tabLabel(route.name, t)}
               </Text>
             </Pressable>
           );
         })}
       </View>
 
-      {/* The home indicator, kept because the reference's shell relied on it. */}
-      <View style={styles.homeIndicator} pointerEvents="none" />
     </View>
   );
 }
 
+function tabLabel(name: string, t: ReturnType<typeof useI18n>['t']): string {
+  if (name === 'daily') return t('nav.daily');
+  if (name === 'connections') return t('nav.connections');
+  if (name === 'you') return t('nav.you');
+  return name;
+}
+
 const styles = StyleSheet.create({
+  rowReverse: { flexDirection: 'row-reverse' },
   wrap: {
     position: 'absolute',
     left: 0,
@@ -155,12 +157,4 @@ const styles = StyleSheet.create({
     color: color.faint,
   },
   labelActive: { fontFamily: font.bodySemi, color: color.ink },
-  homeIndicator: {
-    alignSelf: 'center',
-    width: 120,
-    height: 4,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(10,10,10,0.16)',
-    marginTop: 9,
-  },
 });

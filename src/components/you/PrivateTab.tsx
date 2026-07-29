@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { updateMyPreferences } from '@/api/profile';
 import { Button } from '@/components/ui/Button';
+import { InlineNotice } from '@/components/ui/AsyncState';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -12,6 +13,8 @@ import { Segmented } from '@/components/ui/Segmented';
 import { Slider } from '@/components/ui/Slider';
 import { Text } from '@/components/ui/Text';
 import { CountrySheet } from '@/components/you/CountrySheet';
+import { useI18n, type Translate } from '@/i18n';
+import type { TranslationKey } from '@/i18n/catalog';
 import {
   BUILD_OPTIONS,
   DISTANCE_RANGE,
@@ -35,6 +38,7 @@ type SubTab = 'them' | 'you';
  * because this is the part of the product that most needs to be trusted.
  */
 export function PrivateTab({ preferences }: { preferences: PrivatePreferences }) {
+  const { t, isRTL } = useI18n();
   const [tab, setTab] = useState<SubTab>('them');
   const [draft, setDraft] = useState(preferences);
   const [countrySheet, setCountrySheet] = useState(false);
@@ -83,34 +87,33 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
   };
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, isRTL && styles.rtl]}>
       <Segmented
         value={tab}
         onChange={setTab}
         options={[
-          { value: 'them', label: 'Them' },
-          { value: 'you', label: 'You' },
+          { value: 'them', label: t('filters.tab.partner') },
+          { value: 'you', label: t('filters.tab.you') },
         ]}
       />
 
       {tab === 'them' ? (
         <Card style={styles.card}>
           <View>
-            <Text variant="microAccent">1 of 2 · partner preferences</Text>
+            <Text variant="microAccent">{t('filters.partnerStep')}</Text>
             <Text variant="displaySmall" style={styles.sectionTitle}>
-              Physical & location
+              {t('filters.partnerTitle')}
             </Text>
             <Text variant="caption" style={styles.sectionBody}>
-              Height, build and how far you are willing to look. We ask because
-              attraction matters in a marriage — not to rank anyone.
+              {t('filters.partnerBody')}
             </Text>
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHead}>
-              <Text variant="micro">Matching window</Text>
+            <View style={[styles.sectionHead, isRTL && styles.rowReverse]}>
+              <Text variant="micro">{t('filters.ageRange')}</Text>
               <Text variant="caption">
-                {draft.minAge}–{draft.maxAge} years
+                {t('filters.yearsRange', { min: draft.minAge, max: draft.maxAge })}
               </Text>
             </View>
             <RangeSlider
@@ -121,13 +124,15 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
                 patch('minAge', low);
                 patch('maxAge', high);
               }}
+              lowAccessibilityLabel={t('filters.minimumAge')}
+              highAccessibilityLabel={t('filters.maximumAge')}
             />
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHead}>
+            <View style={[styles.sectionHead, isRTL && styles.rowReverse]}>
               <Text variant="micro">
-                Height {draft.minHeightCm}–{draft.maxHeightCm} cm
+                {t('filters.heightRange', { min: draft.minHeightCm, max: draft.maxHeightCm })}
               </Text>
               <Text variant="label" style={styles.sectionValue}>
                 {formatHeightImperial(draft.minHeightCm)} –{' '}
@@ -142,21 +147,23 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
                 patch('minHeightCm', low);
                 patch('maxHeightCm', high);
               }}
+              lowAccessibilityLabel={t('filters.minimumHeight')}
+              highAccessibilityLabel={t('filters.maximumHeight')}
             />
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHead}>
-              <Text variant="micro">Build preferences</Text>
+            <View style={[styles.sectionHead, isRTL && styles.rowReverse]}>
+              <Text variant="micro">{t('filters.bodyTypes')}</Text>
               <Text variant="caption">
-                {draft.preferredBuilds.length} selected
+                {t('filters.selected', { count: draft.preferredBuilds.length })}
               </Text>
             </View>
             <View style={styles.chips}>
               {BUILD_OPTIONS.map((build) => (
                 <Chip
                   key={build}
-                  label={build}
+                  label={buildLabel(build, t)}
                   selected={draft.preferredBuilds.includes(build)}
                   onPress={() => toggleBuild(build)}
                   showMark
@@ -166,24 +173,24 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
           </View>
 
           <View style={styles.section}>
-            <Text variant="micro">Location & distance</Text>
+            <Text variant="micro">{t('filters.locationDistance')}</Text>
             <View style={styles.radiusPanel}>
-              <View style={styles.radiusHead}>
+              <View style={[styles.radiusHead, isRTL && styles.rowReverse]}>
                 <View style={styles.radiusText}>
                   <Text variant="label" style={styles.radiusTitle}>
-                    Nearby radius
+                    {t('filters.searchDistance')}
                   </Text>
-                  <Text variant="caption">Keep local introductions close</Text>
+                  <Text variant="caption">{t('filters.searchDistanceBody')}</Text>
                 </View>
                 <View style={styles.radiusPill}>
                   <Text style={styles.radiusPillLabel}>
-                    {draft.maxDistanceKm} km
+                    {t('filters.distanceKm', { count: draft.maxDistanceKm })}
                   </Text>
                 </View>
               </View>
 
               <Slider
-                accessibilityLabel="Maximum distance in kilometres"
+                accessibilityLabel={t('filters.maxDistanceA11y')}
                 min={DISTANCE_RANGE.min}
                 max={DISTANCE_RANGE.max}
                 step={5}
@@ -195,7 +202,7 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
                 {RADIUS_PRESETS.map((preset) => (
                   <Chip
                     key={preset}
-                    label={`${preset} km`}
+                    label={t('filters.distanceKm', { count: preset })}
                     selected={draft.maxDistanceKm === preset}
                     onPress={() => patch('maxDistanceKm', preset)}
                   />
@@ -205,10 +212,10 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHead}>
-              <Text variant="micro">Preferred countries</Text>
+            <View style={[styles.sectionHead, isRTL && styles.rowReverse]}>
+              <Text variant="micro">{t('filters.countries')}</Text>
               <Text variant="caption">
-                {draft.preferredCountries.length} selected
+                {t('filters.selected', { count: draft.preferredCountries.length })}
               </Text>
             </View>
             <View style={styles.chips}>
@@ -229,27 +236,28 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
             </View>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={t('filters.chooseCountries')}
               onPress={() => setCountrySheet(true)}
-              style={styles.sheetTrigger}
+              style={[styles.sheetTrigger, isRTL && styles.rowReverse]}
             >
               <Text variant="label" style={styles.sheetTriggerLabel}>
-                Filter preferred countries
+                {t('filters.chooseCountries')}
               </Text>
               <Text style={styles.sheetTriggerArrow}>→</Text>
             </Pressable>
           </View>
 
           <View style={styles.section}>
-            <Text variant="micro">Marriage timeline</Text>
+            <Text variant="micro">{t('filters.marriageTiming')}</Text>
             <Text variant="caption" style={styles.filterNote}>
-              Choose the timelines that feel workable for you.
+              {t('filters.marriageTimingBody')}
             </Text>
             <View style={styles.checkList}>
               {(Object.entries(TIMELINE_LABELS) as [MarriageTimeline, string][]).map(
-                ([value, label]) => (
+                ([value]) => (
                   <FilterCheck
                     key={value}
-                    label={label}
+                    label={timelineLabel(value, t)}
                     checked={draft.desiredTimeline.includes(value)}
                     onPress={() => toggleListValue('desiredTimeline', value)}
                   />
@@ -259,16 +267,16 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
           </View>
 
           <View style={styles.section}>
-            <Text variant="micro">Religious practice</Text>
+            <Text variant="micro">{t('filters.practice')}</Text>
             <Text variant="caption" style={styles.filterNote}>
-              These stay private and are only used to make introductions more relevant.
+              {t('filters.practiceBody')}
             </Text>
             <View style={styles.checkList}>
               {(Object.entries(PRACTICE_LABELS) as [ReligiousPractice, string][]).map(
-                ([value, label]) => (
+                ([value]) => (
                   <FilterCheck
                     key={value}
-                    label={label}
+                    label={practiceLabel(value, t)}
                     checked={draft.preferredPractice.includes(value)}
                     onPress={() => toggleListValue('preferredPractice', value)}
                   />
@@ -278,71 +286,71 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
           </View>
 
           <Button
-            label="Clear matching choices"
+            label={t('filters.clear')}
             variant="secondary"
             onPress={() => setClearConfirm(true)}
           />
 
           <Button
-            label={save.isSuccess ? 'Saved' : 'Save matching criteria'}
+            label={save.isSuccess ? t('filters.saved') : t('filters.savePartner')}
             loading={save.isPending}
             onPress={() => save.mutate()}
           />
+          {save.isError ? <InlineNotice message={t('filters.saveError')} /> : null}
         </Card>
       ) : (
         <Card style={styles.card}>
           <View>
-            <Text variant="microAccent">2 of 2 · your private metrics</Text>
+            <Text variant="microAccent">{t('filters.yourStep')}</Text>
             <Text variant="displaySmall" style={styles.sectionTitle}>
-              Your own numbers
+              {t('filters.yourTitle')}
             </Text>
             <Text variant="caption" style={styles.sectionBody}>
-              Stored privately and never shown on your profile.
+              {t('filters.yourBody')}
             </Text>
           </View>
 
           <Card tone="accent">
-            <Text style={styles.confidentialTitle}>Confidential by design</Text>
+            <Text style={styles.confidentialTitle}>{t('filters.privateTitle')}</Text>
             <Text variant="caption" style={styles.confidentialBody}>
-              Compatibility is calculated without exposing any number or label to
-              the other member.
+              {t('filters.privateBody')}
             </Text>
           </Card>
 
-          <View style={styles.metricRow}>
+          <View style={[styles.metricRow, isRTL && styles.rowReverse]}>
             <View style={styles.metric}>
-              <Text variant="micro">Your height (cm)</Text>
+              <Text variant="micro">{t('filters.yourHeight')}</Text>
               <TextInput
-                accessibilityLabel="Your height in centimetres"
+                accessibilityLabel={t('filters.yourHeightA11y')}
                 keyboardType="number-pad"
                 value={String(draft.ownHeightCm)}
                 onChangeText={(text) =>
                   patch('ownHeightCm', Number(text.replace(/\D/g, '')) || 0)
                 }
-                style={styles.metricInput}
+                style={[styles.metricInput, isRTL && styles.inputRTL]}
               />
             </View>
             <View style={styles.metric}>
-              <Text variant="micro">Your weight (kg)</Text>
+              <Text variant="micro">{t('filters.yourWeight')}</Text>
               <TextInput
-                accessibilityLabel="Your weight in kilograms"
+                accessibilityLabel={t('filters.yourWeightA11y')}
                 keyboardType="number-pad"
                 value={String(draft.ownWeightKg ?? '')}
                 onChangeText={(text) =>
                   patch('ownWeightKg', Number(text.replace(/\D/g, '')) || 0)
                 }
-                style={styles.metricInput}
+                style={[styles.metricInput, isRTL && styles.inputRTL]}
               />
             </View>
           </View>
 
           <View style={styles.section}>
-            <Text variant="micro">Your build — pick one</Text>
+            <Text variant="micro">{t('filters.yourBodyType')}</Text>
             <View style={styles.chips}>
               {BUILD_OPTIONS.map((build) => (
                 <Chip
                   key={build}
-                  label={build}
+                  label={buildLabel(build, t)}
                   selected={draft.ownBuild === build}
                   onPress={() => patch('ownBuild', build)}
                 />
@@ -351,10 +359,11 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
           </View>
 
           <Button
-            label={save.isSuccess ? 'Saved' : 'Save private criteria'}
+            label={save.isSuccess ? t('filters.saved') : t('filters.saveYour')}
             loading={save.isPending}
             onPress={() => save.mutate()}
           />
+          {save.isError ? <InlineNotice message={t('filters.saveError')} /> : null}
         </Card>
       )}
 
@@ -367,10 +376,10 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
 
       <ConfirmDialog
         visible={clearConfirm}
-        title="Clear your matching choices?"
-        body="This restores open criteria. Your own private details stay unchanged."
-        confirmLabel="Clear choices"
-        cancelLabel="Keep them"
+        title={t('filters.clearTitle')}
+        body={t('filters.clearBody')}
+        confirmLabel={t('filters.clearConfirm')}
+        cancelLabel={t('filters.clearCancel')}
         onConfirm={clearMatchingChoices}
         onCancel={() => setClearConfirm(false)}
       />
@@ -387,12 +396,14 @@ function FilterCheck({
   checked: boolean;
   onPress: () => void;
 }) {
+  const { isRTL } = useI18n();
   return (
     <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
+      accessibilityLabel={label}
       onPress={onPress}
-      style={[styles.checkRow, checked && styles.checkRowSelected]}
+      style={[styles.checkRow, isRTL && styles.rowReverse, checked && styles.checkRowSelected]}
     >
       <View style={[styles.checkBox, checked && styles.checkBoxSelected]}>
         {checked ? <Text style={styles.checkMark}>✓</Text> : null}
@@ -402,7 +413,55 @@ function FilterCheck({
   );
 }
 
+const BUILD_KEYS: Record<(typeof BUILD_OPTIONS)[number], TranslationKey> = {
+  Petite: 'filters.build.petite',
+  Slim: 'filters.build.slim',
+  Slender: 'filters.build.slender',
+  Lean: 'filters.build.lean',
+  'Tall & Lean': 'filters.build.tallLean',
+  Average: 'filters.build.average',
+  'Fit / Active': 'filters.build.fit',
+  Athletic: 'filters.build.athletic',
+  Toned: 'filters.build.toned',
+  Muscular: 'filters.build.muscular',
+  'Medium / Solid': 'filters.build.solid',
+  Curvy: 'filters.build.curvy',
+  'Full-Figured': 'filters.build.full',
+  'Plus Size': 'filters.build.plus',
+  Broad: 'filters.build.broad',
+  Stocky: 'filters.build.stocky',
+  'Robust / Sturdy': 'filters.build.sturdy',
+};
+
+const PRACTICE_KEYS: Record<ReligiousPractice, TranslationKey> = {
+  very_practicing: 'filters.practice.very',
+  practicing: 'filters.practice.practicing',
+  moderate: 'filters.practice.moderate',
+  learning: 'filters.practice.learning',
+};
+
+const TIMELINE_KEYS: Record<MarriageTimeline, TranslationKey> = {
+  within_3_months: 'filters.timeline.3m',
+  within_6_months: 'filters.timeline.6m',
+  within_1_year: 'filters.timeline.1y',
+  '1_to_2_years': 'filters.timeline.2y',
+};
+
+function buildLabel(value: (typeof BUILD_OPTIONS)[number], t: Translate): string {
+  return t(BUILD_KEYS[value]);
+}
+
+function practiceLabel(value: ReligiousPractice, t: Translate): string {
+  return t(PRACTICE_KEYS[value]);
+}
+
+function timelineLabel(value: MarriageTimeline, t: Translate): string {
+  return t(TIMELINE_KEYS[value]);
+}
+
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
+  rowReverse: { flexDirection: 'row-reverse' },
   wrap: { gap: 12, paddingBottom: 24 },
   card: { gap: 18 },
 
@@ -506,4 +565,5 @@ const styles = StyleSheet.create({
     color: color.ink,
     backgroundColor: color.surface,
   },
+  inputRTL: { textAlign: 'right', writingDirection: 'rtl' },
 });

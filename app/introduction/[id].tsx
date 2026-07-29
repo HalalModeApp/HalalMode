@@ -11,11 +11,13 @@ import { Chip } from '@/components/ui/Chip';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
+import { useI18n } from '@/i18n';
 import { useRound } from '@/state/round';
 import { alpha, color, radius, space } from '@/theme/tokens';
 
 export default function IntroductionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { language, isRTL, t } = useI18n();
   const { round, live, release, keepLimit, submit } = useRound();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -24,10 +26,10 @@ export default function IntroductionDetailScreen() {
 
   if (!introduction) {
     return (
-      <Screen>
+      <Screen style={isRTL ? styles.rtl : undefined}>
         <View style={styles.missing}>
-          <Text variant="bodySmall">This introduction is no longer available.</Text>
-          <Button label="Back" variant="quiet" onPress={() => router.back()} />
+          <Text variant="bodySmall">{t('intro.missing')}</Text>
+          <Button label={t('common.back')} variant="quiet" onPress={() => router.back()} />
         </View>
       </Screen>
     );
@@ -36,6 +38,7 @@ export default function IntroductionDetailScreen() {
   const { profile, agreements } = introduction;
   const position = (round?.introductions.indexOf(introduction) ?? 0) + 1;
   const total = round?.introductions.length ?? 0;
+  const number = (value: number) => new Intl.NumberFormat(language === 'ar' ? 'ar-SA' : 'en').format(value);
 
   const handleSendInterest = async () => {
     setConfirmOpen(false);
@@ -52,19 +55,19 @@ export default function IntroductionDetailScreen() {
   };
 
   return (
-    <Screen>
+    <Screen style={isRTL ? styles.rtl : undefined}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         <ScreenHeader
           action="back"
-          trailingLabel={`Introduction ${position} of ${total}`}
+          trailingLabel={t('intro.position', { current: number(position), total: number(total) })}
         />
 
         <Pressable
           accessibilityRole="imagebutton"
-          accessibilityLabel={`Open ${profile.firstName}'s photos`}
+          accessibilityLabel={t('intro.photosA11y', { name: profile.firstName })}
           onPress={() => router.push(`/gallery/${introduction.id}`)}
           style={styles.hero}
         >
@@ -75,10 +78,10 @@ export default function IntroductionDetailScreen() {
             transition={220}
             accessibilityIgnoresInvertColors
           />
-          <View style={styles.photoBadge}>
+          <View style={[styles.photoBadge, isRTL && styles.rowRTL]}>
             <View style={styles.photoBadgeIcon} />
             <Text style={styles.photoBadgeLabel}>
-              {profile.photos.length} photos
+              {t('intro.photoCount', { count: number(profile.photos.length) })}
             </Text>
           </View>
           <LinearGradient
@@ -87,12 +90,12 @@ export default function IntroductionDetailScreen() {
           >
             <Text style={styles.heroName}>{profile.name}</Text>
             <Text style={styles.heroLine}>
-              {profile.age} · {profile.city} · {profile.occupation}
+              {number(profile.age)} · {profile.city} · {profile.occupation}
             </Text>
           </LinearGradient>
         </Pressable>
 
-        <View style={styles.chips}>
+        <View style={[styles.chips, isRTL && styles.rowRTL]}>
           {profile.chips.map((chip) => (
             <Chip key={chip} label={chip} />
           ))}
@@ -103,7 +106,7 @@ export default function IntroductionDetailScreen() {
         {profile.audioDurationSeconds ? (
           <View style={styles.section}>
             <Text variant="label" style={styles.sectionHeading}>
-              Audio greeting
+              {t('intro.audio')}
             </Text>
             <AudioGreeting
               durationSeconds={profile.audioDurationSeconds}
@@ -113,10 +116,10 @@ export default function IntroductionDetailScreen() {
         ) : null}
 
         <View style={styles.agreementBlock}>
-          <Text variant="micro">Where you already agree</Text>
+          <Text variant="micro">{t('intro.agreements')}</Text>
           <View style={styles.agreementList}>
             {agreements.map((item) => (
-              <View key={item.label} style={styles.agreementRow}>
+              <View key={item.label} style={[styles.agreementRow, isRTL && styles.rowRTL]}>
                 <Text variant="bodySmall">{item.label}</Text>
                 <Text variant="label" style={styles.agreementValue}>
                   {item.value}
@@ -125,14 +128,13 @@ export default function IntroductionDetailScreen() {
             ))}
           </View>
           <Text variant="caption" style={styles.privacyNote}>
-            Your private filters stay private. Neither of you ever sees the
-            other’s ranges.
+            {t('intro.privacy')}
           </Text>
         </View>
 
-        <View style={styles.actions}>
+        <View style={[styles.actions, isRTL && styles.rowRTL]}>
           <Button
-            label="Let go"
+            label={t('daily.letGo')}
             variant="secondary"
             onPress={() => {
               release(introduction.id);
@@ -141,7 +143,7 @@ export default function IntroductionDetailScreen() {
             style={styles.letGo}
           />
           <Button
-            label="Send interest"
+            label={t('daily.sendInterest')}
             onPress={() => setConfirmOpen(true)}
             style={styles.sendInterest}
           />
@@ -150,10 +152,10 @@ export default function IntroductionDetailScreen() {
 
       <ConfirmDialog
         visible={confirmOpen}
-        title={`Send interest to ${profile.firstName}?`}
-        body="They are only notified if it is mutual."
-        confirmLabel="Yes, send"
-        cancelLabel="Not yet"
+        title={t('daily.sendToName', { name: profile.firstName })}
+        body={t('daily.mutualOnly')}
+        confirmLabel={t('daily.yesSend')}
+        cancelLabel={t('daily.notYet')}
         onConfirm={() => void handleSendInterest()}
         onCancel={() => setConfirmOpen(false)}
       />
@@ -162,6 +164,8 @@ export default function IntroductionDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
+  rowRTL: { flexDirection: 'row-reverse' },
   content: { paddingBottom: 40 },
   missing: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
 
@@ -212,7 +216,7 @@ const styles = StyleSheet.create({
   },
   photoBadgeLabel: {
     fontFamily: 'Beiruti_600SemiBold',
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: 1.3,
     textTransform: 'uppercase',
     color: color.white,
@@ -227,7 +231,7 @@ const styles = StyleSheet.create({
   },
   bio: {
     fontFamily: 'Beiruti_400Regular',
-    fontSize: 13,
+    fontSize: 15,
     lineHeight: 23,
     color: color.inkSoft,
     paddingHorizontal: space.gutter,
@@ -250,7 +254,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 16,
   },
-  agreementValue: { flexShrink: 1, textAlign: 'right', fontSize: 12 },
+  agreementValue: { flexShrink: 1, textAlign: 'right', fontSize: 14 },
   privacyNote: { marginTop: 14, color: color.faintest },
 
   actions: {

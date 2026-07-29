@@ -11,6 +11,7 @@ import {
 
 import { fetchCurrentRound, releaseIntroduction, submitKeeps } from '@/api/introductions';
 import { queryKeys } from '@/lib/queryClient';
+import { getRoundInteractionState, resolveActiveId } from '@/lib/roundInvariants';
 import { useSession } from '@/state/session';
 import { TIER_LIMITS, type Introduction, type IntroductionRound } from '@/types';
 
@@ -95,18 +96,20 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   );
 
   // Falls back to the first survivor whenever the active card is released.
-  const resolvedActiveId = useMemo(() => {
-    if (activeId && live.some((item) => item.id === activeId)) return activeId;
-    return live[0]?.id ?? null;
-  }, [activeId, live]);
+  const resolvedActiveId = useMemo(
+    () => resolveActiveId(live, activeId),
+    [activeId, live]
+  );
 
   const active = useMemo(
     () => live.find((item) => item.id === resolvedActiveId) ?? null,
     [live, resolvedActiveId]
   );
 
-  const inChosenZone = live.length > 0 && live.length <= keepLimit;
-  const remaining = Math.max(0, live.length - keepLimit);
+  const { inChosenZone, remaining, canPop } = getRoundInteractionState(
+    live.length,
+    keepLimit
+  );
 
   // Reaching the keepable few ends the current popping gesture, but does not
   // lock the final set: members may still narrow it further if they choose.
@@ -196,7 +199,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       // Hard guard, not a UI condition: once these are the ones being kept,
       // there is no state in which a tap should release them by accident.
       popMode,
-      canPop: live.length > 1,
+      canPop,
       togglePopMode: () => {
         if (live.length <= 1) return;
         setPopMode((on) => !on);
@@ -223,6 +226,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       keepLimit,
       inChosenZone,
       remaining,
+      canPop,
       popMode,
       release,
       releaseFailure,

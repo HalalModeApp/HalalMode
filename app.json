@@ -8,10 +8,6 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "backgroundColor": "#FCFCFB",
-    "splash": {
-      "backgroundColor": "#FCFCFB",
-      "resizeMode": "contain"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.halalmode.app",
@@ -37,6 +33,15 @@
       "expo-router",
       "expo-font",
       "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FCFCFB",
+          "image": "./assets/branding/halalmode-splash.png",
+          "imageWidth": 220,
+          "resizeMode": "contain"
+        }
+      ],
       [
         "expo-image-picker",
         {

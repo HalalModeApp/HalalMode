@@ -38,12 +38,14 @@ export async function fetchCurrentRound(
  *
  * Selections are written privately. The other side is told nothing unless and
  * until they select back — no read receipts, no "someone likes you" nudge.
- * Returns the ids that turned out to be mutual, which may well be empty.
+ * `mutualProfileIds` contains mutuals that received an active conversation
+ * slot. `waitingMutualProfileIds` contains earned mutuals held privately until
+ * both members have capacity; older clients can safely ignore that new field.
  */
 export async function submitKeeps(
   roundId: string,
   keptIntroductionIds: string[]
-): Promise<{ mutualProfileIds: string[] }> {
+): Promise<{ mutualProfileIds: string[]; waitingMutualProfileIds?: string[] }> {
   if (USE_MOCKS) {
     // The sample flow always mutuals on the first keep so the match reveal,
     // question flow and recap are all reachable without a second device.
@@ -60,7 +62,10 @@ export async function submitKeeps(
     p_introduction_ids: keptIntroductionIds,
   });
   if (error) throw error;
-  return data as { mutualProfileIds: string[] };
+  return data as {
+    mutualProfileIds: string[];
+    waitingMutualProfileIds?: string[];
+  };
 }
 
 /**

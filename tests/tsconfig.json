@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": false,
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "noEmit": false,
+    "outDir": "../.test-build",
+    "rootDir": "..",
+    "types": ["node"]
+  },
+  "include": [
+    "./*.test.ts",
+    "../src/lib/arcLayout.ts",
+    "../src/lib/roundInvariants.ts"
+  ]
+}

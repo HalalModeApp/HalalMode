@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/ui/Text';
+import { useI18n } from '@/i18n';
 import { alpha, color, font, radius } from '@/theme/tokens';
 
 const BAR_COUNT = 26;
@@ -29,9 +31,12 @@ export function AudioGreeting({
   compact,
   onDark,
 }: AudioGreetingProps) {
-  const [playing, setPlaying] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { language, isRTL, t } = useI18n();
+  const player = useAudioPlayer(url, {
+    updateInterval: 250,
+    downloadFirst: true,
+  });
+  const status = useAudioPlayerStatus(player);
 
   const bars = useMemo(
     () =>
@@ -42,51 +47,44 @@ export function AudioGreeting({
     [durationSeconds]
   );
 
-  useEffect(() => {
-    if (!playing) {
-      if (timer.current) clearInterval(timer.current);
-      timer.current = null;
-      return;
-    }
-
-    timer.current = setInterval(() => {
-      setElapsed((current) => {
-        if (current + 0.5 >= durationSeconds) {
-          setPlaying(false);
-          return 0;
-        }
-        return current + 0.5;
-      });
-    }, 500);
-
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
-  }, [playing, durationSeconds]);
-
-  const progress = durationSeconds > 0 ? elapsed / durationSeconds : 0;
-  const remaining = Math.max(0, Math.round(durationSeconds - elapsed));
-  const timeLabel = `0:${String(remaining).padStart(2, '0')}`;
+  const actualDuration = status.duration || durationSeconds;
+  const progress = actualDuration > 0 ? status.currentTime / actualDuration : 0;
+  const remaining = Math.max(0, Math.round(actualDuration - status.currentTime));
+  const timeLabel = new Intl.NumberFormat(language === 'ar' ? 'ar-SA' : 'en', {
+    minimumIntegerDigits: 2,
+    useGrouping: false,
+  }).format(remaining);
 
   const tint = onDark ? color.white : color.ink;
   const idleBar = onDark ? 'rgba(252,252,251,0.35)' : 'rgba(10,10,10,0.16)';
 
   return (
-    <View style={[styles.row, !compact && styles.card]}>
+    <View style={[styles.row, isRTL && styles.rowRTL, !compact && styles.card]}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={playing ? 'Pause voice greeting' : 'Play voice greeting'}
-        accessibilityHint={url ? undefined : 'Sample audio'}
-        onPress={() => setPlaying((on) => !on)}
+        accessibilityLabel={
+          !url ? t('audio.unavailable') : status.playing ? t('audio.pause') : t('audio.play')
+        }
+        accessibilityState={{ disabled: !url, busy: status.isBuffering }}
+        disabled={!url}
+        onPress={() => {
+          if (status.playing) {
+            player.pause();
+            return;
+          }
+          if (status.didJustFinish) void player.seekTo(0);
+          player.play();
+        }}
         style={[
           styles.play,
+          !url && styles.playDisabled,
           { backgroundColor: onDark ? color.white : color.ink },
         ]}
       >
         <Text
           style={[styles.playGlyph, { color: onDark ? color.ink : color.white }]}
         >
-          {playing ? '❚❚' : '▶'}
+          {status.playing ? '❚❚' : '▶'}
         </Text>
       </Pressable>
 
@@ -113,7 +111,7 @@ export function AudioGreeting({
           { color: onDark ? 'rgba(252,252,251,0.6)' : color.faint },
         ]}
       >
-        {timeLabel}
+        0:{timeLabel}
       </Text>
     </View>
   );
@@ -121,6 +119,7 @@ export function AudioGreeting({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rowRTL: { flexDirection: 'row-reverse' },
   card: {
     borderWidth: 1,
     borderColor: alpha.line,
@@ -129,13 +128,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   play: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
   playGlyph: { fontFamily: font.body, fontSize: 11 },
+  playDisabled: { opacity: 0.35 },
   wave: {
     flex: 1,
     flexDirection: 'row',
@@ -143,5 +143,5 @@ const styles = StyleSheet.create({
     gap: 2,
     height: 20,
   },
-  time: { fontFamily: font.body, fontSize: 10.5 },
+  time: { fontFamily: font.body, fontSize: 12 },
 });

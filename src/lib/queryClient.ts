@@ -2,7 +2,8 @@ import { QueryClient } from '@tanstack/react-query';
 
 /**
  * A round changes at most once a day, and the product's whole point is that
- * there is nothing new to pull down. So: long stale times, no refetch on focus.
+ * there is nothing new to pull down. Stale data is refreshed when the app
+ * returns to the foreground so private signed media URLs are rotated safely.
  * Chat overrides this per-query where realtime matters.
  */
 export const queryClient = new QueryClient({
@@ -10,7 +11,7 @@ export const queryClient = new QueryClient({
     queries: {
       staleTime: 5 * 60 * 1000,
       gcTime: 30 * 60 * 1000,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
       retry: 1,
     },
   },

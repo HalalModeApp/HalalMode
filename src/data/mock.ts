@@ -324,6 +324,19 @@ const MOCK_RECAP: RecapItem[] = [
   },
 ];
 
+/**
+ * Mirrors the server contract for the post-icebreaker compatibility view.
+ * These are deliberately broad signals only: no private filter, score, or
+ * person-specific explanation is ever sent to the other member.
+ */
+const MOCK_COMPATIBILITY_BREAKDOWN = [
+  { topic: 'values', verdict: 'aligned' },
+  { topic: 'marriage_timing', verdict: 'aligned' },
+  { topic: 'location_and_relocation', verdict: 'discuss' },
+  { topic: 'family_plans', verdict: 'aligned' },
+  { topic: 'conversation', verdict: 'aligned' },
+] as const;
+
 /** Their answers — revealed only once the member submits their own. */
 export const MOCK_THEIR_ANSWERS: Record<string, string> = {
   q1: 'Fajr together when we can, and never guilt-tripping each other about the ones we miss. Rhythm, not policing.',
@@ -347,6 +360,7 @@ export const MOCK_CONNECTIONS: Connection[] = [
       { questionId: 'q5', origin: 'them', myAnswer: '' },
     ],
     recap: MOCK_RECAP,
+    compatibilityBreakdown: [...MOCK_COMPATIBILITY_BREAKDOWN],
     lastMessage: 'Then we should talk about where we would live.',
     lastMessageAt: new Date(Date.now() - 3600_000).toISOString(),
     unread: true,

@@ -12,6 +12,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Polygon } from 'react-native-svg';
 
+import { useI18n } from '@/i18n';
+
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /** How far the pin drives inward, in points. */
@@ -29,6 +31,7 @@ export interface PinBadgeProps {
   size: number;
   /** Each badge gets a different phase so the arc never breathes in unison. */
   ambientDelayMs: number;
+  reducedMotion: boolean;
 }
 
 /**
@@ -41,12 +44,22 @@ export interface PinBadgeProps {
  * It sits at the upper-right so it never covers the eyes, and carries its own
  * hit area; the reference's pin was easy to miss under a real thumb.
  */
-export function PinBadge({ onPress, size, ambientDelayMs }: PinBadgeProps) {
+export function PinBadge({
+  onPress,
+  size,
+  ambientDelayMs,
+  reducedMotion,
+}: PinBadgeProps) {
+  const { t } = useI18n();
   const badge = Math.max(22, size * 0.44);
   const jab = useSharedValue(0);
   const ambient = useSharedValue(-1);
 
   useEffect(() => {
+    if (reducedMotion) {
+      ambient.value = 0;
+      return;
+    }
     ambient.value = withDelay(
       ambientDelayMs,
       withRepeat(
@@ -57,7 +70,7 @@ export function PinBadge({ onPress, size, ambientDelayMs }: PinBadgeProps) {
         -1
       )
     );
-  }, [ambient, ambientDelayMs]);
+  }, [ambient, ambientDelayMs, reducedMotion]);
 
   const strike = () => {
     jab.value = withSequence(
@@ -93,8 +106,8 @@ export function PinBadge({ onPress, size, ambientDelayMs }: PinBadgeProps) {
   return (
     <AnimatedPressable
       accessibilityRole="button"
-      accessibilityLabel="Let this introduction go"
-      onPress={strike}
+      accessibilityLabel={t('daily.releaseA11y')}
+      onPress={reducedMotion ? onPress : strike}
       hitSlop={10}
       style={[
         styles.badge,

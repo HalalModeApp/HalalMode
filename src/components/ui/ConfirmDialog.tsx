@@ -4,6 +4,7 @@ import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import { Button } from '@/components/ui/Button';
 import { Text } from '@/components/ui/Text';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useI18n } from '@/i18n';
 import { alpha, color, radius, shadow, space } from '@/theme/tokens';
 
 export interface ConfirmDialogProps {
@@ -30,6 +31,7 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const reducedMotion = useReducedMotion();
+  const { isRTL } = useI18n();
 
   return (
     <Modal
@@ -52,7 +54,7 @@ export function ConfirmDialog({
           accessible
           accessibilityRole="alert"
           entering={reducedMotion ? undefined : FadeInUp.duration(200)}
-          style={styles.card}
+          style={[styles.card, isRTL && styles.rtl]}
         >
           <Text variant="displaySmall" center>
             {title}
@@ -62,7 +64,7 @@ export function ConfirmDialog({
               {body}
             </Text>
           ) : null}
-          <View style={styles.row}>
+          <View style={[styles.row, isRTL && styles.rowReverse]}>
             <Button
               label={cancelLabel}
               variant="secondary"
@@ -82,6 +84,8 @@ export function ConfirmDialog({
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
+  rowReverse: { flexDirection: 'row-reverse' },
   scrim: {
     flex: 1,
     backgroundColor: 'rgba(10,10,10,0.4)',

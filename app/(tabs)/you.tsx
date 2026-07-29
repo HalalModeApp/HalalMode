@@ -12,19 +12,15 @@ import { Text } from '@/components/ui/Text';
 import { PrivateTab } from '@/components/you/PrivateTab';
 import { ProfileTab } from '@/components/you/ProfileTab';
 import { SettingsTab } from '@/components/you/SettingsTab';
+import { useI18n } from '@/i18n';
 import { queryKeys } from '@/lib/queryClient';
 import { useRound } from '@/state/round';
 import { color, radius, space } from '@/theme/tokens';
 
 type Tab = 'profile' | 'private' | 'settings';
 
-const SUBTITLES: Record<Tab, string> = {
-  profile: 'What everyone in your set can see.',
-  private: 'Only ever used to choose who you meet.',
-  settings: 'Preferences, membership and safety.',
-};
-
 export default function YouScreen() {
+  const { t, isRTL } = useI18n();
   const [tab, setTab] = useState<Tab>('profile');
   const { live } = useRound();
 
@@ -45,20 +41,20 @@ export default function YouScreen() {
 
   if (profileQuery.isPending || preferencesQuery.isPending) {
     return (
-      <Screen withTabBar>
+      <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
         <BrandHeader />
-        <LoadingState label="Loading your profile" />
+        <LoadingState label={t('you.loading')} />
       </Screen>
     );
   }
 
   if (profileQuery.isError || preferencesQuery.isError || !profileQuery.data || !preferencesQuery.data) {
     return (
-      <Screen withTabBar>
+      <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
         <BrandHeader />
         <ErrorState
-          title="Profile unavailable"
-          message="We couldn't load your profile or matching preferences."
+          title={t('you.errorTitle')}
+          message={t('you.errorBody')}
           onRetry={() => {
             void profileQuery.refetch();
             void preferencesQuery.refetch();
@@ -73,7 +69,7 @@ export default function YouScreen() {
   const connections = connectionsQuery.data ?? [];
 
   return (
-    <Screen withTabBar>
+    <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
       <BrandHeader />
 
       <View style={styles.tabsRow}>
@@ -81,9 +77,9 @@ export default function YouScreen() {
           value={tab}
           onChange={setTab}
           options={[
-            { value: 'profile', label: 'Profile' },
-            { value: 'private', label: 'Matching' },
-            { value: 'settings', label: 'Settings' },
+            { value: 'profile', label: t('you.tab.profile') },
+            { value: 'private', label: t('you.tab.matching') },
+            { value: 'settings', label: t('you.tab.settings') },
           ]}
         />
       </View>
@@ -93,13 +89,21 @@ export default function YouScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.identity}>
+        <View style={[styles.identity, isRTL && styles.rowReverse]}>
           <View style={styles.mark} />
           <View style={styles.identityText}>
             <Text variant="displaySmall" style={styles.name}>
               {profile.name}
             </Text>
-            <Text variant="caption">{SUBTITLES[tab]}</Text>
+            <Text variant="caption">
+              {t(
+                tab === 'profile'
+                  ? 'you.subtitle.profile'
+                  : tab === 'private'
+                    ? 'you.subtitle.matching'
+                    : 'you.subtitle.settings'
+              )}
+            </Text>
           </View>
         </View>
 
@@ -117,6 +121,8 @@ export default function YouScreen() {
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
+  rowReverse: { flexDirection: 'row-reverse' },
   tabsRow: { paddingHorizontal: space.xl, paddingTop: 4 },
   content: { paddingHorizontal: space.xl, paddingTop: 20 },
 

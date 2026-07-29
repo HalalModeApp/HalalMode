@@ -13,11 +13,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/Text';
+import { useI18n } from '@/i18n';
 import { useRound } from '@/state/round';
 import { color, font, radius } from '@/theme/tokens';
 
 export default function GalleryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { language, isRTL, t } = useI18n();
   const insets = useSafeAreaInsets();
   const { round } = useRound();
   const listRef = useRef<FlatList<string>>(null);
@@ -26,6 +28,7 @@ export default function GalleryScreen() {
   const width = Dimensions.get('window').width;
   const introduction = round?.introductions.find((item) => item.id === id);
   const photos = introduction?.profile.photos ?? [];
+  const number = (value: number) => new Intl.NumberFormat(language === 'ar' ? 'ar-SA' : 'en').format(value);
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -43,10 +46,10 @@ export default function GalleryScreen() {
 
   return (
     <View style={[styles.backdrop, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
+      <View style={[styles.header, isRTL && styles.rowRTL]}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Close gallery"
+          accessibilityLabel={t('gallery.close')}
           onPress={() => router.back()}
           style={styles.close}
           hitSlop={12}
@@ -54,11 +57,11 @@ export default function GalleryScreen() {
           <Text style={styles.closeGlyph}>✕</Text>
         </Pressable>
         <Text style={styles.title} numberOfLines={1}>
-          {introduction.profile.firstName}’s gallery
+          {t('gallery.title', { name: introduction.profile.firstName })}
         </Text>
         <View style={styles.counter}>
           <Text style={styles.counterLabel}>
-            {index + 1} / {photos.length}
+            {number(index + 1)} / {number(photos.length)}
           </Text>
         </View>
       </View>
@@ -90,7 +93,7 @@ export default function GalleryScreen() {
           <Pressable
             key={photo}
             accessibilityRole="button"
-            accessibilityLabel={`Photo ${thumbIndex + 1}`}
+            accessibilityLabel={t('gallery.photoA11y', { count: number(thumbIndex + 1) })}
             onPress={() => goTo(thumbIndex)}
             style={[styles.thumb, thumbIndex === index && styles.thumbActive]}
           >
@@ -116,6 +119,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  rowRTL: { flexDirection: 'row-reverse' },
   title: { flex: 1, fontFamily: font.bodySemi, fontSize: 13, color: color.white },
   counter: {
     backgroundColor: 'rgba(252,252,251,0.1)',
@@ -125,13 +129,13 @@ const styles = StyleSheet.create({
   },
   counterLabel: {
     fontFamily: font.body,
-    fontSize: 10.5,
+    fontSize: 12,
     color: 'rgba(252,252,251,0.62)',
   },
   close: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: 'rgba(252,252,251,0.16)',
     backgroundColor: 'rgba(252,252,251,0.06)',
@@ -154,8 +158,8 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   thumb: {
-    width: 40,
-    height: 52,
+    width: 44,
+    height: 56,
     borderRadius: 8,
     overflow: 'hidden',
     opacity: 0.45,

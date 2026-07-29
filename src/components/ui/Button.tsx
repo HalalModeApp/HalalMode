@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 import { Text } from '@/components/ui/Text';
+import { useI18n } from '@/i18n';
 import { alpha, color, font, microLabel, radius } from '@/theme/tokens';
 
 export type ButtonVariant =
@@ -49,6 +50,7 @@ export function Button({
   style,
   ...rest
 }: ButtonProps) {
+  const { isRTL } = useI18n();
   const isDisabled = disabled || loading;
   const fills = block ?? variant !== 'quiet';
 
@@ -88,7 +90,7 @@ export function Button({
           {dotColor ? (
             <View style={[styles.dot, { backgroundColor: dotColor }]} />
           ) : null}
-          <Text style={[styles.label, labelStyles[variant]]}>{label}</Text>
+          <Text style={[styles.label, labelStyles[variant], isRTL && styles.labelRTL]}>{label}</Text>
         </View>
       )}
     </Pressable>
@@ -112,6 +114,7 @@ const styles = StyleSheet.create({
     ...microLabel.medium,
     letterSpacing: 1.2,
   },
+  labelRTL: { letterSpacing: 0, textTransform: 'none' },
   primary: { backgroundColor: color.ink },
   secondary: {
     backgroundColor: 'transparent',

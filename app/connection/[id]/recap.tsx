@@ -4,24 +4,31 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { fetchConnection, openConnection } from '@/api/connections';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
+import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { queryKeys } from '@/lib/queryClient';
+import { sanitizeCompatibilityBreakdown } from '@/lib/compatibilityBreakdown';
+import { useI18n } from '@/i18n';
+import type { TranslationKey } from '@/i18n/catalog';
 import { alpha, color, radius, space } from '@/theme/tokens';
-import type { RecapItem } from '@/types';
+import type { CompatibilityBreakdownItem, CompatibilityTopic, RecapItem } from '@/types';
 
 export default function RecapScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { isRTL, t } = useI18n();
   const queryClient = useQueryClient();
 
-  const { data: connection } = useQuery({
+  const connectionQuery = useQuery({
     queryKey: queryKeys.connection(id),
     queryFn: () => fetchConnection(id),
   });
+  const connection = connectionQuery.data;
 
   const recap = connection?.recap ?? [];
+  const compatibilityBreakdown = sanitizeCompatibilityBreakdown(connection?.compatibilityBreakdown);
   const alignedCount = recap.filter((item) => item.verdict === 'aligned').length;
   const openMutation = useMutation({
     mutationFn: () => openConnection(id),
@@ -33,21 +40,25 @@ export default function RecapScreen() {
       router.replace(`/connection/${id}/chat`);
     },
   });
+  if (connectionQuery.isPending) return <Screen><LoadingState label={t('common.loading')} /></Screen>;
+  if (connectionQuery.isError || !connection) return (
+    <Screen><ScreenHeader /><ErrorState title={t('connections.errorTitle')} message={t('connections.errorBody')} onRetry={() => void connectionQuery.refetch()} /></Screen>
+  );
 
   return (
-    <Screen>
+    <Screen style={isRTL ? styles.rtl : undefined}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         <ScreenHeader action="back" />
         <View style={styles.header}>
-          <Text variant="micro">Step 3 of 3 · alignment</Text>
+          <Text variant="micro">{t('recap.step')}</Text>
           <Text variant="display" style={styles.title}>
-            You agree on {spellOut(alignedCount)} of {recap.length}.
+            {t('recap.title', { count: alignedCount, total: recap.length })}
           </Text>
           <Text variant="bodySmall" style={styles.subtitle}>
-            A recap is not a score. It shows where the conversation should start.
+            {t('recap.body')}
           </Text>
         </View>
 
@@ -57,21 +68,33 @@ export default function RecapScreen() {
           ))}
         </View>
 
+        {compatibilityBreakdown.length > 0 ? (
+          <View testID="compatibility-breakdown" style={styles.compatibilitySection}>
+            <Text variant="label" style={styles.compatibilityTitle}>{t('recap.compatibilityTitle')}</Text>
+            <Text variant="bodySmall" style={styles.compatibilityBody}>{t('recap.compatibilityBody')}</Text>
+            <View style={styles.compatibilityList}>
+              {compatibilityBreakdown.map((item) => (
+                <CompatibilityCard key={item.topic} item={item} />
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         <Card tone="dark" style={styles.startHere}>
-          <Text style={styles.startHereLabel}>Start here</Text>
+          <Text style={styles.startHereLabel}>{t('recap.start')}</Text>
           <Text style={styles.startHereQuote}>
-            “Tell me what a Friday evening looks like in the home you imagine.”
+            {t('recap.prompt')}
           </Text>
         </Card>
 
         <View style={styles.actions}>
           <Button
-            label="Open conversation"
+            label={t('recap.open')}
             loading={openMutation.isPending}
             onPress={() => openMutation.mutate()}
           />
           <Button
-            label="Close politely instead"
+            label={t('recap.close')}
             variant="quiet"
             onPress={() => router.replace('/(tabs)/connections')}
           />
@@ -81,8 +104,41 @@ export default function RecapScreen() {
   );
 }
 
+const topicKey: Record<CompatibilityTopic, TranslationKey> = {
+  values: 'recap.compatibilityValues',
+  marriage_timing: 'recap.compatibilityMarriageTiming',
+  location_and_relocation: 'recap.compatibilityLocation',
+  family_plans: 'recap.compatibilityFamilyPlans',
+  conversation: 'recap.compatibilityConversation',
+};
+
+function CompatibilityCard({ item }: { item: CompatibilityBreakdownItem }) {
+  const { t } = useI18n();
+  const aligned = item.verdict === 'aligned';
+  const title = t(topicKey[item.topic]);
+  const status = aligned ? t('recap.compatibilityAligned') : t('recap.compatibilityDiscuss');
+  const body = aligned ? t('recap.compatibilityAlignedBody') : t('recap.compatibilityDiscussBody');
+
+  return (
+    <View
+      testID={`compatibility-topic-${item.topic}`}
+      accessibilityLabel={`${title}. ${status}. ${body}`}
+      style={styles.compatibilityCard}
+    >
+      <View style={styles.compatibilityCardHeader}>
+        <Text variant="label" style={styles.compatibilityCardTitle}>{title}</Text>
+        <View style={[styles.tag, aligned ? styles.tagAligned : styles.tagDiscuss]}>
+          <Text style={[styles.tagLabel, aligned ? styles.tagLabelAligned : styles.tagLabelDiscuss]}>{status}</Text>
+        </View>
+      </View>
+      <Text variant="bodySmall">{body}</Text>
+    </View>
+  );
+}
+
 function RecapCard({ item }: { item: RecapItem }) {
   const aligned = item.verdict === 'aligned';
+  const { t } = useI18n();
 
   return (
     <View style={styles.card}>
@@ -91,7 +147,7 @@ function RecapCard({ item }: { item: RecapItem }) {
       </Text>
       <View style={[styles.tag, aligned ? styles.tagAligned : styles.tagDiscuss]}>
         <Text style={[styles.tagLabel, aligned ? styles.tagLabelAligned : styles.tagLabelDiscuss]}>
-          {aligned ? 'Aligned' : 'Talk about this'}
+          {aligned ? t('recap.aligned') : t('recap.discuss')}
         </Text>
       </View>
       <Text variant="bodySmall">{item.note}</Text>
@@ -99,14 +155,8 @@ function RecapCard({ item }: { item: RecapItem }) {
   );
 }
 
-/** The reference writes these out in words. It reads calmer than a numeral. */
-function spellOut(n: number): string {
-  return (
-    ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'][n] ?? String(n)
-  );
-}
-
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
   content: { paddingBottom: 40 },
   header: { paddingHorizontal: space.gutterWide, paddingTop: 8 },
   title: { marginTop: 8 },
@@ -132,12 +182,32 @@ const styles = StyleSheet.create({
   tagDiscuss: { backgroundColor: 'rgba(138,106,52,0.1)' },
   tagLabel: {
     fontFamily: 'Beiruti_700Bold',
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 1.6,
     textTransform: 'uppercase',
   },
   tagLabelAligned: { color: color.green },
   tagLabelDiscuss: { color: color.gold },
+
+  compatibilitySection: { paddingHorizontal: space.gutterWide, marginTop: 28 },
+  compatibilityTitle: { fontSize: 13, color: color.ink },
+  compatibilityBody: { marginTop: 8, color: color.muted },
+  compatibilityList: { marginTop: 14, gap: 9 },
+  compatibilityCard: {
+    borderWidth: 1,
+    borderColor: alpha.line,
+    borderRadius: radius.xl,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  compatibilityCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  compatibilityCardTitle: { flex: 1, fontSize: 13 },
 
   startHere: {
     marginHorizontal: space.gutterWide,
@@ -146,7 +216,7 @@ const styles = StyleSheet.create({
   },
   startHereLabel: {
     fontFamily: 'Beiruti_600SemiBold',
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 2.4,
     textTransform: 'uppercase',
     color: '#B79A62',

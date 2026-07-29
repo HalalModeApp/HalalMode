@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
+import { useI18n, type Translate } from '@/i18n';
 import { requireSupabase } from '@/lib/supabase';
 import { useAuth } from '@/state/auth';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
@@ -51,9 +52,8 @@ const EMPTY_DRAFT: OnboardingDraft = {
   country: '',
 };
 
-const STEP_NAMES = ['Welcome', 'Your name', 'Basic details', 'Location', 'Review'];
-
 export default function OnboardingScreen() {
+  const { t, isRTL } = useI18n();
   const { user, refreshProfileStatus } = useAuth();
   const storageKey = `halalmode.onboarding.v2.${user?.id ?? 'current'}`;
   const [step, setStep] = useState(0);
@@ -111,7 +111,7 @@ export default function OnboardingScreen() {
   };
 
   const goNext = () => {
-    const nextErrors = validateStep(step, draft);
+    const nextErrors = validateStep(step, draft, t);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
     setStep((current) => Math.min(LAST_STEP, current + 1));
@@ -127,13 +127,13 @@ export default function OnboardingScreen() {
     const allErrors = [1, 2, 3].reduce<ValidationErrors>(
       (current, currentStep) => ({
         ...current,
-        ...validateStep(currentStep, draft),
+        ...validateStep(currentStep, draft, t),
       }),
       {}
     );
     if (Object.keys(allErrors).length > 0 || !birthDate || !draft.gender) {
       setErrors(allErrors);
-      setSubmitError('Some details still need your attention. Go back and check them.');
+      setSubmitError(t('onboarding.submitCheck'));
       return;
     }
 
@@ -153,7 +153,7 @@ export default function OnboardingScreen() {
       await refreshProfileStatus();
     } catch {
       setSubmitError(
-        'We could not finish your setup. Your answers are saved; please check your connection and try again.'
+        t('onboarding.submitGeneric')
       );
     } finally {
       setSaving(false);
@@ -165,7 +165,7 @@ export default function OnboardingScreen() {
       <Screen>
         <View style={styles.loading}>
           <ActivityIndicator color={color.ink} />
-          <Text variant="bodySmall">Restoring your saved setup…</Text>
+          <Text variant="bodySmall">{t('onboarding.restoring')}</Text>
         </View>
       </Screen>
     );
@@ -175,15 +175,27 @@ export default function OnboardingScreen() {
     <Screen>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}
+        style={[styles.flex, isRTL && styles.rtl]}
       >
         <View style={styles.progressHeader}>
-          <View style={styles.progressTop}>
+          <View style={[styles.progressTop, isRTL && styles.rowReverse]}>
             <Text variant="microAccent">
-              Step {step + 1} of {LAST_STEP + 1} · {STEP_NAMES[step]}
+              {t('onboarding.step', {
+                current: step + 1,
+                total: LAST_STEP + 1,
+                name: t(
+                  [
+                    'onboarding.step.welcome',
+                    'onboarding.step.name',
+                    'onboarding.step.details',
+                    'onboarding.step.location',
+                    'onboarding.step.review',
+                  ][step] as Parameters<Translate>[0]
+                ),
+              })}
             </Text>
             <Text variant="caption" accessibilityLiveRegion="polite">
-              {saved ? 'Saved on this device' : 'Saving…'}
+              {saved ? t('onboarding.saved') : t('common.saving')}
             </Text>
           </View>
           <View
@@ -223,25 +235,25 @@ export default function OnboardingScreen() {
               accessibilityLiveRegion="assertive"
               style={styles.submitError}
             >
-              <Text style={styles.submitErrorTitle}>Setup was not completed</Text>
+              <Text style={styles.submitErrorTitle}>{t('onboarding.submitTitle')}</Text>
               <Text variant="bodySmall">{submitError}</Text>
             </View>
           ) : null}
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, isRTL && styles.rowReverse]}>
           {step > 0 ? (
-            <Button label="Back" variant="secondary" onPress={goBack} style={styles.back} />
+            <Button label={t('common.back')} variant="secondary" onPress={goBack} style={styles.back} />
           ) : null}
           <Button
             label={
               step === LAST_STEP
                 ? submitError
-                  ? 'Try again'
-                  : 'Finish setup'
+                  ? t('common.tryAgain')
+                  : t('onboarding.finish')
                 : step === 0
-                  ? 'Start setup'
-                  : 'Continue'
+                  ? t('onboarding.start')
+                  : t('common.continue')
             }
             loading={saving}
             onPress={step === LAST_STEP ? () => void complete() : goNext}
@@ -254,27 +266,23 @@ export default function OnboardingScreen() {
 }
 
 function WelcomeStep() {
+  const { t } = useI18n();
   return (
     <View>
-      <Text variant="display" style={styles.title}>
-        Meet with clear intentions.
-      </Text>
-      <Text variant="body" style={styles.copy}>
-        We use a few basic details to prepare appropriate, reciprocal introductions.
-        You can review everything before finishing.
-      </Text>
+      <Text variant="display" style={styles.title}>{t('onboarding.welcomeTitle')}</Text>
+      <Text variant="body" style={styles.copy}>{t('onboarding.welcomeBody')}</Text>
       <View style={styles.infoCard}>
         <InfoRow
-          title="What people see"
-          body="Your first name, age, city and the profile details you choose to share."
+          title={t('onboarding.peopleSeeTitle')}
+          body={t('onboarding.peopleSeeBody')}
         />
         <InfoRow
-          title="What stays private"
-          body="Your full name, date of birth and matching choices are not shown in introductions."
+          title={t('onboarding.privateTitle')}
+          body={t('onboarding.privateBody')}
         />
         <InfoRow
-          title="Saved as you go"
-          body="You can close the app and continue setup on this device later."
+          title={t('onboarding.savedTitle')}
+          body={t('onboarding.savedBody')}
         />
       </View>
     </View>
@@ -286,15 +294,16 @@ function IdentityStep({
   errors,
   patch,
 }: StepProps) {
+  const { t } = useI18n();
   return (
     <View>
       <StepHeading
-        title="What should we call you?"
-        body="Your first name is shown in introductions. Your full name is collected for account checks and stays private."
+        title={t('onboarding.nameTitle')}
+        body={t('onboarding.nameBody')}
       />
       <View style={styles.form}>
         <Field
-          label="First name shown on your profile"
+          label={t('onboarding.firstName')}
           value={draft.firstName}
           onChangeText={(value) => patch('firstName', value)}
           autoCapitalize="words"
@@ -302,7 +311,7 @@ function IdentityStep({
           error={errors.firstName}
         />
         <Field
-          label="Full name for your account"
+          label={t('onboarding.fullName')}
           value={draft.fullName}
           onChangeText={(value) => patch('fullName', value)}
           autoCapitalize="words"
@@ -315,29 +324,30 @@ function IdentityStep({
 }
 
 function BasicDetailsStep({ draft, errors, patch }: StepProps) {
+  const { t, isRTL } = useI18n();
   return (
     <View>
       <StepHeading
-        title="Your basic details"
-        body="You must be at least 18. Your exact date of birth stays private; introductions show your age."
+        title={t('onboarding.detailsTitle')}
+        body={t('onboarding.detailsBody')}
       />
       <View style={styles.form}>
-        <Text variant="label">Date of birth</Text>
-        <View style={styles.dateRow}>
+        <Text variant="label">{t('onboarding.birthDate')}</Text>
+        <View style={[styles.dateRow, isRTL && styles.rowReverse]}>
           <DatePart
-            label="Day"
+            label={t('onboarding.day')}
             value={draft.birthDay}
             maxLength={2}
             onChangeText={(value) => patch('birthDay', digits(value))}
           />
           <DatePart
-            label="Month"
+            label={t('onboarding.month')}
             value={draft.birthMonth}
             maxLength={2}
             onChangeText={(value) => patch('birthMonth', digits(value))}
           />
           <DatePart
-            label="Year"
+            label={t('onboarding.year')}
             value={draft.birthYear}
             maxLength={4}
             onChangeText={(value) => patch('birthYear', digits(value))}
@@ -346,11 +356,9 @@ function BasicDetailsStep({ draft, errors, patch }: StepProps) {
         {errors.birthDate ? <InlineError message={errors.birthDate} /> : null}
 
         <View style={styles.genderBlock}>
-          <Text variant="label">Gender</Text>
-          <Text variant="caption">
-            Used to prepare appropriate introductions. Contact support if this needs correcting later.
-          </Text>
-          <View style={styles.genderRow}>
+          <Text variant="label">{t('onboarding.gender')}</Text>
+          <Text variant="caption">{t('onboarding.genderBody')}</Text>
+          <View style={[styles.genderRow, isRTL && styles.rowReverse]}>
             {(['female', 'male'] as const).map((option) => {
               const selected = draft.gender === option;
               return (
@@ -362,7 +370,7 @@ function BasicDetailsStep({ draft, errors, patch }: StepProps) {
                   style={[styles.genderOption, selected && styles.genderOptionSelected]}
                 >
                   <Text style={[styles.genderLabel, selected && styles.genderLabelSelected]}>
-                    {option === 'female' ? 'Woman' : 'Man'}
+                    {option === 'female' ? t('onboarding.woman') : t('onboarding.man')}
                   </Text>
                 </Pressable>
               );
@@ -376,15 +384,16 @@ function BasicDetailsStep({ draft, errors, patch }: StepProps) {
 }
 
 function LocationStep({ draft, errors, patch }: StepProps) {
+  const { t } = useI18n();
   return (
     <View>
       <StepHeading
-        title="Where are you based?"
-        body="Your city helps us find practical introductions. We do not show your precise location."
+        title={t('onboarding.locationTitle')}
+        body={t('onboarding.locationBody')}
       />
       <View style={styles.form}>
         <Field
-          label="City"
+          label={t('onboarding.city')}
           value={draft.city}
           onChangeText={(value) => patch('city', value)}
           autoCapitalize="words"
@@ -392,7 +401,7 @@ function LocationStep({ draft, errors, patch }: StepProps) {
           error={errors.city}
         />
         <Field
-          label="Country"
+          label={t('onboarding.country')}
           value={draft.country}
           onChangeText={(value) => patch('country', value)}
           autoCapitalize="words"
@@ -405,21 +414,25 @@ function LocationStep({ draft, errors, patch }: StepProps) {
 }
 
 function ReviewStep({ draft, birthDate }: { draft: OnboardingDraft; birthDate: string | null }) {
+  const { t, language } = useI18n();
   return (
     <View>
       <StepHeading
-        title="Check your details"
-        body="Make sure these are correct before we prepare your profile. You can go back to make changes."
+        title={t('onboarding.reviewTitle')}
+        body={t('onboarding.reviewBody')}
       />
       <View style={styles.reviewCard}>
-        <ReviewRow label="Profile name" value={draft.firstName.trim()} />
-        <ReviewRow label="Full name" value={draft.fullName.trim()} note="Private" />
-        <ReviewRow label="Date of birth" value={birthDate ? readableDate(birthDate) : 'Not entered'} note="Private" />
-        <ReviewRow label="Gender" value={draft.gender === 'female' ? 'Woman' : 'Man'} />
-        <ReviewRow label="Location" value={`${draft.city.trim()}, ${draft.country.trim()}`} />
+        <ReviewRow label={t('onboarding.profileName')} value={draft.firstName.trim()} />
+        <ReviewRow label={t('onboarding.fullNameShort')} value={draft.fullName.trim()} note={t('onboarding.private')} />
+        <ReviewRow label={t('onboarding.birthDate')} value={birthDate ? readableDate(birthDate, language) : t('onboarding.notEntered')} note={t('onboarding.private')} />
+        <ReviewRow label={t('onboarding.gender')} value={draft.gender === 'female' ? t('onboarding.woman') : t('onboarding.man')} />
+        <ReviewRow
+          label={t('onboarding.location')}
+          value={`${draft.city.trim()}${language === 'ar' ? '،' : ','} ${draft.country.trim()}`}
+        />
       </View>
       <Text variant="caption" style={styles.reviewNote}>
-        Finishing creates your profile. You can add photos, a biography and matching preferences next.
+        {t('onboarding.reviewNote')}
       </Text>
     </View>
   );
@@ -445,6 +458,7 @@ function Field({
   error,
   ...props
 }: { label: string; error?: string } & ComponentProps<typeof TextInput>) {
+  const { isRTL } = useI18n();
   return (
     <View style={styles.field}>
       <Text variant="label">{label}</Text>
@@ -453,7 +467,7 @@ function Field({
         accessibilityLabel={label}
         accessibilityHint={error}
         placeholderTextColor={color.faintest}
-        style={[styles.input, error && styles.inputError]}
+        style={[styles.input, isRTL && styles.inputRTL, error && styles.inputError]}
       />
       {error ? <InlineError message={error} /> : null}
     </View>
@@ -461,17 +475,18 @@ function Field({
 }
 
 function DatePart(props: ComponentProps<typeof TextInput> & { label: string }) {
+  const { t, isRTL } = useI18n();
   const { label, ...inputProps } = props;
   return (
     <View style={styles.datePart}>
       <Text variant="caption">{label}</Text>
       <TextInput
         {...inputProps}
-        accessibilityLabel={`Birth ${label.toLowerCase()}`}
+        accessibilityLabel={t('onboarding.birthPartLabel', { part: label })}
         keyboardType="number-pad"
         placeholder={label === 'Year' ? 'YYYY' : label === 'Month' ? 'MM' : 'DD'}
         placeholderTextColor={color.faintest}
-        style={styles.input}
+        style={[styles.input, isRTL && styles.inputRTL]}
       />
     </View>
   );
@@ -513,39 +528,39 @@ function ReviewRow({ label, value, note }: { label: string; value: string; note?
   );
 }
 
-function validateStep(step: number, draft: OnboardingDraft): ValidationErrors {
+function validateStep(step: number, draft: OnboardingDraft, t: Translate): ValidationErrors {
   if (step === 1) {
     const errors: ValidationErrors = {};
     if (draft.firstName.trim().length < 2) {
-      errors.firstName = 'Enter the first name you want shown on your profile.';
+      errors.firstName = t('onboarding.error.firstName');
     }
     if (draft.fullName.trim().length < 3 || !draft.fullName.trim().includes(' ')) {
-      errors.fullName = 'Enter your first and last name.';
+      errors.fullName = t('onboarding.error.fullName');
     }
     return errors;
   }
 
   if (step === 2) {
     const errors: ValidationErrors = {};
-    const dateError = validateBirthDate(draft);
+    const dateError = validateBirthDate(draft, t);
     if (dateError) errors.birthDate = dateError;
-    if (!draft.gender) errors.gender = 'Choose your gender to continue.';
+    if (!draft.gender) errors.gender = t('onboarding.error.gender');
     return errors;
   }
 
   if (step === 3) {
     const errors: ValidationErrors = {};
-    if (draft.city.trim().length < 2) errors.city = 'Enter your city.';
-    if (draft.country.trim().length < 2) errors.country = 'Enter your country.';
+    if (draft.city.trim().length < 2) errors.city = t('onboarding.error.city');
+    if (draft.country.trim().length < 2) errors.country = t('onboarding.error.country');
     return errors;
   }
 
   return {};
 }
 
-function validateBirthDate(draft: OnboardingDraft): string | null {
+function validateBirthDate(draft: OnboardingDraft, t: Translate): string | null {
   const value = formatBirthDate(draft);
-  if (!value) return 'Enter a complete date of birth.';
+  if (!value) return t('onboarding.error.birthIncomplete');
   const date = new Date(`${value}T00:00:00`);
   const [year, month, day] = value.split('-').map(Number);
   if (
@@ -554,11 +569,11 @@ function validateBirthDate(draft: OnboardingDraft): string | null {
     date.getMonth() + 1 !== month ||
     date.getDate() !== day
   ) {
-    return 'Enter a real date of birth.';
+    return t('onboarding.error.birthInvalid');
   }
   const age = ageOnDate(date, new Date());
-  if (age < 18) return 'You must be at least 18 to use Halal Mode.';
-  if (age > 100) return 'Check the year you entered.';
+  if (age < 18) return t('onboarding.error.tooYoung');
+  if (age > 100) return t('onboarding.error.birthYear');
   return null;
 }
 
@@ -578,8 +593,8 @@ function ageOnDate(birthDate: Date, today: Date): number {
   return age;
 }
 
-function readableDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+function readableDate(value: string, language: 'en' | 'ar'): string {
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar-SA-u-ca-gregory' : 'en', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -593,6 +608,8 @@ function digits(value: string): string {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  rtl: { direction: 'rtl' },
+  rowReverse: { flexDirection: 'row-reverse' },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   progressHeader: {
     paddingHorizontal: space.gutterWide,
@@ -637,6 +654,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   inputError: { borderColor: '#A33A3A' },
+  inputRTL: { textAlign: 'right', writingDirection: 'rtl' },
   errorText: { fontFamily: font.bodyMedium, fontSize: 12, lineHeight: 18, color: '#A33A3A' },
   dateRow: { flexDirection: 'row', gap: 9 },
   datePart: { flex: 1, gap: 6 },

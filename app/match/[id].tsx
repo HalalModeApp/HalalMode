@@ -13,6 +13,8 @@ import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
+import { useI18n } from '@/i18n';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { color, font, radius, space } from '@/theme/tokens';
 import type { ConnectionStage } from '@/types';
 
@@ -32,6 +34,8 @@ const NEXT_ROUTE: Record<ConnectionStage, string> = {
  */
 export default function MatchScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { isRTL, t } = useI18n();
+  const reducedMotion = useReducedMotion();
   const matchId = Array.isArray(id) ? id[0] : id;
   const {
     data: match,
@@ -64,8 +68,8 @@ export default function MatchScreen() {
   if (isLoading) {
     return (
       <MatchStatus
-        title="Preparing your match"
-        body="We’re opening the connection you both chose."
+        title={t('match.loadingTitle')}
+        body={t('match.loadingBody')}
         loading
       />
     );
@@ -74,9 +78,9 @@ export default function MatchScreen() {
   if (isError) {
     return (
       <MatchStatus
-        title="We couldn’t open this match"
-        body="Your connection is still safe. Check your connection and try again."
-        actionLabel="Try again"
+        title={t('match.errorTitle')}
+        body={t('match.errorBody')}
+        actionLabel={t('common.tryAgain')}
         actionLoading={isFetching}
         onAction={() => void refetch()}
       />
@@ -86,9 +90,9 @@ export default function MatchScreen() {
   if (!match) {
     return (
       <MatchStatus
-        title="This match isn’t available"
-        body="It may have expired or already moved to your Connections."
-        actionLabel="View connections"
+        title={t('match.missingTitle')}
+        body={t('match.missingBody')}
+        actionLabel={t('match.viewConnections')}
         onAction={() => router.replace('/(tabs)/connections')}
       />
     );
@@ -98,7 +102,7 @@ export default function MatchScreen() {
   const profile = connection.profile;
 
   return (
-    <Screen>
+    <Screen style={isRTL ? styles.rtl : undefined}>
       {/* A takeover, not a drill-down — so it dismisses rather than reverses. */}
       <ScreenHeader
         action="close"
@@ -106,14 +110,14 @@ export default function MatchScreen() {
       />
       <Confetti />
 
-      <Animated.View entering={FadeIn.duration(400)} style={styles.body}>
+      <Animated.View entering={reducedMotion ? undefined : FadeIn.duration(400)} style={styles.body}>
         <Text variant="micro">Halal Mode</Text>
         <Text variant="display" center style={styles.title}>
-          It’s a mutual match.
+          {t('match.title')}
         </Text>
 
         <Animated.View
-          entering={FadeInDown.delay(150).duration(420)}
+          entering={reducedMotion ? undefined : FadeInDown.delay(150).duration(420)}
           style={styles.pair}
         >
           <View style={[styles.plate, styles.plateLeft]}>
@@ -123,7 +127,7 @@ export default function MatchScreen() {
               contentFit="cover"
               accessibilityIgnoresInvertColors
             />
-            <Text style={styles.plateName}>You</Text>
+            <Text style={styles.plateName}>{t('match.you')}</Text>
           </View>
 
           <View style={styles.heart}>
@@ -142,15 +146,14 @@ export default function MatchScreen() {
         </Animated.View>
 
         <Text variant="bodySmall" center style={styles.explainer}>
-          No messaging yet. First you both choose five questions that matter,
-          answer them honestly, and read each other’s words before hello.
+          {t('match.body')}
         </Text>
 
         <Button
           label={
             connection.stage === 'choosing_questions'
-              ? 'Choose questions'
-              : 'Continue connection'
+              ? t('match.choose')
+              : t('match.continue')
           }
           onPress={() =>
             router.replace(
@@ -160,7 +163,7 @@ export default function MatchScreen() {
           style={styles.cta}
         />
         <Button
-          label="Later tonight"
+          label={t('match.later')}
           variant="quiet"
           onPress={() => router.replace('/(tabs)/connections')}
         />
@@ -184,8 +187,9 @@ function MatchStatus({
   actionLoading?: boolean;
   onAction?: () => void;
 }) {
+  const { isRTL } = useI18n();
   return (
-    <Screen>
+    <Screen style={isRTL ? styles.rtl : undefined}>
       <ScreenHeader
         action="close"
         onAction={() => router.replace('/(tabs)/connections')}
@@ -212,6 +216,7 @@ function MatchStatus({
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
   status: {
     flex: 1,
     alignItems: 'center',
@@ -259,7 +264,7 @@ const styles = StyleSheet.create({
   plateName: {
     marginTop: 12,
     fontFamily: font.bodySemi,
-    fontSize: 12,
+    fontSize: 14,
     color: color.ink,
   },
   heart: {

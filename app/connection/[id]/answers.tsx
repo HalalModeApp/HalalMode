@@ -20,14 +20,9 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { QUESTION_LIBRARY } from '@/data/questions';
 import { queryKeys } from '@/lib/queryClient';
+import { useI18n } from '@/i18n';
 import { alpha, color, radius, space } from '@/theme/tokens';
 import type { QuestionAnswer } from '@/types';
-
-const ORIGIN_LABEL: Record<QuestionAnswer['origin'], (name: string) => string> = {
-  both: () => 'Chosen by both of you',
-  me: () => 'Chosen by you',
-  them: (name) => `Chosen by ${name}`,
-};
 
 /**
  * Step 2 of 3 — answer, then reveal.
@@ -38,6 +33,7 @@ const ORIGIN_LABEL: Record<QuestionAnswer['origin'], (name: string) => string> =
  */
 export default function AnswersScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { language, isRTL, t } = useI18n();
   const [index, setIndex] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [revealed, setRevealed] = useState<Record<string, QuestionAnswer>>({});
@@ -64,15 +60,15 @@ export default function AnswersScreen() {
   });
 
   if (connectionQuery.isPending) {
-    return <Screen><LoadingState label="Loading your questions" /></Screen>;
+    return <Screen><LoadingState label={t('answers.loading')} /></Screen>;
   }
   if (connectionQuery.isError || !connection) {
     return (
       <Screen>
         <ScreenHeader />
         <ErrorState
-          title="Answers unavailable"
-          message="We couldn't load this connection. Your drafts are still on this device."
+          title={t('answers.errorTitle')}
+          message={t('answers.errorBody')}
           onRetry={() => void connectionQuery.refetch()}
         />
       </Screen>
@@ -88,8 +84,8 @@ export default function AnswersScreen() {
       <Screen>
         <ScreenHeader />
         <ErrorState
-          title="Questions aren't ready"
-          message="Both question sets are saved, but the shared list is still being prepared."
+          title={t('answers.notReadyTitle')}
+          message={t('answers.notReadyBody')}
           onRetry={() => void connectionQuery.refetch()}
         />
       </Screen>
@@ -112,7 +108,7 @@ export default function AnswersScreen() {
   };
 
   return (
-    <Screen>
+    <Screen style={isRTL ? styles.rtl : undefined}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -120,7 +116,7 @@ export default function AnswersScreen() {
         <ScreenHeader action="back" />
         <View style={styles.header}>
           <Text variant="micro">
-            Step 2 of 3 · question {index + 1} of {answers.length}
+            {t('answers.step', { current: index + 1, total: answers.length })}
           </Text>
           <View style={styles.progress}>
             {answers.map((answer, i) => (
@@ -141,23 +137,23 @@ export default function AnswersScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Text variant="microAccent">
-            {ORIGIN_LABEL[current.origin](firstName)}
+            {t(`answers.origin.${current.origin}`, { name: firstName })}
           </Text>
           <Text variant="display" style={styles.question}>
-            {question.text}
+            {language === 'ar' ? question.textAr : question.text}
           </Text>
 
           <View style={[styles.answerBox, committed && styles.answerBoxLocked]}>
-            <Text variant="micro">Your answer</Text>
+            <Text variant="micro">{t('answers.yours')}</Text>
             <TextInput
-              accessibilityLabel="Your answer"
+              accessibilityLabel={t('answers.yours')}
               multiline
               editable={!committed}
               value={draft}
               onChangeText={(text) =>
                 setDrafts((state) => ({ ...state, [current.questionId]: text }))
               }
-              placeholder="Say it the way you would say it out loud."
+              placeholder={t('answers.placeholder')}
               placeholderTextColor={color.whisper}
               style={styles.input}
             />
@@ -168,16 +164,15 @@ export default function AnswersScreen() {
               entering={FadeInUp.duration(350)}
               style={styles.theirBox}
             >
-              <Text variant="microAccent">{firstName}’s answer</Text>
+              <Text variant="microAccent">{t('answers.theirs', { name: firstName })}</Text>
               <Text style={styles.theirText}>{reveal.theirAnswer}</Text>
             </Animated.View>
           ) : (
             <View style={styles.theirBox}>
-              <Text variant="micro">{firstName}’s answer</Text>
+              <Text variant="micro">{t('answers.theirs', { name: firstName })}</Text>
               <View style={styles.lockedWrap}>
                 <Text style={styles.lockedText}>
-                  {firstName} has answered already. Their words unlock the moment
-                  you commit to yours — no editing after reading.
+                  {t('answers.locked', { name: firstName })}
                 </Text>
                 <BlurView
                   intensity={22}
@@ -185,18 +180,18 @@ export default function AnswersScreen() {
                   style={StyleSheet.absoluteFill}
                 />
               </View>
-              <Text variant="bodySmall">Hidden until you submit.</Text>
+              <Text variant="bodySmall">{t('answers.hidden')}</Text>
             </View>
           )}
         </ScrollView>
 
         {mutation.isError ? (
-          <InlineNotice message="Your answer wasn't saved. Check your connection and try again." />
+          <InlineNotice message={t('answers.saveError')} />
         ) : null}
 
         <View style={styles.footer}>
           <Button
-            label="Back"
+            label={t('common.back')}
             variant="quiet"
             disabled={index === 0}
             onPress={() => setIndex((i) => Math.max(0, i - 1))}
@@ -205,9 +200,9 @@ export default function AnswersScreen() {
             label={
               committed
                 ? isLast
-                  ? 'See the recap'
-                  : 'Next question'
-                : 'Submit and reveal'
+                  ? t('answers.recap')
+                  : t('answers.next')
+                : t('answers.submit')
             }
             disabled={!committed && draft.trim().length < 10}
             loading={mutation.isPending}
@@ -221,6 +216,7 @@ export default function AnswersScreen() {
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
   flex: { flex: 1 },
   header: { paddingHorizontal: space.gutterWide, paddingTop: 8 },
   progress: { flexDirection: 'row', gap: 5, marginTop: 12 },
@@ -249,7 +245,7 @@ const styles = StyleSheet.create({
     minHeight: 110,
     textAlignVertical: 'top',
     fontFamily: 'Beiruti_400Regular',
-    fontSize: 13,
+    fontSize: 15,
     lineHeight: 22,
     color: color.ink,
   },
@@ -264,13 +260,13 @@ const styles = StyleSheet.create({
   lockedWrap: { overflow: 'hidden', borderRadius: radius.sm },
   lockedText: {
     fontFamily: 'Beiruti_400Regular',
-    fontSize: 12.5,
+    fontSize: 14,
     lineHeight: 21,
     color: color.faintest,
   },
   theirText: {
     fontFamily: 'Beiruti_400Regular',
-    fontSize: 13,
+    fontSize: 14,
     lineHeight: 23,
     color: color.inkSoft,
   },

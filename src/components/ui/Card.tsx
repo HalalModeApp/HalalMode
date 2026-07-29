@@ -5,7 +5,7 @@ import { alpha, color, radius, space } from '@/theme/tokens';
 
 export interface CardProps {
   children: ReactNode;
-  /** `dark` is the inverted panel used for Plus and the "Start here" prompt. */
+  /** `dark` is the inverted panel used for Premium and the "Start here" prompt. */
   tone?: 'outlined' | 'filled' | 'dark' | 'accent';
   style?: ViewStyle;
 }

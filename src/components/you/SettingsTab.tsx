@@ -7,20 +7,13 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Text } from '@/components/ui/Text';
+import { useI18n } from '@/i18n';
 import { useSession } from '@/state/session';
 import { USE_MOCKS } from '@/lib/supabase';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 import { TIER_LIMITS } from '@/types';
 
 const SETTINGS_KEY = 'halalmode.preferences.v1';
-
-const PLUS_FEATURES = [
-  'Receive 10 reciprocal introductions',
-  'Choose up to 3 people',
-  'A match opens with anyone who also selected you',
-  'Keep up to 5 conversations open',
-  'Priority matching when an area is busy',
-];
 
 interface LocalSettings {
   quietActivity: boolean;
@@ -43,12 +36,18 @@ export function SettingsTab({
   liveCount: number;
   openConnections: number;
 }) {
+  const { t, isRTL, nativeRestartRequired } = useI18n();
   const { tier, setTier, language, setLanguage } = useSession();
   const [settings, setSettings] = useState<LocalSettings>(DEFAULT_SETTINGS);
   const [pauseConfirm, setPauseConfirm] = useState(false);
   const [plusConfirm, setPlusConfirm] = useState(false);
   const limits = TIER_LIMITS[tier];
   const isPlus = tier === 'plus';
+  const plusFeatures = [
+    t('settings.plus.f1'),
+    t('settings.plus.f2'),
+    t('settings.plus.f4'),
+  ];
 
   useEffect(() => {
     let active = true;
@@ -78,62 +77,60 @@ export function SettingsTab({
       await setProfilePaused(next);
       patch('paused', next);
       setPauseConfirm(false);
-    } catch (error) {
-      Alert.alert('Could not update matching', error instanceof Error ? error.message : 'Please try again.');
+    } catch {
+      Alert.alert(t('settings.pauseErrorTitle'), t('settings.pauseErrorBody'));
     }
   };
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, isRTL && styles.rtl]}>
       <Section
-        eyebrow="Privacy"
-        title="Your profile is intentional by default."
+        eyebrow={t('settings.privacy')}
+        title={t('settings.privacyTitle')}
       >
         <SettingRow
-          title="Introduction-only visibility"
-          subtitle="Your profile is only shown inside reciprocal introductions and open connections."
-          badge="Always on"
+          title={t('settings.visibility')}
+          subtitle={t('settings.visibilityBody')}
+          badge={t('settings.alwaysOn')}
         />
         <SettingRow
-          title="Keep activity quiet"
-          subtitle="Do not surface read receipts, online status, or attention signals."
-          value={settings.quietActivity}
-          onValueChange={(value) => patch('quietActivity', value)}
+          title={t('settings.activity')}
+          subtitle={t('settings.activityBody')}
+          badge={t('settings.comingLater')}
         />
         <SettingRow
-          title="Photo boundaries"
-          subtitle="Photos stay inside a live introduction or a mutual connection."
+          title={t('settings.photos')}
+          subtitle={t('settings.photosBody')}
           trailing={<Text style={styles.lockGlyph}>○</Text>}
         />
       </Section>
 
-      <Section eyebrow="Safety" title="Controls that keep the space calm.">
+      <Section eyebrow={t('settings.safety')} title={t('settings.safetyTitle')}>
         <SettingRow
-          title="Contact shielding"
-          subtitle="Keep people from an imported contact list out of future introductions."
-          value={settings.contactShield}
-          onValueChange={(value) => patch('contactShield', value)}
+          title={t('settings.contacts')}
+          subtitle={t('settings.contactsBody')}
+          badge={t('settings.comingLater')}
         />
         <SettingRow
-          title="People you have blocked"
-          subtitle="Review blocked members without revealing anything to them."
-          trailing={<Text style={styles.arrow}>→</Text>}
+          title={t('settings.blocked')}
+          subtitle={t('settings.blockedBody')}
+          badge={t('settings.comingLater')}
         />
         <SettingRow
-          title="Safety & reporting"
-          subtitle="Report concerns or revisit how moderation works."
-          trailing={<Text style={styles.arrow}>→</Text>}
+          title={t('settings.reporting')}
+          subtitle={t('settings.reportingBody')}
+          badge={t('settings.comingLater')}
         />
       </Section>
 
-      <Section eyebrow="Preferences" title="How Halal Mode reaches you.">
+      <Section eyebrow={t('settings.preferences')} title={t('settings.preferencesTitle')}>
         <SettingRow
-          title="Language"
-          subtitle={language === 'en' ? 'English' : 'Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©'}
+          title={t('settings.language')}
+          subtitle={language === 'en' ? t('auth.switchEnglish') : t('auth.switchArabic')}
           trailing={
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Switch language"
+              accessibilityLabel={t('settings.switchLanguage')}
               onPress={() => setLanguage(language === 'en' ? 'ar' : 'en')}
               style={styles.languagePill}
             >
@@ -141,45 +138,49 @@ export function SettingsTab({
             </Pressable>
           }
         />
+        {nativeRestartRequired ? (
+          <Text accessibilityRole="alert" variant="caption" style={styles.restartNotice}>
+            {t('settings.restartRequired')}
+          </Text>
+        ) : null}
         <SettingRow
-          title="Gentle reminders"
-          subtitle="A quiet nudge when a round is ready or a connection needs your reply."
-          value={settings.gentleReminders}
-          onValueChange={(value) => patch('gentleReminders', value)}
+          title={t('settings.notifications')}
+          subtitle={t('settings.notificationsBody')}
+          badge={t('settings.comingLater')}
         />
       </Section>
 
       <Card tone="dark" style={styles.plusCard}>
         <View>
-          <Text style={styles.plusLabel}>Membership</Text>
-          <Text style={styles.plusTitle}>Halal Mode Plus</Text>
+          <Text style={styles.plusLabel}>{t('settings.membership')}</Text>
+          <Text style={styles.plusTitle}>{t('settings.plus')}</Text>
         </View>
         <View style={styles.featureList}>
-          {PLUS_FEATURES.map((feature) => (
-            <View key={feature} style={styles.featureRow}>
+          {plusFeatures.map((feature) => (
+            <View key={feature} style={[styles.featureRow, isRTL && styles.rowReverse]}>
               <Text style={styles.featureMark}>✦</Text>
               <Text style={styles.featureText}>{feature}</Text>
             </View>
           ))}
         </View>
         <Button
-          label={isPlus ? 'Manage Plus' : 'Explore Plus'}
+          label={isPlus ? t('settings.managePlus') : t('settings.explorePlus')}
           variant="onDark"
           onPress={() => setPlusConfirm(true)}
         />
       </Card>
 
       <Card tone="filled" style={styles.plusDetails}>
-        <View style={styles.plusDetailsHead}>
+        <View style={[styles.plusDetailsHead, isRTL && styles.rowReverse]}>
           <View>
-            <Text variant="microAccent">Plus membership</Text>
+            <Text variant="microAccent">{t('settings.plus')}</Text>
             <Text variant="displaySmall" style={styles.plusDetailsTitle}>
-              More room for intentional choices.
+              {t('settings.plusTitle')}
             </Text>
           </View>
           <View style={[styles.planBadge, isPlus && styles.planBadgeActive]}>
             <Text style={[styles.planBadgeLabel, isPlus && styles.planBadgeLabelActive]}>
-              {isPlus ? 'Active' : 'Preview'}
+              {isPlus ? t('settings.active') : t('settings.preview')}
             </Text>
           </View>
         </View>
@@ -187,88 +188,86 @@ export function SettingsTab({
         <View style={styles.benefitGrid}>
           <PremiumBenefit
             mark="10"
-            title="A fuller round"
-            detail="Ten reciprocal introductions, still selected with the same mutual criteria."
+            title={t('settings.fullerRound')}
+            detail={t('settings.fullerRoundBody')}
           />
           <PremiumBenefit
             mark="3"
-            title="More people to keep"
-            detail="Keep up to three introductions when you feel genuinely interested."
+            title={t('settings.moreKeeps')}
+            detail={t('settings.moreKeepsBody')}
           />
           <PremiumBenefit
-            mark="5"
-            title="More open conversations"
-            detail="Keep up to five mutual connections moving at a thoughtful pace."
-          />
-          <PremiumBenefit
-            mark="↗"
-            title="Priority matching"
-            detail="Your eligible profile is considered earlier when local demand is high."
+            mark="10"
+            title={t('settings.moreChats')}
+            detail={t('settings.moreChatsBody')}
           />
         </View>
 
-        <View style={styles.plusRule}>
+        <View style={[styles.plusRule, isRTL && styles.rowReverse]}>
           <Text style={styles.plusRuleMark}>◌</Text>
           <Text variant="caption" style={styles.plusRuleText}>
-            Plus never exposes private preferences, selection scores, or who passed on you.
+            {t('settings.plusPrivacy')}
           </Text>
         </View>
       </Card>
 
-      <Section eyebrow="Account" title="Manage your account.">
+      <Section eyebrow={t('settings.account')} title={t('settings.accountTitle')}>
         <SettingRow
-          title={settings.paused ? 'Matching is paused' : 'Pause matching'}
+          title={settings.paused ? t('settings.paused') : t('settings.pause')}
           subtitle={
             settings.paused
-              ? 'No new rounds will be prepared in this local demo state.'
-              : 'Take a break from new introductions. Existing connections remain available.'
+              ? t('settings.pausedBody')
+              : t('settings.pauseBody')
           }
           value={settings.paused}
           onValueChange={() => setPauseConfirm(true)}
         />
         <View style={styles.paceCard}>
-          <Text variant="micro">Today’s introductions</Text>
+          <Text variant="micro">{t('settings.today')}</Text>
           <Text variant="body" style={styles.paceBody}>
-            {liveCount} of {limits.introductions} introductions remain open ·{' '}
-            {openConnections} of {limits.openConnections} connections are in progress.
-            Nothing renews until Fajr.
+            {t('settings.activityCount', {
+              live: liveCount,
+              introLimit: limits.introductions,
+              open: openConnections,
+              connectionLimit: limits.openConnections,
+            })}
           </Text>
         </View>
         <SettingRow
-          title="Account support"
-          subtitle="Help with your data, a fresh start, or closing your account."
-          trailing={<Text style={styles.arrow}>→</Text>}
+          title={t('settings.support')}
+          subtitle={t('settings.supportBody')}
+          badge={t('settings.comingLater')}
         />
       </Section>
 
       <Text variant="caption" center style={styles.version}>
-        Halal Mode · version 1.0.0
+        {t('settings.version')}
       </Text>
 
       <ConfirmDialog
         visible={pauseConfirm}
-        title={settings.paused ? 'Resume matching?' : 'Pause matching?'}
+        title={settings.paused ? t('settings.resumeTitle') : t('settings.pauseTitle')}
         body={
           settings.paused
-            ? 'New rounds can be prepared again when you are ready.'
-            : 'Your existing conversations remain available. You can resume whenever you choose.'
+            ? t('settings.resumeBody')
+            : t('settings.pauseConfirmBody')
         }
-        confirmLabel={settings.paused ? 'Resume' : 'Pause for now'}
-        cancelLabel="Not now"
+        confirmLabel={settings.paused ? t('settings.resume') : t('settings.pauseNow')}
+        cancelLabel={t('settings.notNow')}
         onConfirm={() => void confirmPause()}
         onCancel={() => setPauseConfirm(false)}
       />
 
       <ConfirmDialog
         visible={plusConfirm}
-        title={isPlus ? 'Leave Plus?' : 'Try Halal Mode Plus?'}
+        title={isPlus ? t('settings.leavePlus') : t('settings.tryPlus')}
         body={USE_MOCKS
           ? (isPlus
-            ? 'This demo will return to the free limits for future rounds and connections.'
-            : 'This demo will unlock the Plus limits for introductions, keeps, and connections.')
-          : 'Membership changes are confirmed by the payment service, then applied by the server.'}
-        confirmLabel={USE_MOCKS ? (isPlus ? 'Use free plan' : 'Activate Plus') : 'Okay'}
-        cancelLabel="Not now"
+            ? t('settings.demoFree')
+            : t('settings.demoPlus'))
+          : t('settings.purchaseUnavailable')}
+        confirmLabel={USE_MOCKS ? (isPlus ? t('settings.useFree') : t('settings.activatePlus')) : t('settings.okay')}
+        cancelLabel={t('settings.notNow')}
         onConfirm={() => {
           if (USE_MOCKS) setTier(isPlus ? 'free' : 'plus');
           setPlusConfirm(false);
@@ -288,8 +287,9 @@ function PremiumBenefit({
   title: string;
   detail: string;
 }) {
+  const { isRTL } = useI18n();
   return (
-    <View style={styles.benefit}>
+    <View style={[styles.benefit, isRTL && styles.rowReverse]}>
       <View style={styles.benefitMark}>
         <Text style={styles.benefitMarkLabel}>{mark}</Text>
       </View>
@@ -340,6 +340,7 @@ function SettingRow({
   badge?: string;
   trailing?: React.ReactNode;
 }) {
+  const { isRTL } = useI18n();
   const control =
     typeof value === 'boolean' ? (
       <Switch
@@ -354,9 +355,9 @@ function SettingRow({
     );
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, isRTL && styles.rowReverse]}>
       <View style={styles.rowText}>
-        <View style={styles.rowTitleLine}>
+        <View style={[styles.rowTitleLine, isRTL && styles.rowReverse]}>
           <Text style={styles.rowTitle}>{title}</Text>
           {badge ? <Text style={styles.badge}>{badge}</Text> : null}
         </View>
@@ -370,6 +371,8 @@ function SettingRow({
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
+  rowReverse: { flexDirection: 'row-reverse' },
   wrap: { gap: 22, paddingBottom: 30 },
   section: { gap: 10 },
   sectionHead: { gap: 5, paddingHorizontal: 2 },
@@ -408,8 +411,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingVertical: 7,
     paddingHorizontal: 12,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   languagePillLabel: { fontFamily: font.bodyBold, fontSize: 10, letterSpacing: 1, color: color.ink },
+  restartNotice: { color: color.gold, marginTop: 8 },
 
   plusCard: { gap: 14, borderRadius: radius.panel },
   plusLabel: {
@@ -431,10 +437,9 @@ const styles = StyleSheet.create({
     color: 'rgba(252,252,251,0.88)',
   },
   plusDetails: { gap: 16, borderRadius: radius.panel, padding: 18 },
-  plusDetailsHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  plusDetailsTitle: { marginTop: 6, fontSize: 20, lineHeight: 26, maxWidth: 205 },
+  plusDetailsHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  plusDetailsTitle: { marginTop: 6, fontSize: 20, lineHeight: 26, flexShrink: 1 },
   planBadge: {
-    marginLeft: 'auto',
     borderWidth: 1,
     borderColor: 'rgba(138,106,52,0.28)',
     borderRadius: radius.pill,

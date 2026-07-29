@@ -9,12 +9,14 @@ import { Button } from '@/components/ui/Button';
 import { ErrorState, InlineNotice, LoadingState } from '@/components/ui/AsyncState';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { CATEGORY_LABELS, QUESTIONS_TO_PICK, QUESTION_LIBRARY } from '@/data/questions';
+import { QUESTIONS_TO_PICK, QUESTION_LIBRARY } from '@/data/questions';
+import { useI18n } from '@/i18n';
 import { queryClient, queryKeys } from '@/lib/queryClient';
 import { alpha, color, radius, space } from '@/theme/tokens';
 
 export default function QuestionSelectScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { language, isRTL, t } = useI18n();
   const [picked, setPicked] = useState<string[]>([]);
 
   const connectionQuery = useQuery({
@@ -42,15 +44,15 @@ export default function QuestionSelectScreen() {
 
   const complete = picked.length === QUESTIONS_TO_PICK;
   if (connectionQuery.isPending) {
-    return <Screen><LoadingState label="Loading the question library" /></Screen>;
+    return <Screen><LoadingState label={t('questions.loading')} /></Screen>;
   }
   if (connectionQuery.isError || !connectionQuery.data) {
     return (
       <Screen>
         <ScreenHeader />
         <ErrorState
-          title="Questions unavailable"
-          message="We couldn't load this connection."
+          title={t('questions.errorTitle')}
+          message={t('questions.errorBody')}
           onRetry={() => void connectionQuery.refetch()}
         />
       </Screen>
@@ -66,18 +68,15 @@ export default function QuestionSelectScreen() {
   const firstName = connection.profile.firstName;
 
   return (
-    <Screen>
+    <Screen style={isRTL ? styles.rtl : undefined}>
       <ScreenHeader action="back" />
       <View style={styles.header}>
         <Text variant="micro">
-          Step 1 of 3{firstName ? ` · with ${firstName}` : ''}
+          {t('questions.step', { name: firstName ? t('questions.withName', { name: firstName }) : '' })}
         </Text>
-        <Text variant="display" style={styles.title}>
-          Pick the five that would change your answer.
-        </Text>
+        <Text variant="display" style={styles.title}>{t('questions.title')}</Text>
         <Text variant="bodySmall" style={styles.subtitle}>
-          {firstName ? `${firstName}’s five` : 'Their five'} are chosen
-          separately. Overlaps are marked when you meet in the middle.
+          {firstName ? t('questions.bodyName', { name: firstName }) : t('questions.bodyFallback')}
         </Text>
       </View>
 
@@ -94,18 +93,19 @@ export default function QuestionSelectScreen() {
               key={question.id}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: selected, disabled: blocked }}
-              accessibilityLabel={question.text}
+              accessibilityLabel={language === 'ar' ? question.textAr : question.text}
               disabled={blocked}
               onPress={() => toggle(question.id)}
               style={[
                 styles.option,
+                isRTL && styles.optionRTL,
                 selected && styles.optionSelected,
                 blocked && styles.optionBlocked,
               ]}
             >
               <View style={styles.optionText}>
-                <Text variant="micro">{CATEGORY_LABELS[question.category]}</Text>
-                <Text style={styles.questionText}>{question.text}</Text>
+                <Text variant="micro">{t(`questions.category.${question.category}`)}</Text>
+                <Text style={styles.questionText}>{language === 'ar' ? question.textAr : question.text}</Text>
               </View>
               <View style={[styles.dot, selected && styles.dotSelected]} />
             </Pressable>
@@ -114,14 +114,14 @@ export default function QuestionSelectScreen() {
       </ScrollView>
 
       {mutation.isError ? (
-        <InlineNotice message="Your questions weren't saved. Please try again." />
+        <InlineNotice message={t('questions.savedError')} />
       ) : null}
       <View style={styles.footer}>
         <Text variant="bodySmall">
-          {picked.length} of {QUESTIONS_TO_PICK} chosen
+          {t('questions.chosen', { count: picked.length, total: QUESTIONS_TO_PICK })}
         </Text>
         <Button
-          label="Answer them"
+          label={t('questions.answer')}
           disabled={!complete}
           loading={mutation.isPending}
           onPress={() => mutation.mutate()}
@@ -133,6 +133,7 @@ export default function QuestionSelectScreen() {
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
   header: { paddingHorizontal: space.gutterWide, paddingTop: 8 },
   title: { marginTop: 8 },
   subtitle: { marginTop: 10 },
@@ -155,11 +156,12 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
   },
   optionSelected: { borderColor: color.ink, backgroundColor: color.sand },
+  optionRTL: { flexDirection: 'row-reverse' },
   optionBlocked: { opacity: 0.4 },
   optionText: { flex: 1, gap: 5 },
   questionText: {
     fontFamily: 'Beiruti_500Medium',
-    fontSize: 12.5,
+    fontSize: 14,
     lineHeight: 18,
     color: color.ink,
   },

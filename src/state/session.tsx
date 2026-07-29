@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import type { Language, MembershipTier } from '@/types';
+import { isSupportedLocale } from '@/i18n/locales';
 
 const STORAGE_KEY = 'halalmode.session.v1';
 
@@ -45,7 +46,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (parsed.tier === 'plus' || parsed.tier === 'free') {
           setTierState(parsed.tier);
         }
-        if (parsed.language === 'ar' || parsed.language === 'en') {
+        if (isSupportedLocale(parsed.language)) {
           setLanguageState(parsed.language);
         }
       })

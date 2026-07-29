@@ -1,142 +1,117 @@
 # Halal Mode
 
-A Muslim marriage app built around **fewer, more intentional introductions** — not endless profiles, not swiping, not doom scrolling.
+Halal Mode is an intentional Muslim marriage app built around a small daily set
+of reciprocal introductions. Members keep only people they genuinely want to
+meet; a conversation opens only after mutual interest, five double-blind
+compatibility answers, and a neutral recap.
 
-Members receive a small, reciprocal set of introductions, keep only who they genuinely want to meet, and connect only when the interest is mutual. Before free conversation opens, both people answer five compatibility questions under a double blind and read a neutral alignment recap.
+The product deliberately avoids public popularity scores, one-sided-like
+disclosure, endless browsing, and paid visibility.
 
-The visual and interaction design follows `Halal Mode 2030.dc.html`.
+## Current product status
 
----
+- Expo SDK 54 / React Native 0.81 / strict TypeScript / Expo Router.
+- Supabase for Auth, Postgres, Storage, Edge Functions, and RLS.
+- Email magic-link authentication and onboarding are implemented for the real
+  backend. Mock mode remains the default for local product work.
+- English and Arabic copy, in-app language choice, and explicit RTL styling are
+  implemented. A native direction change requires a cold restart and still needs
+  a complete native device matrix.
+- Reciprocal rounds, mutual interest, question picks, double-blind answers,
+  recap, connection closing, message read receipts, blocking, reporting, and
+  account controls have server-side boundaries in migrations.
+- Profile voice introductions can record, upload to private storage, and play.
+  In-chat voice-note sending and real calling are not production features.
+- Halal Mode Premium is the member-facing name. The current `plus` tier key is
+  an internal schema compatibility detail, not product copy.
 
-## Stack
+See [release gates](docs/QUALITY_GATES.md) and the
+[release checklist](docs/RELEASE_CHECKLIST.md) for what is actually verified.
 
-| Layer | Choice |
-| --- | --- |
-| App | Expo SDK 54, React Native 0.81, TypeScript (strict) |
-| Routing | Expo Router (typed routes) |
-| Motion | React Native Reanimated 4 + Gesture Handler |
-| Data | TanStack Query |
-| Forms | React Hook Form + Zod |
-| Backend | Supabase — Postgres, Auth, Storage, Edge Functions, RLS |
-| Builds | EAS Build / Submit / Update |
-
-## Getting started
+## Run locally
 
 ```bash
 npm install
-```
-
-```bash
-cp .env.example .env
-```
-
-The app ships with `EXPO_PUBLIC_USE_MOCKS=1`, so it runs end-to-end against bundled sample content with **no Supabase project required**. Every screen and the full introduction → match → questions → recap → conversation flow is reachable out of the box.
-
-```bash
+copy .env.example .env
 npm start
 ```
 
-To run against a real backend, set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` and flip `EXPO_PUBLIC_USE_MOCKS=0`.
+`EXPO_PUBLIC_USE_MOCKS=1` lets the complete introduction to connection flow run
+without a Supabase project. To use a real backend, set
+`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, and
+`EXPO_PUBLIC_USE_MOCKS=0`.
 
 ```bash
-npm run typecheck
+npm run verify:client
+npm run export:android
 ```
 
 ## Project layout
 
+```text
+app/                      Expo Router screens and flows
+src/api/                  Mock and Supabase data paths
+src/components/           Introductions, UI, navigation, profile components
+src/i18n/                 Typed English/Arabic catalogs and provider
+src/lib/                  Pure rules and infrastructure helpers
+src/state/                Session, auth, and round state
+src/theme/                Design tokens
+supabase/migrations/      Schema, RLS, RPCs, and matcher boundaries
+supabase/functions/       Scheduled round generation
+supabase/tests/database/  pgTAP database contracts
+tests/                    Node unit invariants
+docs/                     Quality gates and release checklist
 ```
-app/                      Expo Router routes
-  (tabs)/                 daily · connections · you
-  introduction/[id]       full profile for one card
-  match/[id]              mutual-interest reveal
-  connection/[id]/        questions → answers → recap → chat
-  gallery/[id]            photo viewer
-src/
-  api/                    data access; each call has a mock and a Supabase path
-  components/
-    introductions/        ArcCarousel, HeroCard, PopBurst, AudioGreeting
-    navigation/           floating tab rail, brand header
-    ui/                   Text, Button, Chip, Card, Field, sliders, dialogs
-    you/                  profile / private preferences / settings tabs
-  data/                   question library, preference vocabularies, sample content
-  state/                  round interaction state, session preferences
-  theme/tokens.ts         every colour, radius, type ramp and spring
-  types/                  domain model, mirrored by the SQL schema
-supabase/
-  migrations/             schema, RLS, functions, reciprocal matcher
-  functions/generate-round/  scheduled round generation
-```
-
-## Design decisions worth knowing
-
-**The arc, not a 3D scene.** The earlier prototype rendered balloons in WebGL. This build uses one portrait at full size with the day's set curving beneath it on a sprung arc (`src/components/introductions/ArcCarousel.tsx`). Inactive faces recede, the centred one gets the frame. Above five introductions — a Plus round — the arc becomes two centred rows, because an arc of ten is unreadable.
-
-**Round state lives above the navigator.** `RoundProvider` sits outside the tabs so opening a profile and coming back does not forget which introductions were let go.
-
-**Typography carries the brand.** Playfair Display for human sentences, Beiruti for mechanics and labels — Beiruti also covers Arabic, which matters for the RTL work. Alabaster and near-black, one warm gold accent, uppercase micro-labels instead of icons.
-
-**Motion is sprung, not timed.** The reference's `cubic-bezier(.22,1,.36,1)` reads as a spring; `motion.arc` in the tokens is that spring, shared by the carousel and the tab indicator.
 
 ## Privacy model
 
-This is the part of the product that most needs to be right, so it is enforced in the database rather than the client.
+The app enforces sensitive access rules in Postgres, not only in the client:
 
-- **Private preferences never leave the owner's session.** `private_preferences` is `auth.uid() = user_id` for select *and* write. The matcher reads both sides' rows only inside `security definer` functions that return matches — never the rows.
-- **Selection scores are unreadable by everyone**, including their owner. `selection_scores` has RLS enabled and no policy at all. Exposing it would turn it into the popularity rating the product refuses to be.
-- **Being chosen is invisible unless mutual.** A member can read rows in `introduction_selections` where they are the *viewer*, never where they are the *subject*. There is no query that answers "who kept me".
-- **The double blind is server-side.** `question_answers` has RLS enabled with no policy; `submit_answer()` is the only read path and returns the other side's answer only after writing yours. Answers are write-once. A client-side blur would be theatre.
-- **No browsing.** A profile is readable only while you have a live introduction to that person or an open connection with them.
+- Private preferences are visible only to their owner. Matching functions read
+  both sides internally and return only permitted results.
+- Selection scores are not readable by members, including their owner. They are
+  a matching input, never a popularity feature.
+- A member cannot discover one-sided interest. Selection access is scoped to the
+  viewer and mutual state is resolved server-side.
+- Question answers are write-once and double-blind. The answer RPC releases the
+  other person's answer only after the caller has answered.
+- Profile visibility, connections, messaging, blocks, reports, and private
+  media are protected by RLS/RPC/storage policies.
 
-## The reciprocal matcher
+## Membership limits
 
-The defining constraint is that introductions come in pairs:
-
-> if Mo appears in Lama's set, Lama appears in Mo's set
-
-That cannot be produced by querying candidates independently per user, so `generate_round_for_pairs()` (`supabase/migrations/0004_matcher.sql`) builds a pair graph first and derives both sides' cards from it, then links the twin rows via `reciprocal_id` so reciprocity is auditable.
-
-Pairing considers mutual private criteria (checked in both directions), adjacent score bands, blocks, prior exposure, and a randomness term. Both sides are rank-capped so introductions are distributed fairly rather than concentrating on whoever matches everyone. The band window is ±1 rather than exact, so nobody is sealed into one range.
-
-Non-mutual keeps expire quietly via `expire_stale_rounds()`. Neither side is told anything happened.
-
-### Deploying the backend
-
-```bash
-supabase db push
-```
-
-```bash
-supabase functions deploy generate-round --no-verify-jwt
-```
-
-Then schedule it (the function checks an `x-cron-secret` header, since it is deployed without JWT verification):
-
-```sql
-select cron.schedule('halal-mode-round', '0 4 * * *', $$
-  select net.http_post(
-    url := 'https://<project>.supabase.co/functions/v1/generate-round',
-    headers := jsonb_build_object('x-cron-secret', current_setting('app.cron_secret'))
-  );
-$$);
-```
-
-## Tier limits
-
-| | Free | Plus |
+| | Free | Halal Mode Premium |
 | --- | --- | --- |
 | Introductions per round | 5 | 10 |
 | May keep | 1 | 3 |
-| Open connections | 3 | 5 |
+| Open connections | 5 | 10 |
 
-Limits are mirrored in `TIER_LIMITS` for instant UI response, but `submit_round_selections()` re-checks them server-side. Flipping the local value buys nothing.
+Client limits make the interface responsive; database functions enforce the
+same limits once migration `0019_connection_capacity.sql` is deployed. The
+membership preview in mock mode is not a purchase system.
 
-## Known constraints
+## Backend deployment
 
-- **Hermes bytecode compilation fails on Windows** with the `hermesc.exe` shipped in `react-native@0.81.5` — it rejects private class fields in React Native's own `DOMRect`. This reproduces on a stock project with no app code, and does not affect EAS Build (Linux/macOS). To bundle locally, pass `--no-bytecode`:
-  ```bash
-  npx expo export --platform ios --no-bytecode
-  ```
-- **Voice notes play a simulated waveform.** The player UI, progress and timing are real; recording and playback need `expo-audio` wiring and a Storage bucket.
-- **Arabic RTL is scaffolded, not finished.** The question library carries `textAr`, Beiruti covers the script, and the language toggle persists — but the layout has not been mirrored or the copy translated.
-- **Auth screens are not built.** The app assumes a signed-in member; `supabase.auth` is configured and ready to wire up.
-- Photography throughout the sample data is placeholder.
+Apply migrations only after the isolated database contract gate in
+`docs/QUALITY_GATES.md` passes:
+
+```bash
+supabase db push
+supabase functions deploy generate-round --no-verify-jwt
+```
+
+The round function is scheduled for Madinah Fajr using a server-side schedule
+prepared the previous day. Treat deployment, cron credentials, and remote
+verification as separate release steps. Never place the service-role key in the
+app or repository.
+
+## Known release blockers
+
+- Database pgTAP tests are not yet automated in CI because a local Supabase
+  configuration is not committed.
+- There are no stable `testID`s or Maestro end-to-end flows yet.
+- iOS and full Android device/accessibility/RTL verification are incomplete.
+- Chat needs cursor pagination, direct realtime cache insertion, and a durable
+  offline outbox before high-volume scale.
+- Real purchases, entitlement verification, subscription restore, real calling,
+  and in-chat voice-note sending are not implemented.

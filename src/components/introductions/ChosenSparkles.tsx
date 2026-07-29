@@ -73,16 +73,30 @@ function createSparkleField(identity: string): SparkleField[] {
   });
 }
 
-export function ChosenSparkles({ size, seed }: { size: number; seed: string }) {
+export function ChosenSparkles({
+  size,
+  seed,
+  reducedMotion,
+}: {
+  size: number;
+  seed: string;
+  reducedMotion: boolean;
+}) {
   // Well clear of the frame — they radiate outward into the screen rather than
   // hugging the portrait. The strip is `overflow: visible` to allow it.
   const radius = size * 1.35;
   const sparkles = useMemo(() => createSparkleField(seed), [seed]);
+  const visibleSparkles = reducedMotion ? sparkles.slice(0, 6) : sparkles;
 
   return (
     <>
-      {sparkles.map((sparkle, index) => (
-        <Sparkle key={index} {...sparkle} radius={radius} />
+      {visibleSparkles.map((sparkle, index) => (
+        <Sparkle
+          key={index}
+          {...sparkle}
+          radius={radius}
+          reducedMotion={reducedMotion}
+        />
       ))}
     </>
   );
@@ -97,6 +111,7 @@ interface SparkleProps {
   duration: number;
   defocus: number;
   radius: number;
+  reducedMotion: boolean;
 }
 
 function Sparkle({
@@ -108,10 +123,15 @@ function Sparkle({
   duration,
   defocus,
   radius,
+  reducedMotion,
 }: SparkleProps) {
   const progress = useSharedValue(0);
 
   useEffect(() => {
+    if (reducedMotion) {
+      progress.value = 0.3;
+      return;
+    }
     progress.value = withDelay(
       delay,
       withRepeat(
@@ -120,7 +140,7 @@ function Sparkle({
         false
       )
     );
-  }, [delay, duration, progress]);
+  }, [delay, duration, progress, reducedMotion]);
 
   const startX = Math.cos(angle) * radius * innerReach;
   const startY = Math.sin(angle) * radius * innerReach;

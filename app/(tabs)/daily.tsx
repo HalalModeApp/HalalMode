@@ -21,12 +21,15 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useCameraShake } from '@/hooks/useCameraShake';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useI18n } from '@/i18n';
 import { playPop, startShimmer, stopShimmer } from '@/lib/sound';
 import { USE_MOCKS } from '@/lib/supabase';
 import { useRound } from '@/state/round';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 
 export default function DailyScreen() {
+  const { t, isRTL } = useI18n();
   const {
     round,
     isLoading,
@@ -57,10 +60,11 @@ export default function DailyScreen() {
   const [confirmLetGo, setConfirmLetGo] = useState(false);
   const [interestTargetId, setInterestTargetId] = useState<string | null>(null);
   const { shake, style: shakeStyle } = useCameraShake();
+  const reducedMotion = useReducedMotion();
   const popPulse = useSharedValue(0);
 
   useEffect(() => {
-    if (!popMode) {
+    if (!popMode || reducedMotion) {
       popPulse.value = 0;
       return;
     }
@@ -72,7 +76,7 @@ export default function DailyScreen() {
       ),
       -1
     );
-  }, [popMode, popPulse]);
+  }, [popMode, popPulse, reducedMotion]);
 
   const popPulseStyle = useAnimatedStyle(() => ({
     opacity: popPulse.value * 0.7,
@@ -90,13 +94,13 @@ export default function DailyScreen() {
   const handleRelease = useCallback(
     (id: string) => {
       playPop();
-      shake();
+      if (!reducedMotion) shake();
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       // The burst itself is owned by ArcCarousel, which knows where each face
       // sits and can fire the particles from exactly that point.
       release(id);
     },
-    [release, shake]
+    [reducedMotion, release, shake]
   );
 
   // Letting the last one go ends the round with nothing kept — irreversible,
@@ -142,20 +146,20 @@ export default function DailyScreen() {
 
   if (isLoading) {
     return (
-      <Screen withTabBar>
+      <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
         <BrandHeader />
-        <LoadingState label="Preparing today's introductions" />
+        <LoadingState label={t('daily.loading')} />
       </Screen>
     );
   }
 
   if (error) {
     return (
-      <Screen withTabBar>
+      <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
         <BrandHeader />
         <ErrorState
-          title="Introductions unavailable"
-          message="We couldn't load today's introductions. Your choices have not changed."
+          title={t('daily.loadErrorTitle')}
+          message={t('daily.loadErrorBody')}
           onRetry={refresh}
         />
       </Screen>
@@ -164,11 +168,11 @@ export default function DailyScreen() {
 
   if (!round) {
     return (
-      <Screen withTabBar>
+      <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
         <BrandHeader />
         <EmptyState
-          title="No introductions yet"
-          message="Your next reciprocal set will appear after Fajr in Madinah."
+          title={t('daily.emptyTitle')}
+          message={t('daily.emptyBody')}
         />
       </Screen>
     );
@@ -180,25 +184,25 @@ export default function DailyScreen() {
 
   // The last introduction standing gets a named release instead of a toggle.
   // Pop mode itself is already off for the whole chosen zone — see RoundProvider —
-  // so on Plus the three survivors keep their button but lose their pins.
+  // so Premium members with three survivors keep their button but lose their pins.
   const isFinal = live.length === 1;
   const finalName = live[0]?.profile.firstName ?? '';
 
   return (
-    <Screen withTabBar>
+    <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
       <BrandHeader />
 
-      <View style={styles.headline}>
+      <View style={[styles.headline, isRTL && styles.rowReverse]}>
         <View style={styles.headlineText}>
-          <Text variant="micro">Today · resets at fajr</Text>
+          <Text variant="micro">{t('daily.today')}</Text>
           <Text variant="display" style={styles.title}>
-            {round.introductions.length} introductions,{'\n'}one at a time.
+            {t('daily.title', { count: round.introductions.length })}
           </Text>
         </View>
         {USE_MOCKS ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Start the demo round again"
+            accessibilityLabel={t('daily.demoResetLabel')}
             onPress={reset}
             style={styles.resetButton}
           >
@@ -209,14 +213,14 @@ export default function DailyScreen() {
 
       {releaseError ? (
         <InlineNotice
-          message="That choice wasn't saved, so the profile was restored."
-          actionLabel="Try again"
+          message={t('daily.releaseError')}
+          actionLabel={t('common.tryAgain')}
           onAction={retryRelease}
           onDismiss={clearReleaseError}
         />
       ) : null}
       {submitError ? (
-        <InlineNotice message="We couldn't send your choices. Review them and try again." />
+        <InlineNotice message={t('daily.submitError')} />
       ) : null}
 
       <Animated.View style={[styles.stage, shakeStyle]}>
@@ -248,16 +252,16 @@ export default function DailyScreen() {
       <View style={styles.footer}>
         <Text variant="caption" center tone="whisper">
           {isFinal
-            ? 'One introduction left today'
+            ? t('daily.oneLeft')
             : inChosenZone
-              ? `${live.length} kept of ${keepLimit}.`
-              : `Let go of ${remaining} more.`}
+              ? t('daily.kept', { count: live.length, limit: keepLimit })
+              : t('daily.letGoMore', { count: remaining })}
         </Text>
 
-        <View style={styles.actions}>
+        <View style={[styles.actions, isRTL && styles.rowReverse]}>
           {isFinal ? (
             <Button
-              label={`Let go of ${finalName}`}
+              label={t('daily.letGoName', { name: finalName })}
               variant="secondary"
               dotColor="#CB4242"
               onPress={() => setConfirmLetGo(true)}
@@ -267,11 +271,11 @@ export default function DailyScreen() {
             <Pressable
               accessibilityRole="switch"
               accessibilityState={{ checked: popMode, disabled: !canPop }}
-              accessibilityLabel="Pop mode"
+              accessibilityLabel={t('daily.popLabel')}
               accessibilityHint={
                 canPop
                   ? undefined
-                  : 'Unavailable — these are the introductions you are keeping'
+                  : t('daily.popUnavailable')
               }
               disabled={!canPop}
               onPress={togglePopMode}
@@ -286,7 +290,7 @@ export default function DailyScreen() {
                 style={[styles.popPulse, popPulseStyle]}
               />
               <Text style={[styles.popLabel, popMode && styles.popLabelOn]}>
-                {popMode ? 'Done' : 'Pop'}
+                {popMode ? t('daily.done') : t('daily.pop')}
               </Text>
             </Pressable>
           )}
@@ -294,8 +298,10 @@ export default function DailyScreen() {
           <Button
             label={
               inChosenZone
-                ? 'Send interest'
-                : `Read ${active?.profile.firstName ?? 'profile'}'s profile`
+                ? t('daily.sendInterest')
+                : active
+                  ? t('daily.readProfile', { name: active.profile.firstName })
+                  : t('daily.readProfileFallback')
             }
             // Gold marks the one moment a choice is being sealed.
             variant={inChosenZone ? 'gold' : popMode ? 'secondary' : 'primary'}
@@ -313,14 +319,17 @@ export default function DailyScreen() {
         visible={confirmOpen}
         title={
           interestTargetId
-            ? `Send interest to ${live.find((item) => item.id === interestTargetId)?.profile.firstName ?? 'this person'}?`
+            ? (() => {
+                const name = live.find((item) => item.id === interestTargetId)?.profile.firstName;
+                return name ? t('daily.sendToName', { name }) : t('daily.sendToPerson');
+              })()
             : live.length === 1 && live[0]
-            ? `Send interest to ${live[0].profile.firstName}?`
-            : 'Send interest to your final set?'
+            ? t('daily.sendToName', { name: live[0].profile.firstName })
+            : t('daily.sendToSet')
         }
-        body="They are only notified if it is mutual."
-        confirmLabel="Yes, send"
-        cancelLabel="Not yet"
+        body={t('daily.mutualOnly')}
+        confirmLabel={t('daily.yesSend')}
+        cancelLabel={t('daily.notYet')}
         onConfirm={() => void handleSubmit()}
         onCancel={() => {
           setConfirmOpen(false);
@@ -330,10 +339,10 @@ export default function DailyScreen() {
 
       <ConfirmDialog
         visible={confirmLetGo}
-        title={`Let go of ${finalName}?`}
-        body="That ends today's round with no one kept. Nothing renews until Fajr."
-        confirmLabel="Let go"
-        cancelLabel={`Keep ${finalName}`}
+        title={t('daily.letGoQuestion', { name: finalName })}
+        body={t('daily.letGoFinalBody')}
+        confirmLabel={t('daily.letGo')}
+        cancelLabel={t('daily.keepName', { name: finalName })}
         onConfirm={() => void handleLetGoFinal()}
         onCancel={() => setConfirmLetGo(false)}
       />
@@ -346,20 +355,21 @@ export default function DailyScreen() {
  * The reference is explicit that the empty state should close the session.
  */
 function SetCompleteState({ onReset }: { onReset: () => void }) {
+  const { t, isRTL } = useI18n();
   return (
-    <Screen withTabBar>
+    <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
       <BrandHeader />
       <Animated.View entering={FadeIn.duration(300)} style={styles.complete}>
-        <Text variant="micro">Set complete</Text>
+        <Text variant="micro">{t('daily.completeLabel')}</Text>
         <Text variant="display" center style={styles.completeTitle}>
-          Nothing more today.
+          {t('daily.completeTitle')}
         </Text>
         <Text variant="bodySmall" center style={styles.completeBody}>
-          That was the whole set.{'\n'}Come back at Fajr for another round.
+          {t('daily.completeBody')}
         </Text>
         {USE_MOCKS ? (
           <Button
-            label="Start the demo again"
+            label={t('daily.demoAgain')}
             variant="quiet"
             onPress={onReset}
             style={styles.completeReset}
@@ -371,6 +381,8 @@ function SetCompleteState({ onReset }: { onReset: () => void }) {
 }
 
 const styles = StyleSheet.create({
+  rtl: { direction: 'rtl' },
+  rowReverse: { flexDirection: 'row-reverse' },
   centred: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   headline: {
