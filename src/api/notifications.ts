@@ -5,7 +5,11 @@ import { Platform } from 'react-native';
 import { supportsRemotePushRuntime } from '@/lib/notificationRuntime';
 import { requireSupabase, USE_MOCKS } from '@/lib/supabase';
 
-export type NotificationPermissionError = 'unsupported_device' | 'permission_denied' | 'project_unconfigured';
+export type NotificationPermissionError =
+  | 'unsupported_device'
+  | 'unsupported_runtime'
+  | 'permission_denied'
+  | 'project_unconfigured';
 
 export async function fetchMyNotificationConsent(): Promise<boolean> {
   if (USE_MOCKS) return false;
@@ -18,7 +22,7 @@ export async function enableMyNotifications(locale: string): Promise<void> {
   if (USE_MOCKS) return;
   if (!Device.isDevice) throw new Error('unsupported_device' satisfies NotificationPermissionError);
   if (!supportsRemotePushRuntime(Platform.OS, Constants.executionEnvironment)) {
-    throw new Error('unsupported_device' satisfies NotificationPermissionError);
+    throw new Error('unsupported_runtime' satisfies NotificationPermissionError);
   }
   // Expo Go excludes Android remote-notification support. Import lazily only
   // after confirming a production/development build runtime, so Settings can

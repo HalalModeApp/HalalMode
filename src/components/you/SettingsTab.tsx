@@ -57,6 +57,8 @@ export function SettingsTab({
         ? 'settings.notificationPermissionBody'
         : code === 'unsupported_device'
           ? 'settings.notificationDeviceBody'
+          : code === 'unsupported_runtime'
+            ? 'settings.notificationBuildBody'
           : 'settings.notificationErrorBody';
       Alert.alert(t('settings.notificationErrorTitle'), t(key));
     },
