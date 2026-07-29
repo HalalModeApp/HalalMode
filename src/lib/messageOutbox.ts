@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY = 'halal-mode.message-outbox.v1';
+import { outboxStorageKeyForMember } from '@/lib/outboxScope';
+
+const LEGACY_STORAGE_KEY = 'halal-mode.message-outbox.v1';
 
 export type PendingMessage = {
   id: string;
@@ -9,20 +11,23 @@ export type PendingMessage = {
   createdAt: string;
 };
 
-export async function enqueueMessage(connectionId: string, body: string): Promise<PendingMessage> {
+export async function enqueueMessage(memberId: string, connectionId: string, body: string): Promise<PendingMessage> {
   const entry: PendingMessage = {
     id: createRequestId(),
     connectionId,
     body,
     createdAt: new Date().toISOString(),
   };
-  const entries = await getPendingMessages();
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify([...entries, entry]));
+  const entries = await getPendingMessages(memberId);
+  await AsyncStorage.setItem(outboxStorageKeyForMember(memberId), JSON.stringify([...entries, entry]));
   return entry;
 }
 
-export async function getPendingMessages(connectionId?: string): Promise<PendingMessage[]> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
+export async function getPendingMessages(memberId: string, connectionId?: string): Promise<PendingMessage[]> {
+  // v1 was device-wide. Discard it rather than guessing its owner and risking
+  // one member seeing another member's unsent private text after an upgrade.
+  await AsyncStorage.removeItem(LEGACY_STORAGE_KEY);
+  const raw = await AsyncStorage.getItem(outboxStorageKeyForMember(memberId));
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -34,9 +39,12 @@ export async function getPendingMessages(connectionId?: string): Promise<Pending
   }
 }
 
-export async function removePendingMessage(id: string): Promise<void> {
-  const entries = await getPendingMessages();
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(entries.filter((entry) => entry.id !== id)));
+export async function removePendingMessage(memberId: string, id: string): Promise<void> {
+  const entries = await getPendingMessages(memberId);
+  await AsyncStorage.setItem(
+    outboxStorageKeyForMember(memberId),
+    JSON.stringify(entries.filter((entry) => entry.id !== id))
+  );
 }
 
 function isPendingMessage(value: unknown): value is PendingMessage {

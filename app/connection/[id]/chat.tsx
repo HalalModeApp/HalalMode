@@ -34,6 +34,7 @@ import { trackProductEvent } from '@/lib/analytics';
 import { enqueueMessage, getPendingMessages, removePendingMessage } from '@/lib/messageOutbox';
 import { supabase, USE_MOCKS } from '@/lib/supabase';
 import { testIds } from '@/lib/testIds';
+import { useAuth } from '@/state/auth';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 import type { ChatMessage } from '@/types';
 import type { MessagePage } from '@/api/connections';
@@ -45,6 +46,7 @@ type ConversationItem =
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { isRTL, t } = useI18n();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const listRef = useRef<FlatList<ConversationItem>>(null);
   const shouldScrollToEndRef = useRef(true);
@@ -54,10 +56,15 @@ export default function ChatScreen() {
   >(null);
   const [now, setNow] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+  const outboxMemberId = USE_MOCKS ? 'mock' : user?.id;
 
   const refreshPendingCount = useCallback(async () => {
-    setPendingCount((await getPendingMessages(id)).length);
-  }, [id]);
+    if (!outboxMemberId) {
+      setPendingCount(0);
+      return;
+    }
+    setPendingCount((await getPendingMessages(outboxMemberId, id)).length);
+  }, [id, outboxMemberId]);
 
   const connectionQuery = useQuery({
     queryKey: queryKeys.connection(id),
@@ -132,11 +139,12 @@ export default function ChatScreen() {
 
   const send = useMutation({
     mutationFn: async (text: string) => {
-      const pending = await enqueueMessage(id, text);
+      if (!outboxMemberId) throw new Error('Your session is not ready to send a message.');
+      const pending = await enqueueMessage(outboxMemberId, id, text);
       setDraft('');
       try {
         const message = await sendMessage(id, text, pending.id);
-        await removePendingMessage(pending.id);
+        await removePendingMessage(outboxMemberId, pending.id);
         return message;
       } finally {
         void refreshPendingCount();
@@ -172,11 +180,12 @@ export default function ChatScreen() {
 
   const retryPending = useMutation({
     mutationFn: async () => {
-      const pending = await getPendingMessages(id);
+      if (!outboxMemberId) throw new Error('Your session is not ready to send a message.');
+      const pending = await getPendingMessages(outboxMemberId, id);
       const delivered: ChatMessage[] = [];
       for (const item of pending) {
         const message = await sendMessage(id, item.body, item.id);
-        await removePendingMessage(item.id);
+        await removePendingMessage(outboxMemberId, item.id);
         delivered.push(message);
       }
       return delivered;
