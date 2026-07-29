@@ -7,6 +7,7 @@ import { disableMyNotifications, enableMyNotifications, fetchMyNotificationConse
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { InlineNotice } from '@/components/ui/AsyncState';
 import { Text } from '@/components/ui/Text';
 import { BlockedMembersSheet } from '@/components/you/BlockedMembersSheet';
 import { useI18n } from '@/i18n';
@@ -172,10 +173,17 @@ export function SettingsTab({
           subtitle={t('settings.notificationsBody')}
           value={notificationsQuery.data ?? false}
           testID={testIds.settings.notifications}
-          disabled={!pushNotifications || notifications.isPending}
+          disabled={!pushNotifications || notifications.isPending || notificationsQuery.isPending || notificationsQuery.isError}
           onValueChange={(enabled) => notifications.mutate(enabled)}
           badge={!pushNotifications ? t('settings.comingLater') : undefined}
         />
+        {notificationsQuery.isError ? (
+          <InlineNotice
+            message={t('settings.notificationLoadError')}
+            actionLabel={t('common.tryAgain')}
+            onAction={() => void notificationsQuery.refetch()}
+          />
+        ) : null}
       </Section>
 
       <Card tone="dark" style={styles.premiumCard}>
