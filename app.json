@@ -48,7 +48,8 @@
           "photosPermission": "Halal Mode uses your photo library so you can add clear, recent photos to your profile."
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

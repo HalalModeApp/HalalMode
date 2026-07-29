@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { requestAccountDeletion, setProfilePaused } from '@/api/account';
+import { disableMyNotifications, enableMyNotifications, fetchMyNotificationConsent } from '@/api/notifications';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -11,6 +13,7 @@ import { BlockedMembersSheet } from '@/components/you/BlockedMembersSheet';
 import { useI18n } from '@/i18n';
 import { useSession } from '@/state/session';
 import { useAuth } from '@/state/auth';
+import { useFeatureFlags } from '@/state/featureFlags';
 import { USE_MOCKS } from '@/lib/supabase';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 import { TIER_LIMITS } from '@/types';
@@ -38,9 +41,11 @@ export function SettingsTab({
   liveCount: number;
   openConnections: number;
 }) {
-  const { t, isRTL, nativeRestartRequired } = useI18n();
+  const { t, isRTL, localeTag, nativeRestartRequired } = useI18n();
   const { tier, setTier, language, setLanguage } = useSession();
   const { signOut } = useAuth();
+  const { pushNotifications } = useFeatureFlags();
+  const queryClient = useQueryClient();
   const [settings, setSettings] = useState<LocalSettings>(DEFAULT_SETTINGS);
   const [pauseConfirm, setPauseConfirm] = useState(false);
   const [premiumConfirm, setPremiumConfirm] = useState(false);
@@ -48,6 +53,27 @@ export function SettingsTab({
   const [blockedOpen, setBlockedOpen] = useState(false);
   const limits = TIER_LIMITS[tier];
   const isPremium = tier === 'premium';
+  const notificationsQuery = useQuery({
+    queryKey: ['notification-consent'],
+    queryFn: fetchMyNotificationConsent,
+    enabled: pushNotifications && !USE_MOCKS,
+  });
+  const notifications = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      if (enabled) await enableMyNotifications(localeTag);
+      else await disableMyNotifications();
+    },
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['notification-consent'] }),
+    onError: (error) => {
+      const code = error instanceof Error ? error.message : '';
+      const key = code === 'permission_denied'
+        ? 'settings.notificationPermissionBody'
+        : code === 'unsupported_device'
+          ? 'settings.notificationDeviceBody'
+          : 'settings.notificationErrorBody';
+      Alert.alert(t('settings.notificationErrorTitle'), t(key));
+    },
+  });
   const premiumFeatures = [
     t('settings.premium.f1'),
     t('settings.premium.f2'),
@@ -170,7 +196,10 @@ export function SettingsTab({
         <SettingRow
           title={t('settings.notifications')}
           subtitle={t('settings.notificationsBody')}
-          badge={t('settings.comingLater')}
+          value={notificationsQuery.data ?? false}
+          disabled={!pushNotifications || notifications.isPending}
+          onValueChange={(enabled) => notifications.mutate(enabled)}
+          badge={!pushNotifications ? t('settings.comingLater') : undefined}
         />
       </Section>
 
@@ -376,6 +405,7 @@ function SettingRow({
   title,
   subtitle,
   value,
+  disabled,
   onValueChange,
   badge,
   trailing,
@@ -383,6 +413,7 @@ function SettingRow({
   title: string;
   subtitle: string;
   value?: boolean;
+  disabled?: boolean;
   onValueChange?: (next: boolean) => void;
   badge?: string;
   trailing?: React.ReactNode;
@@ -393,6 +424,7 @@ function SettingRow({
       <Switch
         accessibilityLabel={title}
         value={value}
+        disabled={disabled}
         onValueChange={onValueChange}
         trackColor={{ false: color.sandDeep, true: color.ink }}
         thumbColor={color.white}
