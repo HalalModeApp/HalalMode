@@ -2,13 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
 
-import { setProfilePaused } from '@/api/account';
+import { requestAccountDeletion, setProfilePaused } from '@/api/account';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Text } from '@/components/ui/Text';
 import { useI18n } from '@/i18n';
 import { useSession } from '@/state/session';
+import { useAuth } from '@/state/auth';
 import { USE_MOCKS } from '@/lib/supabase';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 import { TIER_LIMITS } from '@/types';
@@ -38,9 +39,11 @@ export function SettingsTab({
 }) {
   const { t, isRTL, nativeRestartRequired } = useI18n();
   const { tier, setTier, language, setLanguage } = useSession();
+  const { signOut } = useAuth();
   const [settings, setSettings] = useState<LocalSettings>(DEFAULT_SETTINGS);
   const [pauseConfirm, setPauseConfirm] = useState(false);
   const [premiumConfirm, setPremiumConfirm] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
   const limits = TIER_LIMITS[tier];
   const isPremium = tier === 'premium';
   const premiumFeatures = [
@@ -79,6 +82,16 @@ export function SettingsTab({
       setPauseConfirm(false);
     } catch {
       Alert.alert(t('settings.pauseErrorTitle'), t('settings.pauseErrorBody'));
+    }
+  };
+
+  const confirmDeletion = async () => {
+    try {
+      await requestAccountDeletion();
+      setDeleteConfirm(false);
+      await signOut();
+    } catch {
+      Alert.alert(t('settings.deleteErrorTitle'), t('settings.deleteErrorBody'));
     }
   };
 
@@ -238,6 +251,18 @@ export function SettingsTab({
           subtitle={t('settings.supportBody')}
           badge={t('settings.comingLater')}
         />
+        <SettingRow
+          title={t('settings.delete')}
+          subtitle={t('settings.deleteBody')}
+          trailing={
+            <Button
+              label={t('settings.deleteAction')}
+              variant="quiet"
+              block={false}
+              onPress={() => setDeleteConfirm(true)}
+            />
+          }
+        />
       </Section>
 
       <Text variant="caption" center style={styles.version}>
@@ -256,6 +281,16 @@ export function SettingsTab({
         cancelLabel={t('settings.notNow')}
         onConfirm={() => void confirmPause()}
         onCancel={() => setPauseConfirm(false)}
+      />
+
+      <ConfirmDialog
+        visible={deleteConfirm}
+        title={t('settings.deleteTitle')}
+        body={t('settings.deleteConfirmBody')}
+        confirmLabel={t('settings.deleteAction')}
+        cancelLabel={t('settings.notNow')}
+        onConfirm={() => void confirmDeletion()}
+        onCancel={() => setDeleteConfirm(false)}
       />
 
       <ConfirmDialog

@@ -8,3 +8,10 @@ export async function setProfilePaused(paused: boolean): Promise<void> {
   });
   if (error) throw error;
 }
+
+/** Immediately removes the member from matching while a server-side purge is processed. */
+export async function requestAccountDeletion(): Promise<void> {
+  if (USE_MOCKS) return;
+  const { error } = await requireSupabase().rpc('request_my_account_deletion');
+  if (error) throw error;
+}
