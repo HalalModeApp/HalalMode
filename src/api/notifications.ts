@@ -1,8 +1,8 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import { supportsRemotePushRuntime } from '@/lib/notificationRuntime';
 import { requireSupabase, USE_MOCKS } from '@/lib/supabase';
 
 export type NotificationPermissionError = 'unsupported_device' | 'permission_denied' | 'project_unconfigured';
@@ -17,6 +17,13 @@ export async function fetchMyNotificationConsent(): Promise<boolean> {
 export async function enableMyNotifications(locale: string): Promise<void> {
   if (USE_MOCKS) return;
   if (!Device.isDevice) throw new Error('unsupported_device' satisfies NotificationPermissionError);
+  if (!supportsRemotePushRuntime(Platform.OS, Constants.executionEnvironment)) {
+    throw new Error('unsupported_device' satisfies NotificationPermissionError);
+  }
+  // Expo Go excludes Android remote-notification support. Import lazily only
+  // after confirming a production/development build runtime, so Settings can
+  // still render safely in Expo Go and in browser previews.
+  const Notifications = await import('expo-notifications');
   const existing = await Notifications.getPermissionsAsync();
   const permission = existing.status === 'granted'
     ? existing
