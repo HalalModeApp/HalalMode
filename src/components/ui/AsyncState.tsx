@@ -7,14 +7,16 @@ import { color, space } from '@/theme/tokens';
 
 interface LoadingStateProps {
   label?: string;
+  testID?: string;
 }
 
-export function LoadingState({ label }: LoadingStateProps) {
+export function LoadingState({ label, testID = 'loading-state' }: LoadingStateProps) {
   const { t } = useI18n();
   const resolvedLabel = label ?? t('common.loading');
   return (
     <View
       accessible
+      testID={testID}
       accessibilityLabel={resolvedLabel}
       accessibilityLiveRegion="polite"
       style={styles.container}
@@ -30,6 +32,7 @@ interface ErrorStateProps {
   message: string;
   retryLabel?: string;
   onRetry?: () => void;
+  testID?: string;
 }
 
 export function ErrorState({
@@ -37,14 +40,24 @@ export function ErrorState({
   message,
   retryLabel,
   onRetry,
+  testID = 'error-state',
 }: ErrorStateProps) {
   const { t } = useI18n();
+  const resolvedTitle = title ?? t('common.errorTitle');
   return (
-    <View accessibilityLiveRegion="assertive" style={styles.container}>
-      <Text variant="displaySmall" center>{title ?? t('common.errorTitle')}</Text>
+    <View
+      accessible
+      accessibilityRole="alert"
+      accessibilityLabel={`${resolvedTitle}. ${message}`}
+      accessibilityLiveRegion="assertive"
+      testID={testID}
+      style={styles.container}
+    >
+      <Text variant="displaySmall" center>{resolvedTitle}</Text>
       <Text variant="bodySmall" center style={styles.copy}>{message}</Text>
       {onRetry ? (
         <Button
+          testID={`${testID}-retry`}
           accessibilityHint={t('common.retryHint')}
           block={false}
           label={retryLabel ?? t('common.tryAgain')}
