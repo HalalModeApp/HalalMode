@@ -16,3 +16,8 @@ export const galleryImagePerformancePolicy = {
   allowDownscaling: true,
   enforceEarlyResizing: true,
 } as const;
+
+/** Forces a fresh native image request after a signed URL or network failure. */
+export function galleryRetryKey(source: string, attempt: number): string {
+  return `${source}:${attempt}`;
+}

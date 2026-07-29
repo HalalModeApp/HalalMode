@@ -14,7 +14,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/Text';
 import { useI18n } from '@/i18n';
-import { galleryImagePerformancePolicy, galleryListPerformancePolicy } from '@/lib/galleryPerformancePolicy';
+import {
+  galleryImagePerformancePolicy,
+  galleryListPerformancePolicy,
+  galleryRetryKey,
+} from '@/lib/galleryPerformancePolicy';
 import { useRound } from '@/state/round';
 import { color, font, radius } from '@/theme/tokens';
 
@@ -77,17 +81,8 @@ export default function GalleryScreen() {
         onMomentumScrollEnd={onScroll}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         {...galleryListPerformancePolicy}
-        renderItem={({ item }) => (
-          <View style={[styles.slide, { width }]}>
-            <Image
-              source={item}
-              style={styles.photo}
-              contentFit="cover"
-              transition={200}
-              {...galleryImagePerformancePolicy}
-              accessibilityIgnoresInvertColors
-            />
-          </View>
+        renderItem={({ item, index: photoIndex }) => (
+          <GallerySlide photo={item} index={photoIndex} width={width} />
         )}
       />
 
@@ -109,6 +104,45 @@ export default function GalleryScreen() {
           </Pressable>
         ))}
       </View>
+    </View>
+  );
+}
+
+function GallerySlide({ photo, index, width }: { photo: string; index: number; width: number }) {
+  const { t } = useI18n();
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <View style={[styles.slide, { width }]}>
+      <Image
+        key={galleryRetryKey(photo, attempt)}
+        testID={`gallery-photo-${index + 1}`}
+        source={photo}
+        style={styles.photo}
+        contentFit="cover"
+        transition={200}
+        {...galleryImagePerformancePolicy}
+        accessibilityIgnoresInvertColors
+        onError={() => setFailed(true)}
+      />
+      {failed ? (
+        <View style={styles.errorOverlay} accessibilityRole="alert">
+          <Text variant="bodySmall" center style={styles.errorText}>{t('gallery.photoUnavailable')}</Text>
+          <Pressable
+            testID={`gallery-photo-${index + 1}-retry`}
+            accessibilityRole="button"
+            accessibilityLabel={t('gallery.retry')}
+            onPress={() => {
+              setFailed(false);
+              setAttempt((current) => current + 1);
+            }}
+            style={styles.retry}
+          >
+            <Text style={styles.retryLabel}>{t('gallery.retry')}</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -153,6 +187,25 @@ const styles = StyleSheet.create({
     aspectRatio: 3 / 4,
     borderRadius: radius.md,
   },
+  errorOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(14,13,12,0.82)',
+  },
+  errorText: { color: color.white, maxWidth: 190 },
+  retry: {
+    minHeight: 44,
+    minWidth: 108,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    backgroundColor: color.white,
+    paddingHorizontal: 16,
+  },
+  retryLabel: { color: color.ink, fontFamily: font.bodyBold, fontSize: 11 },
 
   thumbs: {
     flexDirection: 'row',
