@@ -2,6 +2,35 @@ import { requireSupabase, USE_MOCKS } from '@/lib/supabase';
 
 export type ReportReason = 'harassment' | 'misrepresentation' | 'safety_concern' | 'other';
 
+export interface BlockedMember {
+  id: string;
+  firstName: string;
+  city: string;
+  country: string;
+  blockedAt: string;
+}
+
+export async function fetchMyBlockedMembers(): Promise<BlockedMember[]> {
+  if (USE_MOCKS) return [];
+  const client = requireSupabase();
+  const { data, error } = await client.rpc('get_my_blocked_members');
+  if (error) throw error;
+  return ((data ?? []) as Record<string, unknown>[]).map((item) => ({
+    id: String(item.id),
+    firstName: String(item.firstName ?? ''),
+    city: String(item.city ?? ''),
+    country: String(item.country ?? ''),
+    blockedAt: String(item.blockedAt),
+  }));
+}
+
+export async function unblockMyMember(memberId: string): Promise<void> {
+  if (USE_MOCKS) return;
+  const client = requireSupabase();
+  const { error } = await client.rpc('unblock_my_member', { p_blocked_user_id: memberId });
+  if (error) throw error;
+}
+
 export async function reportConnectionMember(connectionId: string, reason: ReportReason): Promise<void> {
   if (USE_MOCKS) return;
   const client = requireSupabase();

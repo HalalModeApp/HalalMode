@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Text } from '@/components/ui/Text';
+import { BlockedMembersSheet } from '@/components/you/BlockedMembersSheet';
 import { useI18n } from '@/i18n';
 import { useSession } from '@/state/session';
 import { useAuth } from '@/state/auth';
@@ -44,6 +45,7 @@ export function SettingsTab({
   const [pauseConfirm, setPauseConfirm] = useState(false);
   const [premiumConfirm, setPremiumConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [blockedOpen, setBlockedOpen] = useState(false);
   const limits = TIER_LIMITS[tier];
   const isPremium = tier === 'premium';
   const premiumFeatures = [
@@ -127,7 +129,16 @@ export function SettingsTab({
         <SettingRow
           title={t('settings.blocked')}
           subtitle={t('settings.blockedBody')}
-          badge={t('settings.comingLater')}
+          trailing={
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.blocked')}
+              onPress={() => setBlockedOpen(true)}
+              style={styles.disclosure}
+            >
+              <Text style={styles.arrow}>{isRTL ? '←' : '→'}</Text>
+            </Pressable>
+          }
         />
         <SettingRow
           title={t('settings.reporting')}
@@ -309,6 +320,7 @@ export function SettingsTab({
         }}
         onCancel={() => setPremiumConfirm(false)}
       />
+      <BlockedMembersSheet visible={blockedOpen} onClose={() => setBlockedOpen(false)} />
     </View>
   );
 }
@@ -439,6 +451,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   arrow: { fontFamily: font.body, fontSize: 16, color: color.faint },
+  disclosure: { minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
   lockGlyph: { fontFamily: font.body, fontSize: 20, color: color.green },
   languagePill: {
     borderWidth: 1,
