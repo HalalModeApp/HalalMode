@@ -18,8 +18,8 @@ select ok(
   'authenticated clients cannot directly create or alter message rows'
 );
 select ok(
-  has_table_privilege('authenticated', 'public.messages', 'SELECT'),
-  'authenticated clients retain RLS-protected message reads'
+  not has_table_privilege('authenticated', 'public.messages', 'SELECT'),
+  'authenticated clients cannot bypass connection summaries with raw message reads'
 );
 select is(
   (select count(*)::int from pg_policies
