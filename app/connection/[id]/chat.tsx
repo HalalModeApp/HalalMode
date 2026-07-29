@@ -240,6 +240,8 @@ export default function ChatScreen() {
     Alert.alert(t('chat.reportTitle'), t('chat.reportBody'), [
       { text: t('chat.reportHarassment'), onPress: () => report.mutate('harassment') },
       { text: t('chat.reportMisrepresentation'), onPress: () => report.mutate('misrepresentation') },
+      { text: t('chat.reportSafetyConcern'), onPress: () => report.mutate('safety_concern') },
+      { text: t('chat.reportOther'), onPress: () => report.mutate('other') },
       { text: t('settings.notNow'), style: 'cancel' },
     ]);
   };
