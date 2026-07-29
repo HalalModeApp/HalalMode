@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/ui/Text';
@@ -19,6 +20,8 @@ export interface ScreenHeaderProps {
   trailingLabel?: string;
   /** `dark` for use over photography and the near-black screens. */
   tone?: 'light' | 'dark';
+  /** Optional semantic control rendered opposite the leading navigation action. */
+  trailing?: ReactNode;
 }
 
 /**
@@ -33,6 +36,7 @@ export function ScreenHeader({
   onAction,
   trailingLabel,
   tone = 'light',
+  trailing,
 }: ScreenHeaderProps) {
   const dark = tone === 'dark';
   const { isRTL, t } = useI18n();
@@ -63,10 +67,15 @@ export function ScreenHeader({
         />
       </Pressable>
 
-      {trailingLabel ? (
-        <Text variant="micro" style={dark ? styles.labelDark : undefined}>
-          {trailingLabel}
-        </Text>
+      {trailing || trailingLabel ? (
+        <View style={[styles.trailing, isRTL && styles.trailingRTL]}>
+          {trailingLabel ? (
+            <Text variant="micro" style={dark ? styles.labelDark : undefined}>
+              {trailingLabel}
+            </Text>
+          ) : null}
+          {trailing}
+        </View>
       ) : null}
     </View>
   );
@@ -102,4 +111,6 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.6, transform: [{ scale: 0.94 }] },
   labelDark: { color: 'rgba(252,252,251,0.6)' },
+  trailing: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  trailingRTL: { flexDirection: 'row-reverse' },
 });

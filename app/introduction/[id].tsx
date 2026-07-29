@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AudioGreeting } from '@/components/introductions/AudioGreeting';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
+import { SafetyControl } from '@/components/safety/SafetyControl';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -19,7 +20,7 @@ import { alpha, color, radius, space } from '@/theme/tokens';
 export default function IntroductionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { localeTag, isRTL, t } = useI18n();
-  const { round, live, release, keepLimit, submit } = useRound();
+  const { round, live, release, refresh, keepLimit, submit } = useRound();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const introduction =
@@ -64,6 +65,13 @@ export default function IntroductionDetailScreen() {
         <ScreenHeader
           action="back"
           trailingLabel={t('intro.position', { current: number(position), total: number(total) })}
+          trailing={(
+            <SafetyControl
+              scope={{ kind: 'introduction', id: introduction.id }}
+              memberName={profile.firstName}
+              onBlocked={() => void refresh()}
+            />
+          )}
         />
 
         <Pressable

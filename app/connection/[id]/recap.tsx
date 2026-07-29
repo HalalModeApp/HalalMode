@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { fetchConnection, openConnection } from '@/api/connections';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
+import { SafetyControl } from '@/components/safety/SafetyControl';
 import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -63,7 +64,15 @@ export default function RecapScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <ScreenHeader action="back" />
+        <ScreenHeader
+          action="back"
+          trailing={(
+            <SafetyControl
+              scope={{ kind: 'connection', id }}
+              memberName={connection.profile.firstName}
+            />
+          )}
+        />
         <View style={styles.header}>
           <Text variant="micro">{t('recap.step')}</Text>
           <Text variant="display" style={styles.title}>

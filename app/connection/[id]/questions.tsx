@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { fetchConnection, submitQuestionPicks } from '@/api/connections';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
+import { SafetyControl } from '@/components/safety/SafetyControl';
 import { Button } from '@/components/ui/Button';
 import { ErrorState, InlineNotice, LoadingState } from '@/components/ui/AsyncState';
 import { Screen } from '@/components/ui/Screen';
@@ -69,7 +70,10 @@ export default function QuestionSelectScreen() {
 
   return (
     <Screen style={isRTL ? styles.rtl : undefined}>
-      <ScreenHeader action="back" />
+      <ScreenHeader
+        action="back"
+        trailing={<SafetyControl scope={{ kind: 'connection', id }} memberName={firstName} />}
+      />
       <View style={styles.header}>
         <Text variant="micro">
           {t('questions.step', { name: firstName ? t('questions.withName', { name: firstName }) : '' })}

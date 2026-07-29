@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Redirect, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 
 import { fetchConnection } from '@/api/connections';
+import { ScreenHeader } from '@/components/navigation/ScreenHeader';
+import { SafetyControl } from '@/components/safety/SafetyControl';
 import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
 import { Screen } from '@/components/ui/Screen';
 import { useI18n } from '@/i18n';
@@ -39,5 +42,37 @@ export default function ConnectionIndex() {
       : connection.stage === 'recap'
         ? 'recap'
         : 'chat';
-  return <Redirect href={`/connection/${id}/${destination}`} />;
+  return (
+    <ConnectionRedirect
+      id={id}
+      destination={destination}
+      memberName={connection.profile.firstName}
+      loadingLabel={t('connection.opening')}
+    />
+  );
+}
+
+function ConnectionRedirect({
+  id,
+  destination,
+  memberName,
+  loadingLabel,
+}: {
+  id: string;
+  destination: string;
+  memberName: string;
+  loadingLabel: string;
+}) {
+  useEffect(() => {
+    router.replace(`/connection/${id}/${destination}`);
+  }, [destination, id]);
+
+  return (
+    <Screen>
+      <ScreenHeader
+        trailing={<SafetyControl scope={{ kind: 'connection', id }} memberName={memberName} />}
+      />
+      <LoadingState label={loadingLabel} />
+    </Screen>
+  );
 }

@@ -49,3 +49,25 @@ export async function blockConnectionMember(connectionId: string): Promise<void>
   });
   if (error) throw error;
 }
+
+export async function reportIntroductionMember(
+  introductionId: string,
+  reason: ReportReason
+): Promise<void> {
+  if (USE_MOCKS) return;
+  const client = requireSupabase();
+  const { error } = await client.rpc('report_introduction_member', {
+    p_introduction_id: introductionId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+}
+
+export async function blockIntroductionMember(introductionId: string): Promise<void> {
+  if (USE_MOCKS) return;
+  const client = requireSupabase();
+  const { error } = await client.rpc('block_introduction_member', {
+    p_introduction_id: introductionId,
+  });
+  if (error) throw error;
+}

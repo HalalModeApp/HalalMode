@@ -10,6 +10,7 @@ import { fetchConnections } from '@/api/connections';
 import { fetchMyProfile } from '@/api/profile';
 import { Confetti } from '@/components/introductions/Confetti';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
+import { SafetyControl } from '@/components/safety/SafetyControl';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
@@ -107,6 +108,12 @@ export default function MatchScreen() {
       <ScreenHeader
         action="close"
         onAction={() => router.replace('/(tabs)/connections')}
+        trailing={(
+          <SafetyControl
+            scope={{ kind: 'connection', id: connection.id }}
+            memberName={profile.firstName}
+          />
+        )}
       />
       <Confetti />
 

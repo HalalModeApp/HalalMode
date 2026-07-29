@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/Text';
+import { SafetyControl } from '@/components/safety/SafetyControl';
 import { useI18n } from '@/i18n';
 import {
   galleryImagePerformancePolicy,
@@ -79,6 +80,12 @@ export default function GalleryScreen() {
         <Text style={styles.title} numberOfLines={1}>
           {t('gallery.title', { name: introduction.profile.firstName })}
         </Text>
+        <SafetyControl
+          scope={{ kind: 'introduction', id: introduction.id }}
+          memberName={introduction.profile.firstName}
+          tone="dark"
+          onBlocked={() => void refresh()}
+        />
         <View style={styles.counter}>
           <Text style={styles.counterLabel}>
             {number(safeIndex + 1)} / {number(photos.length)}

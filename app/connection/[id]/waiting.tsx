@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { fetchConnection } from '@/api/connections';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
+import { SafetyControl } from '@/components/safety/SafetyControl';
 import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
@@ -45,7 +46,15 @@ export default function WaitingForQuestionsScreen() {
 
   return (
     <Screen style={isRTL ? styles.rtl : undefined}>
-      <ScreenHeader onAction={() => router.replace('/(tabs)/connections')} />
+      <ScreenHeader
+        onAction={() => router.replace('/(tabs)/connections')}
+        trailing={(
+          <SafetyControl
+            scope={{ kind: 'connection', id }}
+            memberName={connection.profile.firstName}
+          />
+        )}
+      />
       <View style={styles.content} accessibilityLiveRegion="polite">
         <View style={styles.mark}><Text style={styles.markLabel}>5</Text></View>
         <Text variant="microAccent">{t('waiting.saved')}</Text>

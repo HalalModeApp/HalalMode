@@ -43,4 +43,14 @@ export const testIds = {
     send: 'chat-send',
     retry: 'chat-retry-pending',
   },
+  safety: {
+    menu: 'relationship-safety-menu',
+    sheet: 'relationship-safety-sheet',
+    report: 'relationship-safety-report',
+    block: 'relationship-safety-block',
+    confirmBlock: 'relationship-safety-confirm-block',
+    retry: 'relationship-safety-retry',
+    done: 'relationship-safety-done',
+    reason: (reason: string) => `relationship-safety-reason-${reason}`,
+  },
 } as const;

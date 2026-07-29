@@ -14,6 +14,7 @@ import Animated, { FadeInUp } from 'react-native-reanimated';
 
 import { fetchConnection, submitAnswer } from '@/api/connections';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
+import { SafetyControl } from '@/components/safety/SafetyControl';
 import { ErrorState, InlineNotice, LoadingState } from '@/components/ui/AsyncState';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
@@ -113,7 +114,15 @@ export default function AnswersScreen() {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScreenHeader action="back" />
+        <ScreenHeader
+          action="back"
+          trailing={(
+            <SafetyControl
+              scope={{ kind: 'connection', id }}
+              memberName={connection.profile.firstName}
+            />
+          )}
+        />
         <View style={styles.header}>
           <Text variant="micro">
             {t('answers.step', { current: index + 1, total: answers.length })}

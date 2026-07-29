@@ -17,6 +17,7 @@ import { ArcCarousel } from '@/components/introductions/ArcCarousel';
 import { ConductAcknowledgement } from '@/components/introductions/ConductAcknowledgement';
 import { HeroCard } from '@/components/introductions/HeroCard';
 import { BrandHeader } from '@/components/navigation/BrandHeader';
+import { SafetyControl } from '@/components/safety/SafetyControl';
 import { Button } from '@/components/ui/Button';
 import { EmptyState, ErrorState, InlineNotice, LoadingState } from '@/components/ui/AsyncState';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -321,6 +322,17 @@ export default function DailyScreen() {
           />
         ) : null}
 
+        {active ? (
+          <View style={[styles.safetyOverlay, isRTL && styles.safetyOverlayRTL]}>
+            <SafetyControl
+              scope={{ kind: 'introduction', id: active.id }}
+              memberName={active.profile.firstName}
+              tone="dark"
+              onBlocked={() => void refresh()}
+            />
+          </View>
+        ) : null}
+
         {activeId ? (
           <ArcCarousel
             live={live}
@@ -498,6 +510,8 @@ const styles = StyleSheet.create({
   resetGlyph: { fontFamily: font.body, fontSize: 14, color: color.muted },
 
   stage: { flex: 1, marginTop: 14, minHeight: 0 },
+  safetyOverlay: { position: 'absolute', top: 12, right: 42, zIndex: 200 },
+  safetyOverlayRTL: { right: undefined, left: 42 },
 
   footer: {
     paddingHorizontal: 26,
