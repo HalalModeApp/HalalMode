@@ -13,7 +13,11 @@ import {
 import type { User } from '@supabase/supabase-js';
 
 import { requireSupabase, supabase, USE_MOCKS } from '@/lib/supabase';
-import { canApplyProfileStatus, hasAuthPrincipalChanged } from '@/lib/authSessionScope';
+import {
+  canApplyProfileStatus,
+  hasAuthPrincipalChanged,
+  MEMBER_SIGN_OUT_SCOPE,
+} from '@/lib/authSessionScope';
 import { queryClient } from '@/lib/queryClient';
 
 interface AuthValue {
@@ -126,7 +130,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [ready, refreshProfileStatus, user]);
 
   const signOut = useCallback(async () => {
-    if (!USE_MOCKS) await requireSupabase().auth.signOut();
+    if (!USE_MOCKS) {
+      const { error } = await requireSupabase().auth.signOut({
+        scope: MEMBER_SIGN_OUT_SCOPE,
+      });
+      if (error) throw error;
+    }
     // Covers mock mode and an auth provider that does not emit an event before
     // the route changes.
     queryClient.clear();

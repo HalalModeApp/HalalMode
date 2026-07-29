@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { canApplyProfileStatus, hasAuthPrincipalChanged } from '../src/lib/authSessionScope';
+import {
+  canApplyProfileStatus,
+  hasAuthPrincipalChanged,
+  MEMBER_SIGN_OUT_SCOPE,
+} from '../src/lib/authSessionScope';
+
+test('member-facing sign out affects the current device only', () => {
+  assert.equal(MEMBER_SIGN_OUT_SCOPE, 'local');
+});
 
 test('auth cache is retained only for the same authenticated member', () => {
   assert.equal(hasAuthPrincipalChanged('member_a', 'member_a'), false);
