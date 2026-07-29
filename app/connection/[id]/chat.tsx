@@ -144,7 +144,10 @@ export default function ChatScreen() {
       setDraft('');
       try {
         const message = await sendMessage(id, text, pending.id);
-        await removePendingMessage(outboxMemberId, pending.id);
+        // Delivery is already durable server-side. A local cleanup failure must
+        // not turn it into a false send error; the idempotency key makes a later
+        // cleanup retry safe.
+        void removePendingMessage(outboxMemberId, pending.id).catch(() => {});
         return message;
       } finally {
         void refreshPendingCount();
@@ -185,7 +188,7 @@ export default function ChatScreen() {
       const delivered: ChatMessage[] = [];
       for (const item of pending) {
         const message = await sendMessage(id, item.body, item.id);
-        await removePendingMessage(outboxMemberId, item.id);
+        void removePendingMessage(outboxMemberId, item.id).catch(() => {});
         delivered.push(message);
       }
       return delivered;
