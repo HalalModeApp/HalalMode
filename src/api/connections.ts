@@ -102,8 +102,34 @@ export async function submitAnswer(
 export async function fetchMessages(
   connectionId: string
 ): Promise<ChatMessage[]> {
+  const page = await fetchMessagesPage(connectionId);
+  return page.messages;
+}
+
+export type MessageCursor = {
+  createdAt: string;
+  id: string;
+};
+
+export type MessagePage = {
+  messages: ChatMessage[];
+  nextCursor?: MessageCursor;
+  hasMore: boolean;
+};
+
+/**
+ * Fetches a bounded, oldest-to-newest page. Cursor access is verified by the
+ * server so a client cannot use pagination to probe another connection.
+ */
+export async function fetchMessagesPage(
+  connectionId: string,
+  before?: MessageCursor
+): Promise<MessagePage> {
   if (USE_MOCKS) {
-    return MOCK_MESSAGES.filter((m) => m.connectionId === connectionId);
+    return {
+      messages: MOCK_MESSAGES.filter((m) => m.connectionId === connectionId),
+      hasMore: false,
+    };
   }
 
   const client = requireSupabase();
@@ -113,18 +139,32 @@ export async function fetchMessages(
   } = await client.auth.getUser();
   if (authError) throw authError;
   if (!user) throw new Error('You must be signed in to read messages.');
-  const { data, error } = await client
-    .from('messages')
-    .select('*')
-    .eq('connection_id', connectionId)
-    .order('created_at', { ascending: true });
+  const { data, error } = await client.rpc('get_connection_messages', {
+    p_connection_id: connectionId,
+    p_before_at: before?.createdAt ?? null,
+    p_before_id: before?.id ?? null,
+    p_limit: 50,
+  });
   if (error) throw error;
-  return (data ?? []).map((row) => messageFromRow(row as Record<string, unknown>, user.id));
+  const payload = data as {
+    messages?: Record<string, unknown>[];
+    nextCursor?: { createdAt?: unknown; id?: unknown } | null;
+    hasMore?: unknown;
+  } | null;
+  const nextCursor = payload?.nextCursor;
+  return {
+    messages: (payload?.messages ?? []).map((row) => messageFromRow(row, user.id)),
+    hasMore: payload?.hasMore === true,
+    ...(typeof nextCursor?.createdAt === 'string' && typeof nextCursor.id === 'string'
+      ? { nextCursor: { createdAt: nextCursor.createdAt, id: nextCursor.id } }
+      : {}),
+  };
 }
 
 export async function sendMessage(
   connectionId: string,
-  text: string
+  text: string,
+  clientRequestId?: string
 ): Promise<ChatMessage> {
   const message: ChatMessage = {
     id: `local-${Date.now()}`,
@@ -146,6 +186,7 @@ export async function sendMessage(
   const { data, error } = await client.rpc('send_message', {
     p_connection_id: connectionId,
     p_body: text,
+    p_client_request_id: clientRequestId ?? null,
   });
   if (error) throw error;
   return messageFromRow(data as Record<string, unknown>, user.id);
@@ -187,7 +228,7 @@ export async function closeConnection(connectionId: string): Promise<void> {
   if (error) throw error;
 }
 
-function messageFromRow(row: Record<string, unknown>, currentUserId: string): ChatMessage {
+export function messageFromRow(row: Record<string, unknown>, currentUserId: string): ChatMessage {
   return {
     id: String(row.id),
     connectionId: String(row.connection_id),

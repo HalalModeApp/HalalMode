@@ -4,11 +4,11 @@ set local search_path = public, extensions;
 select plan(22);
 
 select ok(
-  has_function_privilege('authenticated', 'public.send_message(uuid,text)', 'EXECUTE'),
+  has_function_privilege('authenticated', 'public.send_message(uuid,text,text)', 'EXECUTE'),
   'authenticated members can call send_message'
 );
 select ok(
-  not has_function_privilege('anon', 'public.send_message(uuid,text)', 'EXECUTE'),
+  not has_function_privilege('anon', 'public.send_message(uuid,text,text)', 'EXECUTE'),
   'anonymous callers cannot call send_message'
 );
 select ok(

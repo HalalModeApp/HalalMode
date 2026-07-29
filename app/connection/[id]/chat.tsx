@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -18,8 +18,9 @@ import {
 import {
   closeConnection,
   fetchConnection,
-  fetchMessages,
+  fetchMessagesPage,
   markMessagesRead,
+  messageFromRow,
   sendMessage,
 } from '@/api/connections';
 import { AudioGreeting } from '@/components/introductions/AudioGreeting';
@@ -29,10 +30,12 @@ import { Text } from '@/components/ui/Text';
 import { useI18n } from '@/i18n';
 import { queryKeys } from '@/lib/queryClient';
 import { trackProductEvent } from '@/lib/analytics';
+import { enqueueMessage, getPendingMessages, removePendingMessage } from '@/lib/messageOutbox';
 import { supabase, USE_MOCKS } from '@/lib/supabase';
 import { testIds } from '@/lib/testIds';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 import type { ChatMessage } from '@/types';
+import type { MessagePage } from '@/api/connections';
 
 type ConversationItem =
   | { kind: 'day'; id: string; date: string }
@@ -43,11 +46,17 @@ export default function ChatScreen() {
   const { isRTL, t } = useI18n();
   const queryClient = useQueryClient();
   const listRef = useRef<FlatList<ConversationItem>>(null);
+  const shouldScrollToEndRef = useRef(true);
   const [draft, setDraft] = useState('');
   const [callState, setCallState] = useState<
     'calling' | 'connected' | 'unavailable' | null
   >(null);
   const [now, setNow] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const refreshPendingCount = useCallback(async () => {
+    setPendingCount((await getPendingMessages(id)).length);
+  }, [id]);
 
   const connectionQuery = useQuery({
     queryKey: queryKeys.connection(id),
@@ -56,13 +65,13 @@ export default function ChatScreen() {
 
   const messagesQuery = useQuery({
     queryKey: queryKeys.messages(id),
-    queryFn: () => fetchMessages(id),
+    queryFn: () => fetchMessagesPage(id),
     // Conversation is the one place freshness matters.
     staleTime: 0,
   });
   const connection = connectionQuery.data;
   const messages = useMemo(
-    () => messagesQuery.data ?? [],
+    () => messagesQuery.data?.messages ?? [],
     [messagesQuery.data]
   );
 
@@ -73,6 +82,7 @@ export default function ChatScreen() {
   }, [id, queryClient]);
 
   useEffect(() => setNow(Date.now()), []);
+  useEffect(() => { void refreshPendingCount(); }, [refreshPendingCount]);
 
   useEffect(() => {
     if (USE_MOCKS || !supabase) return;
@@ -82,9 +92,24 @@ export default function ChatScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'messages', filter: `connection_id=eq.${id}` },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: queryKeys.messages(id) });
-          void markMessagesRead(id);
+        (payload) => {
+          void client.auth.getUser().then(({ data, error: authError }) => {
+            if (authError || !data.user) return;
+            const row = payload.new as Record<string, unknown>;
+            const message = messageFromRow(row, data.user.id);
+            queryClient.setQueryData<MessagePage>(queryKeys.messages(id), (current) => {
+              if (!current) return current;
+              if (payload.eventType === 'DELETE') {
+                return { ...current, messages: current.messages.filter((item) => item.id !== String(payload.old.id)) };
+              }
+              const exists = current.messages.some((item) => item.id === message.id);
+              const messages = exists
+                ? current.messages.map((item) => item.id === message.id ? message : item)
+                : [...current.messages, message].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+              return { ...current, messages };
+            });
+            if (payload.eventType === 'INSERT' && message.sender === 'them') void markMessagesRead(id);
+          });
         }
       )
       .subscribe();
@@ -94,16 +119,66 @@ export default function ChatScreen() {
   }, [id, queryClient]);
 
   const send = useMutation({
-    mutationFn: (text: string) => sendMessage(id, text),
+    mutationFn: async (text: string) => {
+      const pending = await enqueueMessage(id, text);
+      setDraft('');
+      try {
+        const message = await sendMessage(id, text, pending.id);
+        await removePendingMessage(pending.id);
+        return message;
+      } finally {
+        void refreshPendingCount();
+      }
+    },
     onSuccess: (message) => {
       trackProductEvent('message_sent');
-      queryClient.setQueryData<ChatMessage[]>(queryKeys.messages(id), (current) => [
-        ...(current ?? []),
-        message,
-      ]);
-      setDraft('');
+      shouldScrollToEndRef.current = true;
+      queryClient.setQueryData<MessagePage>(queryKeys.messages(id), (current) => ({
+        messages: [...(current?.messages ?? []), message],
+        hasMore: current?.hasMore ?? false,
+        ...(current?.nextCursor ? { nextCursor: current.nextCursor } : {}),
+      }));
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
+  });
+
+  const loadEarlier = useMutation({
+    mutationFn: () => {
+      const cursor = messagesQuery.data?.nextCursor;
+      if (!cursor) throw new Error('No earlier messages are available.');
+      return fetchMessagesPage(id, cursor);
+    },
+    onMutate: () => { shouldScrollToEndRef.current = false; },
+    onSuccess: (page) => {
+      queryClient.setQueryData<MessagePage>(queryKeys.messages(id), (current) => ({
+        messages: [...page.messages, ...(current?.messages ?? [])],
+        hasMore: page.hasMore,
+        ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+      }));
+    },
+  });
+
+  const retryPending = useMutation({
+    mutationFn: async () => {
+      const pending = await getPendingMessages(id);
+      const delivered: ChatMessage[] = [];
+      for (const item of pending) {
+        const message = await sendMessage(id, item.body, item.id);
+        await removePendingMessage(item.id);
+        delivered.push(message);
+      }
+      return delivered;
+    },
+    onSuccess: (delivered) => {
+      queryClient.setQueryData<MessagePage>(queryKeys.messages(id), (current) => ({
+        messages: [...(current?.messages ?? []), ...delivered]
+          .filter((message, index, all) => all.findIndex((item) => item.id === message.id) === index)
+          .sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
+        hasMore: current?.hasMore ?? false,
+        ...(current?.nextCursor ? { nextCursor: current.nextCursor } : {}),
+      }));
+    },
+    onSettled: () => { void refreshPendingCount(); },
   });
 
   const close = useMutation({
@@ -230,8 +305,8 @@ export default function ChatScreen() {
             <Text style={styles.callGlyph}>☎</Text>
           </Pressable>
 
-            <Pressable
-              accessibilityRole="button"
+          <Pressable
+            accessibilityRole="button"
             accessibilityLabel={t('chat.closeA11y')}
             accessibilityState={{ busy: close.isPending }}
             disabled={close.isPending}
@@ -248,7 +323,27 @@ export default function ChatScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messages}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() => {
+            if (!shouldScrollToEndRef.current) return;
+            listRef.current?.scrollToEnd({ animated: false });
+            shouldScrollToEndRef.current = false;
+          }}
+          ListHeaderComponent={
+            messagesQuery.data?.hasMore ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('chat.loadEarlier')}
+                accessibilityState={{ busy: loadEarlier.isPending }}
+                disabled={loadEarlier.isPending}
+                onPress={() => loadEarlier.mutate()}
+                style={styles.loadEarlier}
+              >
+                <Text variant="caption" style={styles.loadEarlierLabel}>
+                  {loadEarlier.isPending ? t('common.loading') : t('chat.loadEarlier')}
+                </Text>
+              </Pressable>
+            ) : null
+          }
           renderItem={({ item }) =>
             item.kind === 'day' ? (
               <DayMarker date={item.date} />
@@ -257,6 +352,24 @@ export default function ChatScreen() {
             )
           }
         />
+
+        {pendingCount > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.retryPending', { count: pendingCount })}
+            accessibilityState={{ busy: retryPending.isPending }}
+            disabled={retryPending.isPending}
+            onPress={() => retryPending.mutate()}
+            style={styles.pendingNotice}
+          >
+            <Text variant="caption" style={styles.pendingNoticeText}>
+              {t('chat.pendingMessages', { count: pendingCount })}
+            </Text>
+            <Text variant="caption" style={styles.pendingRetryText}>
+              {retryPending.isPending ? t('common.loading') : t('chat.retryPending', { count: pendingCount })}
+            </Text>
+          </Pressable>
+        ) : null}
 
         <ScrollView
           horizontal
@@ -357,6 +470,7 @@ function Bubble({
           compact
           onDark={mine}
         />
+
         <MessageMeta message={message} mine={mine} isLastOutgoing={isLastOutgoing} />
       </View>
     );
@@ -577,6 +691,11 @@ const styles = StyleSheet.create({
   callGlyph: { fontFamily: font.body, fontSize: 16, color: color.inkSoft },
 
   messages: { paddingHorizontal: space.xl, paddingVertical: 16, gap: 10 },
+  loadEarlier: { alignSelf: 'center', paddingHorizontal: space.md, paddingVertical: space.sm },
+  loadEarlierLabel: { color: color.ink, textDecorationLine: 'underline' },
+  pendingNotice: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, marginHorizontal: space.xl, marginBottom: space.xs, padding: space.sm, borderRadius: radius.md, backgroundColor: color.sand },
+  pendingNoticeText: { flex: 1, color: color.inkSoft },
+  pendingRetryText: { color: color.ink, textDecorationLine: 'underline' },
   dayMarker: { alignItems: 'center', paddingVertical: 5 },
   dayMarkerLabel: {
     borderRadius: radius.pill,
