@@ -21,6 +21,7 @@ import {
 import { clearPrivateMediaCache } from '@/lib/privateMediaCache';
 import { shouldClearPrivateMediaCache } from '@/lib/privateMediaCachePolicy';
 import { queryClient } from '@/lib/queryClient';
+import { clearOnboardingDraft } from '@/lib/onboardingDraftStorage';
 
 interface AuthValue {
   user: User | null;
@@ -44,11 +45,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const adoptUser = useCallback((nextUser: User | null) => {
     const nextUserId = nextUser?.id ?? null;
-    if (hasAuthPrincipalChanged(activeUserId.current, nextUserId)) {
+    const previousUserId = activeUserId.current;
+    if (hasAuthPrincipalChanged(previousUserId, nextUserId)) {
       // Query keys intentionally do not contain an account id. Clear every
       // in-memory result before a different member can render it.
       queryClient.clear();
       setOnboardingComplete(false);
+      if (previousUserId) void clearOnboardingDraft(previousUserId);
     }
     if (shouldClearPrivateMediaCache(activeUserId.current, nextUserId)) {
       void clearPrivateMediaCache();
@@ -146,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // the route changes.
     queryClient.clear();
     void clearPrivateMediaCache();
+    if (activeUserId.current) void clearOnboardingDraft(activeUserId.current);
     activeUserId.current = null;
     setUser(null);
     setOnboardingComplete(false);

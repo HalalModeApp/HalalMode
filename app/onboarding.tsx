@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import {
   ActivityIndicator,
@@ -16,6 +15,12 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useI18n, type Translate } from '@/i18n';
 import { requireSupabase } from '@/lib/supabase';
+import {
+  clearOnboardingDraft,
+  clearLegacyOnboardingDraft,
+  loadOnboardingDraft,
+  saveOnboardingDraft,
+} from '@/lib/onboardingDraftStorage';
 import { useAuth } from '@/state/auth';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 
@@ -30,11 +35,6 @@ interface OnboardingDraft {
   gender: Gender | null;
   city: string;
   country: string;
-}
-
-interface StoredOnboarding {
-  step: number;
-  draft: OnboardingDraft;
 }
 
 type DraftField = keyof OnboardingDraft;
@@ -55,21 +55,26 @@ const EMPTY_DRAFT: OnboardingDraft = {
 export default function OnboardingScreen() {
   const { t, isRTL } = useI18n();
   const { user, refreshProfileStatus } = useAuth();
-  const storageKey = `halalmode.onboarding.v2.${user?.id ?? 'current'}`;
+  const draftMemberId = user?.id ?? 'current';
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<OnboardingDraft>(EMPTY_DRAFT);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [restoring, setRestoring] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [completed, setCompleted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    void AsyncStorage.getItem(storageKey)
-      .then((raw) => {
-        if (!active || !raw) return;
-        const stored = JSON.parse(raw) as Partial<StoredOnboarding>;
+    void Promise.all([
+      loadOnboardingDraft(draftMemberId),
+      // The v2 draft contained PII in plaintext. Remove it even if the member
+      // never reaches the completion step in this app version.
+      clearLegacyOnboardingDraft(draftMemberId),
+    ])
+      .then(([stored]) => {
+        if (!active || !stored) return;
         if (stored.draft) setDraft({ ...EMPTY_DRAFT, ...stored.draft });
         if (
           typeof stored.step === 'number' &&
@@ -89,18 +94,18 @@ export default function OnboardingScreen() {
     return () => {
       active = false;
     };
-  }, [storageKey]);
+  }, [draftMemberId]);
 
   useEffect(() => {
-    if (restoring) return;
+    if (restoring || completed) return;
     setSaved(false);
     const timer = setTimeout(() => {
-      void AsyncStorage.setItem(storageKey, JSON.stringify({ step, draft }))
+      void saveOnboardingDraft(draftMemberId, step, draft)
         .then(() => setSaved(true))
         .catch(() => setSaved(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [draft, restoring, step, storageKey]);
+  }, [completed, draft, draftMemberId, restoring, step]);
 
   const birthDate = useMemo(() => formatBirthDate(draft), [draft]);
 
@@ -149,7 +154,8 @@ export default function OnboardingScreen() {
         p_country: draft.country.trim(),
       });
       if (error) throw error;
-      await AsyncStorage.removeItem(storageKey);
+      await clearOnboardingDraft(draftMemberId);
+      setCompleted(true);
       await refreshProfileStatus();
     } catch {
       setSubmitError(
