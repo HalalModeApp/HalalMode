@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
    * at this size: the idle faces recede without going grey and lifeless.
    */
   desaturate: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(239,238,235,0.42)',
   },
 });

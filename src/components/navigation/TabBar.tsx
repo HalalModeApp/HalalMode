@@ -1,4 +1,6 @@
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+// Expo Router 57 vendors the matching navigation types. Importing this from a
+// separately installed navigation package creates incompatible duplicate types.
+import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect } from 'react';

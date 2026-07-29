@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     overflow: 'visible',
   },
   card: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: radius.hero,
     overflow: 'hidden',
     backgroundColor: color.clay,
