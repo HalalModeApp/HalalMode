@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
@@ -15,8 +15,18 @@ export default function AuthScreen() {
   const { language, setLanguage } = useSession();
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
+  const [secondsUntilResend, setSecondsUntilResend] = useState(0);
+
+  useEffect(() => {
+    if (secondsUntilResend <= 0) return;
+    const timer = setInterval(() => {
+      setSecondsUntilResend((remaining) => Math.max(0, remaining - 1));
+    }, 1_000);
+    return () => clearInterval(timer);
+  }, [secondsUntilResend]);
 
   const sendLink = async () => {
+    if (sending || secondsUntilResend > 0) return;
     const cleanEmail = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(cleanEmail)) {
       Alert.alert(t('auth.invalidEmail'));
@@ -29,6 +39,9 @@ export default function AuthScreen() {
         options: { emailRedirectTo: 'halalmode://auth' },
       });
       if (error) throw error;
+      // Supabase remains the authority for rate limits. This short local pause
+      // protects people from accidentally requesting several identical links.
+      setSecondsUntilResend(60);
       Alert.alert(t('auth.checkEmail'), t('auth.linkSent'));
     } catch {
       Alert.alert(t('auth.sendFailed'), t('auth.sendFailedBody'));
@@ -73,7 +86,13 @@ export default function AuthScreen() {
             onChangeText={setEmail}
             style={[styles.input, isRTL && styles.inputRTL]}
           />
-          <Button testID={testIds.auth.submit} label={t('auth.send')} loading={sending} onPress={() => void sendLink()} />
+          <Button
+            testID={testIds.auth.submit}
+            label={secondsUntilResend > 0 ? t('auth.waitToResend', { seconds: secondsUntilResend }) : t('auth.send')}
+            loading={sending}
+            disabled={secondsUntilResend > 0}
+            onPress={() => void sendLink()}
+          />
         </View>
       </KeyboardAvoidingView>
     </Screen>
