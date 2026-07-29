@@ -50,7 +50,7 @@ function profileSchema(t: Translate) {
 type FormValues = z.infer<ReturnType<typeof profileSchema>>;
 
 export function ProfileTab({ profile }: { profile: Profile }) {
-  const { language, isRTL, t } = useI18n();
+  const { localeTag, isRTL, t } = useI18n();
   const schema = useMemo(() => profileSchema(t), [t]);
   const queryClient = useQueryClient();
   const [photos, setPhotos] = useState(profile.photos);
@@ -462,7 +462,7 @@ export function ProfileTab({ profile }: { profile: Profile }) {
               {savingVoice
                 ? t('profile.savingVoice')
                 : recorderState.isRecording
-                  ? t('profile.stopSave', { seconds: new Intl.NumberFormat(language === 'ar' ? 'ar-SA' : 'en').format(Math.min(30, Math.round(recorderState.durationMillis / 1000))) })
+                  ? t('profile.stopSave', { seconds: new Intl.NumberFormat(localeTag).format(Math.min(30, Math.round(recorderState.durationMillis / 1000))) })
                   : t('profile.recordIntro')}
             </Text>
           </Pressable>

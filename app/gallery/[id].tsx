@@ -19,7 +19,7 @@ import { color, font, radius } from '@/theme/tokens';
 
 export default function GalleryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { language, isRTL, t } = useI18n();
+  const { localeTag, isRTL, t } = useI18n();
   const insets = useSafeAreaInsets();
   const { round } = useRound();
   const listRef = useRef<FlatList<string>>(null);
@@ -28,7 +28,7 @@ export default function GalleryScreen() {
   const width = Dimensions.get('window').width;
   const introduction = round?.introductions.find((item) => item.id === id);
   const photos = introduction?.profile.photos ?? [];
-  const number = (value: number) => new Intl.NumberFormat(language === 'ar' ? 'ar-SA' : 'en').format(value);
+  const number = (value: number) => new Intl.NumberFormat(localeTag).format(value);
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {

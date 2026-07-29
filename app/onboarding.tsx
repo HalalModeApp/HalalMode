@@ -414,7 +414,7 @@ function LocationStep({ draft, errors, patch }: StepProps) {
 }
 
 function ReviewStep({ draft, birthDate }: { draft: OnboardingDraft; birthDate: string | null }) {
-  const { t, language } = useI18n();
+  const { t, localeTag, isRTL } = useI18n();
   return (
     <View>
       <StepHeading
@@ -424,11 +424,11 @@ function ReviewStep({ draft, birthDate }: { draft: OnboardingDraft; birthDate: s
       <View style={styles.reviewCard}>
         <ReviewRow label={t('onboarding.profileName')} value={draft.firstName.trim()} />
         <ReviewRow label={t('onboarding.fullNameShort')} value={draft.fullName.trim()} note={t('onboarding.private')} />
-        <ReviewRow label={t('onboarding.birthDate')} value={birthDate ? readableDate(birthDate, language) : t('onboarding.notEntered')} note={t('onboarding.private')} />
+        <ReviewRow label={t('onboarding.birthDate')} value={birthDate ? readableDate(birthDate, localeTag) : t('onboarding.notEntered')} note={t('onboarding.private')} />
         <ReviewRow label={t('onboarding.gender')} value={draft.gender === 'female' ? t('onboarding.woman') : t('onboarding.man')} />
         <ReviewRow
           label={t('onboarding.location')}
-          value={`${draft.city.trim()}${language === 'ar' ? '،' : ','} ${draft.country.trim()}`}
+          value={`${draft.city.trim()}${isRTL ? '،' : ','} ${draft.country.trim()}`}
         />
       </View>
       <Text variant="caption" style={styles.reviewNote}>
@@ -593,8 +593,8 @@ function ageOnDate(birthDate: Date, today: Date): number {
   return age;
 }
 
-function readableDate(value: string, language: 'en' | 'ar'): string {
-  return new Intl.DateTimeFormat(language === 'ar' ? 'ar-SA-u-ca-gregory' : 'en', {
+function readableDate(value: string, localeTag: string): string {
+  return new Intl.DateTimeFormat(localeTag, {
     day: 'numeric',
     month: 'long',
     year: 'numeric',

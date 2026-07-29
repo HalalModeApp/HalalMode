@@ -17,7 +17,7 @@ import { alpha, color, radius, space } from '@/theme/tokens';
 
 export default function IntroductionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { language, isRTL, t } = useI18n();
+  const { localeTag, isRTL, t } = useI18n();
   const { round, live, release, keepLimit, submit } = useRound();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -38,7 +38,7 @@ export default function IntroductionDetailScreen() {
   const { profile, agreements } = introduction;
   const position = (round?.introductions.indexOf(introduction) ?? 0) + 1;
   const total = round?.introductions.length ?? 0;
-  const number = (value: number) => new Intl.NumberFormat(language === 'ar' ? 'ar-SA' : 'en').format(value);
+  const number = (value: number) => new Intl.NumberFormat(localeTag).format(value);
 
   const handleSendInterest = async () => {
     setConfirmOpen(false);

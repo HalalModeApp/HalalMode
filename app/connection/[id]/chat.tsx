@@ -497,11 +497,11 @@ function MessageMeta({
   mine: boolean;
   isLastOutgoing: boolean;
 }) {
-  const { language } = useI18n();
+  const { localeTag } = useI18n();
   return (
     <View style={[styles.messageMeta, mine && styles.messageMetaMine]}>
       <Text style={[styles.messageTime, mine && styles.messageTimeMine]}>
-        {formatTime(message.createdAt, language)}
+        {formatTime(message.createdAt, localeTag)}
       </Text>
       {mine ? (
         <Text style={[styles.tick, isLastOutgoing && message.readAt && styles.tickRead]}>
@@ -513,10 +513,10 @@ function MessageMeta({
 }
 
 function DayMarker({ date }: { date: string }) {
-  const { language, t } = useI18n();
+  const { localeTag, t } = useI18n();
   return (
     <View style={styles.dayMarker}>
-      <Text style={styles.dayMarkerLabel}>{formatDay(date, language, t('chat.today'), t('chat.yesterday'))}</Text>
+      <Text style={styles.dayMarkerLabel}>{formatDay(date, localeTag, t('chat.today'), t('chat.yesterday'))}</Text>
     </View>
   );
 }
@@ -622,20 +622,20 @@ function dayKey(value: string): string {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
-function formatTime(value: string, language: 'en' | 'ar'): string {
-  return new Intl.DateTimeFormat(language === 'ar' ? 'ar-SA-u-ca-gregory' : 'en', { hour: 'numeric', minute: '2-digit' }).format(
+function formatTime(value: string, localeTag: string): string {
+  return new Intl.DateTimeFormat(localeTag, { hour: 'numeric', minute: '2-digit' }).format(
     new Date(value)
   );
 }
 
-function formatDay(value: string, language: 'en' | 'ar', todayLabel: string, yesterdayLabel: string): string {
+function formatDay(value: string, localeTag: string, todayLabel: string, yesterdayLabel: string): string {
   const date = new Date(value);
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
   if (dayKey(value) === dayKey(today.toISOString())) return todayLabel;
   if (dayKey(value) === dayKey(yesterday.toISOString())) return yesterdayLabel;
-  return new Intl.DateTimeFormat(language === 'ar' ? 'ar-SA-u-ca-gregory' : 'en', { day: 'numeric', month: 'short' }).format(date);
+  return new Intl.DateTimeFormat(localeTag, { day: 'numeric', month: 'short' }).format(date);
 }
 
 const styles = StyleSheet.create({

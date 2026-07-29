@@ -31,7 +31,7 @@ export function AudioGreeting({
   compact,
   onDark,
 }: AudioGreetingProps) {
-  const { language, isRTL, t } = useI18n();
+  const { localeTag, isRTL, t } = useI18n();
   const player = useAudioPlayer(url, {
     updateInterval: 250,
     downloadFirst: true,
@@ -50,7 +50,7 @@ export function AudioGreeting({
   const actualDuration = status.duration || durationSeconds;
   const progress = actualDuration > 0 ? status.currentTime / actualDuration : 0;
   const remaining = Math.max(0, Math.round(actualDuration - status.currentTime));
-  const timeLabel = new Intl.NumberFormat(language === 'ar' ? 'ar-SA' : 'en', {
+  const timeLabel = new Intl.NumberFormat(localeTag, {
     minimumIntegerDigits: 2,
     useGrouping: false,
   }).format(remaining);
