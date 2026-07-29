@@ -3,6 +3,9 @@
 The app's **Delete account** action immediately pauses the profile and closes
 connections. It does not directly delete Auth records or storage objects.
 
+Permanent erasure is eligible **30 days after** the latest deletion request.
+Until then, the profile remains paused and all connections remain closed.
+
 Deploy `finalize-account-deletions` only after setting a high-entropy
 `DELETION_WORKER_SECRET` as an Edge Function secret. Invoke it from a trusted
 scheduled job with that secret in the `x-deletion-worker-secret` header. The
