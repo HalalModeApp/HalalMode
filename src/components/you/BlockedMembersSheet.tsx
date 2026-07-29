@@ -31,9 +31,19 @@ export function BlockedMembersSheet({ visible, onClose }: { visible: boolean; on
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+      accessibilityViewIsModal
+    >
       <View style={styles.backdrop}>
-        <View style={[styles.sheet, isRTL && styles.rtl]}>
+        <View
+          style={[styles.sheet, isRTL && styles.rtl]}
+          accessibilityViewIsModal
+          testID={testIds.settings.blocked}
+        >
           <View style={[styles.header, isRTL && styles.rowReverse]}>
             <View style={styles.headerText}>
               <Text testID={testIds.settings.blockedTitle} variant="displaySmall">{t('settings.blocked')}</Text>
@@ -44,9 +54,15 @@ export function BlockedMembersSheet({ visible, onClose }: { visible: boolean; on
             </Pressable>
           </View>
 
-          {blockedQuery.isPending ? <ActivityIndicator color={color.ink} style={styles.loading} /> : null}
+          {blockedQuery.isPending ? (
+            <ActivityIndicator
+              accessibilityLabel={t('common.loading')}
+              color={color.ink}
+              style={styles.loading}
+            />
+          ) : null}
           {blockedQuery.isError ? (
-            <View style={styles.empty}>
+            <View style={styles.empty} accessibilityRole="alert">
               <Text variant="bodySmall">{t('settings.blockedLoadError')}</Text>
               <Button label={t('common.tryAgain')} variant="secondary" onPress={() => void blockedQuery.refetch()} />
             </View>
@@ -57,7 +73,11 @@ export function BlockedMembersSheet({ visible, onClose }: { visible: boolean; on
           {blockedQuery.data?.length ? (
             <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
               {blockedQuery.data.map((member) => (
-                <Card key={member.id} tone="filled" style={styles.member}>
+                <Card
+                  key={member.id}
+                  tone="filled"
+                  style={{ ...styles.member, ...(isRTL ? styles.rowReverse : {}) }}
+                >
                   <View style={styles.memberText}>
                     <Text variant="label">{member.firstName}</Text>
                     <Text variant="caption">{[member.city, member.country].filter(Boolean).join(', ')}</Text>
