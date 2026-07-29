@@ -17,6 +17,7 @@
         "NSPhotoLibraryUsageDescription": "Halal Mode uses your photo library so you can add clear, recent photos to your profile.",
         "NSCameraUsageDescription": "Halal Mode uses your camera so you can take a clear, recent profile photo.",
         "NSMicrophoneUsageDescription": "Halal Mode uses your microphone to record your voice introduction and voice notes.",
+        "NSLocationWhenInUseUsageDescription": "Halal Mode uses your location while you set up your profile to privately apply your chosen distance preference. Your exact location is never shown to other members.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -47,6 +48,12 @@
         "expo-image-picker",
         {
           "photosPermission": "Halal Mode uses your photo library so you can add clear, recent photos to your profile."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Halal Mode uses your location while you set up your profile to privately apply your chosen distance preference. Your exact location is never shown to other members."
         }
       ],
       "expo-audio",
