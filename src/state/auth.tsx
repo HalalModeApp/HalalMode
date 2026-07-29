@@ -17,6 +17,8 @@ interface AuthValue {
   user: User | null;
   ready: boolean;
   onboardingComplete: boolean;
+  authError: 'invalid_link' | null;
+  clearAuthError: () => void;
   refreshProfileStatus: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -27,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(USE_MOCKS);
   const [onboardingComplete, setOnboardingComplete] = useState(USE_MOCKS);
+  const [authError, setAuthError] = useState<'invalid_link' | null>(null);
 
   const refreshProfileStatus = useCallback(async () => {
     if (USE_MOCKS) return;
@@ -50,12 +53,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const client = supabase;
     let active = true;
 
+    const exchangeCode = async (url: string) => {
+      let code: string | null = null;
+      try {
+        code = new URL(url).searchParams.get('code');
+      } catch {
+        return;
+      }
+      if (!code) return;
+      const { error } = await client.auth.exchangeCodeForSession(code);
+      if (!active) return;
+      setAuthError(error ? 'invalid_link' : null);
+    };
+
     const load = async () => {
       const initialUrl = await Linking.getInitialURL();
-      if (initialUrl) {
-        const code = new URL(initialUrl).searchParams.get('code');
-        if (code) await client.auth.exchangeCodeForSession(code);
-      }
+      if (initialUrl) await exchangeCode(initialUrl);
       const { data } = await client.auth.getUser();
       if (active) {
         setUser(data.user);
@@ -67,12 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const subscription = client.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
       setUser(session?.user ?? null);
+      if (session?.user) setAuthError(null);
       setReady(true);
     });
-    const linking = Linking.addEventListener('url', ({ url }) => {
-      const code = new URL(url).searchParams.get('code');
-      if (code) void client.auth.exchangeCodeForSession(code);
-    });
+    const linking = Linking.addEventListener('url', ({ url }) => void exchangeCode(url));
     return () => {
       active = false;
       subscription.data.subscription.unsubscribe();
@@ -93,9 +104,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!USE_MOCKS) await requireSupabase().auth.signOut();
   }, []);
 
+  const clearAuthError = useCallback(() => setAuthError(null), []);
+
   const value = useMemo(
-    () => ({ user, ready, onboardingComplete, refreshProfileStatus, signOut }),
-    [user, ready, onboardingComplete, refreshProfileStatus, signOut]
+    () => ({ user, ready, onboardingComplete, authError, clearAuthError, refreshProfileStatus, signOut }),
+    [user, ready, onboardingComplete, authError, clearAuthError, refreshProfileStatus, signOut]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -8,11 +8,13 @@ import { useI18n } from '@/i18n';
 import { requireSupabase } from '@/lib/supabase';
 import { testIds } from '@/lib/testIds';
 import { useSession } from '@/state/session';
+import { useAuth } from '@/state/auth';
 import { color, radius, space } from '@/theme/tokens';
 
 export default function AuthScreen() {
   const { t, isRTL } = useI18n();
   const { language, setLanguage } = useSession();
+  const { authError, clearAuthError } = useAuth();
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [secondsUntilResend, setSecondsUntilResend] = useState(0);
@@ -32,6 +34,7 @@ export default function AuthScreen() {
       Alert.alert(t('auth.invalidEmail'));
       return;
     }
+    clearAuthError();
     setSending(true);
     try {
       const { error } = await requireSupabase().auth.signInWithOtp({
@@ -74,6 +77,11 @@ export default function AuthScreen() {
         </View>
         <View style={styles.form}>
           <Text variant="label" style={isRTL ? styles.rtlText : undefined}>{t('auth.email')}</Text>
+          {authError === 'invalid_link' ? (
+            <Text accessibilityRole="alert" variant="caption" style={[styles.authError, isRTL && styles.rtlText]}>
+              {t('auth.linkInvalid')}
+            </Text>
+          ) : null}
           <TextInput
             testID={testIds.auth.email}
             accessibilityLabel={t('auth.email')}
@@ -110,6 +118,7 @@ const styles = StyleSheet.create({
   languageLabel: { fontFamily: 'Beiruti_600SemiBold', fontSize: 13, color: color.ink },
   title: { marginTop: 10, fontSize: 32, lineHeight: 38 },
   copy: { marginTop: 12, maxWidth: 310 },
+  authError: { color: color.inkSoft, lineHeight: 18 },
   form: { gap: 10 },
   input: {
     borderWidth: 1, borderColor: '#D9D6CE', borderRadius: radius.lg,
