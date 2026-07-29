@@ -12,6 +12,7 @@ import {
 import { fetchCurrentRound, releaseIntroduction, submitKeeps } from '@/api/introductions';
 import { queryKeys } from '@/lib/queryClient';
 import { getRoundInteractionState, resolveActiveId } from '@/lib/roundInvariants';
+import { useAuth } from '@/state/auth';
 import { useSession } from '@/state/session';
 import { TIER_LIMITS, type Introduction, type IntroductionRound } from '@/types';
 
@@ -69,6 +70,8 @@ const RoundContext = createContext<RoundValue | null>(null);
  */
 export function RoundProvider({ children }: { children: ReactNode }) {
   const { tier } = useSession();
+  const { user } = useAuth();
+  const memberId = user?.id;
   const queryClient = useQueryClient();
 
   const [released, setReleased] = useState<Record<string, true>>({});
@@ -183,6 +186,17 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     setSubmitted(false);
     void queryClient.invalidateQueries({ queryKey: queryKeys.round });
   }, [queryClient]);
+
+  useEffect(() => {
+    // Query data is cleared at the auth boundary. These are interaction-local
+    // values, so reset them separately before a different member sees a round.
+    setReleased({});
+    setReleasing({});
+    setReleaseFailure(null);
+    setActiveId(null);
+    setPopMode(false);
+    setSubmitted(false);
+  }, [memberId]);
 
   const value = useMemo<RoundValue>(
     () => ({
