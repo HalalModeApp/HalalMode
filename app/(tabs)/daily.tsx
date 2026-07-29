@@ -66,6 +66,7 @@ export default function DailyScreen() {
     submit,
     submitting,
     submitted,
+    waitingForConnection,
     submitError,
     reset,
   } = useRound();
@@ -238,7 +239,7 @@ export default function DailyScreen() {
   }
 
   if (submitted) {
-    return <SetCompleteState onReset={reset} />;
+    return <SetCompleteState onReset={reset} waitingForConnection={waitingForConnection} />;
   }
 
   // The last introduction standing gets a named release instead of a toggle.
@@ -417,7 +418,7 @@ export default function DailyScreen() {
  * The end of the round. Deliberately a dead end — no refresh, no "see more".
  * The reference is explicit that the empty state should close the session.
  */
-function SetCompleteState({ onReset }: { onReset: () => void }) {
+function SetCompleteState({ onReset, waitingForConnection }: { onReset: () => void; waitingForConnection: boolean }) {
   const { t, isRTL } = useI18n();
   return (
     <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
@@ -430,6 +431,7 @@ function SetCompleteState({ onReset }: { onReset: () => void }) {
         <Text variant="bodySmall" center style={styles.completeBody}>
           {t('daily.completeBody')}
         </Text>
+        {waitingForConnection ? <InlineNotice message={t('daily.waitingConnection')} /> : null}
         {USE_MOCKS ? (
           <Button
             label={t('daily.demoAgain')}

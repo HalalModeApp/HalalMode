@@ -54,6 +54,8 @@ interface RoundValue {
   submit: (keptIntroductionIds?: string[]) => Promise<string[]>;
   /** True once keeps are submitted — drives the "Nothing more today" state. */
   submitted: boolean;
+  /** A mutual is held only until both members have an open conversation slot. */
+  waitingForConnection: boolean;
   submitError: string | null;
 
   reset: () => void;
@@ -78,6 +80,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [popMode, setPopMode] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [waitingForConnection, setWaitingForConnection] = useState(false);
   const [releasing, setReleasing] = useState<Record<string, true>>({});
   const [releaseFailure, setReleaseFailure] = useState<{ id: string; message: string } | null>(null);
 
@@ -163,8 +166,9 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       if (!round) return { mutualProfileIds: [] };
       return submitKeeps(round.id, keptIntroductionIds);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       setSubmitted(true);
+      setWaitingForConnection((result.waitingMutualProfileIds?.length ?? 0) > 0);
       void queryClient.invalidateQueries({ queryKey: queryKeys.connections });
     },
   });
@@ -184,6 +188,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     setActiveId(null);
     setPopMode(false);
     setSubmitted(false);
+    setWaitingForConnection(false);
     void queryClient.invalidateQueries({ queryKey: queryKeys.round });
   }, [queryClient]);
 
@@ -196,6 +201,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     setActiveId(null);
     setPopMode(false);
     setSubmitted(false);
+    setWaitingForConnection(false);
   }, [memberId]);
 
   const value = useMemo<RoundValue>(
@@ -226,6 +232,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       submitting: submitMutation.isPending,
       submit,
       submitted,
+      waitingForConnection,
       submitError: submitMutation.error instanceof Error ? submitMutation.error.message : null,
       reset,
     }),
@@ -248,6 +255,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       submitMutation.isPending,
       submit,
       submitted,
+      waitingForConnection,
       submitMutation.error,
       reset,
     ]
