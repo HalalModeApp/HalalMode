@@ -8,7 +8,7 @@ select ok(
   'members cannot call the compatibility helper directly'
 );
 select ok(
-  position('compatibilityBreakdown' in pg_get_functiondef('public.get_connection(uuid)'::regprocedure)) > 0,
+  position('compatibilityBreakdown' in pg_get_functiondef('halal_mode_private.get_connection_after_legal_consent(uuid)'::regprocedure)) > 0,
   'the authorised connection response includes the compatibility contract'
 );
 
@@ -21,6 +21,15 @@ insert into profiles (
 ) values
   ('00000000-0000-0000-0000-000000000221', 'Compatibility A', 'A', '1990-01-01', 'male', 'Lebanon', 'open', 'practicing', 'within_1_year', 'open_to_children', true),
   ('00000000-0000-0000-0000-000000000222', 'Compatibility B', 'B', '1991-01-01', 'female', 'Peru', 'open', 'practicing', 'within_1_year', 'open_to_children', true);
+insert into halal_mode_private.member_legal_consent_history
+  (user_id, document_type, version, acceptance_context)
+select p.id, d.document_type, d.version, 'reacceptance'
+from profiles p
+cross join halal_mode_private.legal_document_registry d
+where p.id in (
+  '00000000-0000-0000-0000-000000000221',
+  '00000000-0000-0000-0000-000000000222'
+) and d.is_current;
 insert into connections (id, user_a, user_b, stage, recap) values
   ('00000000-0000-0000-0000-000000002201', '00000000-0000-0000-0000-000000000221', '00000000-0000-0000-0000-000000000222', 'recap',
    '[{"questionId":"q1","verdict":"aligned"}]'::jsonb);

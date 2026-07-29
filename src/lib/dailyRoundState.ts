@@ -3,6 +3,7 @@ export const dailyRoundStatuses = [
   'profile_not_ready',
   'no_suitable_introductions',
   'matching_inputs_unavailable',
+  'legal_consent_required',
 ] as const;
 
 export type DailyRoundStatus = (typeof dailyRoundStatuses)[number];

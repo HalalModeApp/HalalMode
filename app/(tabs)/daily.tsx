@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -119,6 +119,12 @@ export default function DailyScreen() {
     );
   }, [popMode, popPulse, reducedMotion]);
 
+  useEffect(() => {
+    if (emptyReason === 'legal_consent_required') {
+      router.replace('/legal-consent' as Href);
+    }
+  }, [emptyReason]);
+
   const popPulseStyle = useAnimatedStyle(() => ({
     opacity: popPulse.value * 0.7,
     transform: [{ scale: 1 + popPulse.value * 0.1 }],
@@ -227,6 +233,15 @@ export default function DailyScreen() {
             onPress={() => router.push({ pathname: '/(tabs)/you', params: { tab: onlyPreferencesMissing ? 'private' : 'profile' } })}
           />
         </View>
+      </Screen>
+    );
+  }
+
+  if (emptyReason === 'legal_consent_required') {
+    return (
+      <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
+        <BrandHeader />
+        <LoadingState label={t('legal.redirecting')} />
       </Screen>
     );
   }

@@ -1,6 +1,12 @@
 /** Stable semantic selectors for native automation; do not use coordinates. */
 export const testIds = {
   auth: { email: 'auth-email', submit: 'auth-send-link', language: 'auth-language' },
+  legal: {
+    consent: 'legal-current-consent',
+    submit: 'legal-accept-current',
+    terms: 'legal-terms-link',
+    privacy: 'legal-privacy-link',
+  },
   onboarding: {
     next: 'onboarding-next',
     back: 'onboarding-back',

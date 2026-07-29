@@ -75,6 +75,7 @@ export default function RootLayout() {
                         >
                           <Stack.Screen name="auth" />
                           <Stack.Screen name="onboarding" />
+                          <Stack.Screen name="legal-consent" options={{ gestureEnabled: false }} />
                           <Stack.Screen name="(tabs)" />
                           <Stack.Screen
                             name="introduction/[id]"

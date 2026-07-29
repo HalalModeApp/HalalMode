@@ -15,6 +15,15 @@ insert into auth.users (id, email) values
 insert into profiles (id, name, first_name, birth_date, gender, city, country, onboarding_complete) values
   ('00000000-0000-0000-0000-000000000331', 'Blocker', 'Blocker', '1990-01-01', 'female', 'Jeddah', 'Saudi Arabia', true),
   ('00000000-0000-0000-0000-000000000332', 'Blocked', 'Blocked', '1990-01-01', 'male', 'Madinah', 'Saudi Arabia', true);
+insert into halal_mode_private.member_legal_consent_history
+  (user_id, document_type, version, acceptance_context)
+select p.id, d.document_type, d.version, 'reacceptance'
+from profiles p
+cross join halal_mode_private.legal_document_registry d
+where p.id in (
+  '00000000-0000-0000-0000-000000000331',
+  '00000000-0000-0000-0000-000000000332'
+) and d.is_current;
 insert into blocks (blocker_id, blocked_id) values
   ('00000000-0000-0000-0000-000000000331', '00000000-0000-0000-0000-000000000332');
 do $$ begin

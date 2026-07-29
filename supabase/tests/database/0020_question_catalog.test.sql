@@ -21,11 +21,11 @@ select ok(
   'clients cannot inspect or forge agreed question snapshots'
 );
 select ok(
-  position('question_catalog' in pg_get_functiondef('public.submit_question_picks(uuid,text[])'::regprocedure)) > 0,
+  position('question_catalog' in pg_get_functiondef('halal_mode_private.submit_question_picks_after_legal_consent(uuid,text[])'::regprocedure)) > 0,
   'question submission validates against the catalog'
 );
 select ok(
-  position('connection_questions' in pg_get_functiondef('public.submit_answer(uuid,text,text)'::regprocedure)) > 0,
+  position('connection_questions' in pg_get_functiondef('halal_mode_private.submit_answer_after_legal_consent(uuid,text,text)'::regprocedure)) > 0,
   'answer submission validates against the connection snapshot'
 );
 
@@ -39,6 +39,18 @@ insert into profiles (id, name, first_name, birth_date, gender, onboarding_compl
   ('00000000-0000-0000-0000-000000000202', 'Question B', 'B', '1990-01-01', 'female', true),
   ('00000000-0000-0000-0000-000000000203', 'Question C', 'C', '1990-01-01', 'male', true),
   ('00000000-0000-0000-0000-000000000204', 'Question D', 'D', '1990-01-01', 'female', true);
+
+insert into halal_mode_private.member_legal_consent_history
+  (user_id, document_type, version, acceptance_context)
+select p.id, d.document_type, d.version, 'reacceptance'
+from profiles p
+cross join halal_mode_private.legal_document_registry d
+where p.id in (
+  '00000000-0000-0000-0000-000000000201',
+  '00000000-0000-0000-0000-000000000202',
+  '00000000-0000-0000-0000-000000000203',
+  '00000000-0000-0000-0000-000000000204'
+) and d.is_current;
 insert into connections (id, user_a, user_b, stage) values
   ('00000000-0000-0000-0000-000000002001', '00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000202', 'choosing_questions'),
   ('00000000-0000-0000-0000-000000002002', '00000000-0000-0000-0000-000000000203', '00000000-0000-0000-0000-000000000204', 'choosing_questions');

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -18,7 +19,9 @@ import { Text } from '@/components/ui/Text';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useI18n, type Translate } from '@/i18n';
 import { requireSupabase } from '@/lib/supabase';
-import { LEGAL_DOCUMENTS } from '@/lib/legalDocuments';
+import { fetchMyLegalConsentStatus } from '@/api/legalConsent';
+import { documentFromStatus, type LegalConsentStatus } from '@/lib/legalConsent';
+import { queryKeys } from '@/lib/queryClient';
 import {
   clearOnboardingDraft,
   clearLegacyOnboardingDraft,
@@ -80,6 +83,10 @@ export default function OnboardingScreen() {
   const [locating, setLocating] = useState(false);
   const [ageConfirmationOpen, setAgeConfirmationOpen] = useState(false);
   const [legalAccepted, setLegalAccepted] = useState(false);
+  const legalStatusQuery = useQuery({
+    queryKey: queryKeys.legalConsent,
+    queryFn: fetchMyLegalConsentStatus,
+  });
 
   useEffect(() => {
     let active = true;
@@ -176,6 +183,8 @@ export default function OnboardingScreen() {
   };
 
   const complete = async () => {
+    const terms = documentFromStatus(legalStatusQuery.data, 'terms');
+    const privacy = documentFromStatus(legalStatusQuery.data, 'privacy');
     const allErrors = [1, 2, 3].reduce<ValidationErrors>(
       (current, currentStep) => ({
         ...current,
@@ -184,7 +193,8 @@ export default function OnboardingScreen() {
       {}
     );
     if (!legalAccepted) allErrors.legal = t('onboarding.error.legal');
-    if (Object.keys(allErrors).length > 0 || !birthDate || !draft.gender || !legalAccepted) {
+    if (!terms || !privacy) allErrors.legal = t('onboarding.legalUnavailable');
+    if (Object.keys(allErrors).length > 0 || !birthDate || !draft.gender || !legalAccepted || !terms || !privacy) {
       setErrors(allErrors);
       setSubmitError(t('onboarding.submitCheck'));
       return;
@@ -202,8 +212,8 @@ export default function OnboardingScreen() {
         p_country: draft.country.trim(),
         p_latitude: draft.latitude,
         p_longitude: draft.longitude,
-        p_terms_version: LEGAL_DOCUMENTS.terms.version,
-        p_privacy_version: LEGAL_DOCUMENTS.privacy.version,
+        p_terms_version: terms.version,
+        p_privacy_version: privacy.version,
       });
       if (error) throw error;
       await clearOnboardingDraft(draftMemberId);
@@ -285,7 +295,18 @@ export default function OnboardingScreen() {
           {step === 3 ? (
             <LocationStep draft={draft} errors={errors} locating={locating} />
           ) : null}
-          {step === 4 ? <ReviewStep draft={draft} birthDate={birthDate} legalAccepted={legalAccepted} onLegalAcceptedChange={setLegalAccepted} legalError={errors.legal} /> : null}
+          {step === 4 ? (
+            <ReviewStep
+              draft={draft}
+              birthDate={birthDate}
+              legalAccepted={legalAccepted}
+              onLegalAcceptedChange={setLegalAccepted}
+              legalError={errors.legal}
+              legalStatus={legalStatusQuery.data}
+              legalStatusError={legalStatusQuery.isError}
+              onRetryLegal={() => void legalStatusQuery.refetch()}
+            />
+          ) : null}
 
           {submitError ? (
             <View
@@ -484,14 +505,23 @@ function ReviewStep({
   legalAccepted,
   onLegalAcceptedChange,
   legalError,
+  legalStatus,
+  legalStatusError,
+  onRetryLegal,
 }: {
   draft: OnboardingDraft;
   birthDate: string | null;
   legalAccepted: boolean;
   onLegalAcceptedChange: (value: boolean) => void;
   legalError?: string;
+  legalStatus?: LegalConsentStatus;
+  legalStatusError: boolean;
+  onRetryLegal: () => void;
 }) {
   const { t, localeTag, isRTL } = useI18n();
+  const terms = documentFromStatus(legalStatus, 'terms');
+  const privacy = documentFromStatus(legalStatus, 'privacy');
+  const legalDocumentsReady = !!terms && !!privacy;
   return (
     <View>
       <StepHeading
@@ -514,8 +544,9 @@ function ReviewStep({
       <Pressable
         testID={testIds.onboarding.legalConsent}
         accessibilityRole="checkbox"
-        accessibilityState={{ checked: legalAccepted }}
+        accessibilityState={{ checked: legalAccepted, disabled: !legalDocumentsReady }}
         accessibilityLabel={t('onboarding.legalConsent')}
+        disabled={!legalDocumentsReady}
         onPress={() => onLegalAcceptedChange(!legalAccepted)}
         style={[styles.legalConsent, isRTL && styles.rowReverse, legalAccepted && styles.legalConsentSelected]}
       >
@@ -525,15 +556,21 @@ function ReviewStep({
         <Text variant="caption" style={styles.legalConsentText}>{t('onboarding.legalConsent')}</Text>
       </Pressable>
       <View style={[styles.legalLinks, isRTL && styles.rowReverse]}>
-        <Pressable accessibilityRole="link" accessibilityLabel={t('onboarding.termsLink')} onPress={() => void Linking.openURL(LEGAL_DOCUMENTS.terms.url)}>
+        <Pressable disabled={!terms} accessibilityRole="link" accessibilityLabel={t('onboarding.termsLink')} onPress={() => terms && void Linking.openURL(terms.url)}>
           <Text style={styles.legalLink}>{t('onboarding.termsLink')}</Text>
         </Pressable>
         <Text variant="caption">{t('onboarding.legalAnd')}</Text>
-        <Pressable accessibilityRole="link" accessibilityLabel={t('onboarding.privacyLink')} onPress={() => void Linking.openURL(LEGAL_DOCUMENTS.privacy.url)}>
+        <Pressable disabled={!privacy} accessibilityRole="link" accessibilityLabel={t('onboarding.privacyLink')} onPress={() => privacy && void Linking.openURL(privacy.url)}>
           <Text style={styles.legalLink}>{t('onboarding.privacyLink')}</Text>
         </Pressable>
       </View>
       {legalError ? <InlineError message={legalError} /> : null}
+      {!legalDocumentsReady ? (
+        <View style={styles.legalLoadError}>
+          <InlineError message={legalStatusError ? t('onboarding.legalUnavailable') : t('onboarding.legalLoading')} />
+          {legalStatusError ? <Button label={t('common.tryAgain')} variant="quiet" onPress={onRetryLegal} /> : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -809,6 +846,7 @@ const styles = StyleSheet.create({
   legalConsentText: { flex: 1, color: color.ink },
   legalLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   legalLink: { fontFamily: font.bodySemi, fontSize: 12, color: color.ink, textDecorationLine: 'underline' },
+  legalLoadError: { marginTop: 8 },
   submitError: {
     marginTop: 18,
     padding: 14,

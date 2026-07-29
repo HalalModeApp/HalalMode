@@ -21,6 +21,7 @@ export const queryKeys = {
   session: ['session'] as const,
   profile: (id: string) => ['profile', id] as const,
   profileReadiness: ['profile-readiness'] as const,
+  legalConsent: ['legal-consent'] as const,
   preferences: ['preferences'] as const,
   round: ['round'] as const,
   connections: ['connections'] as const,

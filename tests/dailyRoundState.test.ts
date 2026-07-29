@@ -8,6 +8,7 @@ test('accepts only the documented privacy-safe daily round statuses', () => {
   assert.equal(normalizeDailyRoundStatus('profile_not_ready'), 'profile_not_ready');
   assert.equal(normalizeDailyRoundStatus('no_suitable_introductions'), 'no_suitable_introductions');
   assert.equal(normalizeDailyRoundStatus('matching_inputs_unavailable'), 'matching_inputs_unavailable');
+  assert.equal(normalizeDailyRoundStatus('legal_consent_required'), 'legal_consent_required');
 });
 
 test('unknown server reasons fall back to the least revealing empty state', () => {
