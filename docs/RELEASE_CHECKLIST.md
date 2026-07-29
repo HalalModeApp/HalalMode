@@ -56,7 +56,7 @@ command output, device build, or deployment URL attached to the release record.
 These are release blockers for a production claim, not optional polish:
 
 - Maestro or equivalent end-to-end flows built on stable `testID`s.
-- Local Supabase configuration and Docker-backed pgTAP execution in CI.
+- First passing Docker-backed pgTAP CI run for the candidate commit.
 - Real-device coverage across the four-size matrix.
 - Accessibility tree/screen-reader assertions and Arabic cold-restart checks.
 - Chat pagination/offline outbox/retry tests, gallery memory measurement, and

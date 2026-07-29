@@ -19,13 +19,15 @@ or production verification.
 - Profile voice introductions use `expo-audio` and private storage. Chat voice
   sending and actual calling remain unavailable by design until a provider,
   consent model, abuse controls, and retention policy are approved.
-- Migrations through `0035` and matching pgTAP contracts are committed locally.
-  They still need isolated pgTAP validation, deployment, and remote verification
-  before their server-side changes can be called live.
+- Migrations through `0035`, matching pgTAP contracts, and an isolated
+  Docker-backed GitHub Actions contract job are committed locally. They still
+  need their first successful remote CI run, deployment, and hosted-project
+  verification before their server-side changes can be called live.
 
 ## What is not release-ready
 
-1. No committed Supabase local configuration/CI job runs pgTAP automatically.
+1. The isolated pgTAP CI job is wired but has not yet run remotely because the
+   branch has not been pushed; this machine also has no Docker/Podman runtime.
 2. Maestro source contracts and stable test IDs cover key paths, but they have
    not run against a configured native build with controlled test accounts.
 3. The native matrix, Arabic cold-restart behavior, screen reader behavior, and
@@ -49,8 +51,7 @@ or production verification.
 
 ## Safe next steps
 
-1. Add a local Supabase config deliberately, then run `supabase db reset --local`
-   and `supabase test db`; only then enable the database CI job.
+1. Push the branch and record the first passing isolated database CI result.
 2. Run the release checklist for the pending migrations and current client work.
 3. Validate native builds on the four-size matrix rather than trusting stale
    emulator content or browser previews.
