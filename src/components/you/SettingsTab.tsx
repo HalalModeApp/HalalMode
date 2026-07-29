@@ -15,6 +15,7 @@ import { useSession } from '@/state/session';
 import { useAuth } from '@/state/auth';
 import { useFeatureFlags } from '@/state/featureFlags';
 import { USE_MOCKS } from '@/lib/supabase';
+import { testIds } from '@/lib/testIds';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 import { TIER_LIMITS } from '@/types';
 
@@ -157,6 +158,7 @@ export function SettingsTab({
           subtitle={t('settings.blockedBody')}
           trailing={
             <Pressable
+              testID={testIds.settings.blocked}
               accessibilityRole="button"
               accessibilityLabel={t('settings.blocked')}
               onPress={() => setBlockedOpen(true)}
@@ -197,6 +199,7 @@ export function SettingsTab({
           title={t('settings.notifications')}
           subtitle={t('settings.notificationsBody')}
           value={notificationsQuery.data ?? false}
+          testID={testIds.settings.notifications}
           disabled={!pushNotifications || notifications.isPending}
           onValueChange={(enabled) => notifications.mutate(enabled)}
           badge={!pushNotifications ? t('settings.comingLater') : undefined}
@@ -409,6 +412,7 @@ function SettingRow({
   onValueChange,
   badge,
   trailing,
+  testID,
 }: {
   title: string;
   subtitle: string;
@@ -417,11 +421,13 @@ function SettingRow({
   onValueChange?: (next: boolean) => void;
   badge?: string;
   trailing?: React.ReactNode;
+  testID?: string;
 }) {
   const { isRTL } = useI18n();
   const control =
     typeof value === 'boolean' ? (
       <Switch
+        testID={testID}
         accessibilityLabel={title}
         value={value}
         disabled={disabled}

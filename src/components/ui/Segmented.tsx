@@ -8,6 +8,7 @@ export interface SegmentedProps<T extends string> {
   options: { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
+  testIDPrefix?: string;
 }
 
 /** The pill-track tab switcher used on the You screen and its Private sub-tabs. */
@@ -15,6 +16,7 @@ export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  testIDPrefix,
 }: SegmentedProps<T>) {
   const { isRTL } = useI18n();
   return (
@@ -24,6 +26,7 @@ export function Segmented<T extends string>({
         return (
           <Pressable
             key={option.value}
+            testID={testIDPrefix ? `${testIDPrefix}-${option.value}` : undefined}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
             onPress={() => onChange(option.value)}

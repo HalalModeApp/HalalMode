@@ -76,6 +76,7 @@ export default function YouScreen() {
         <Segmented
           value={tab}
           onChange={setTab}
+          testIDPrefix="you-tab"
           options={[
             { value: 'profile', label: t('you.tab.profile') },
             { value: 'private', label: t('you.tab.matching') },

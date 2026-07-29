@@ -75,6 +75,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
 
           return (
             <Pressable
+              testID={`tab-${route.name}`}
               key={route.key}
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}

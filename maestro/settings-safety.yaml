@@ -1,0 +1,13 @@
+appId: com.halalmode.app
+---
+# Runs in an isolated seeded session; navigation and actions use stable IDs.
+- launchApp
+- tapOn:
+    id: tab-you
+- tapOn:
+    id: you-tab-settings
+- assertVisible:
+    id: settings-blocked-members
+- tapOn:
+    id: settings-blocked-members
+- assertVisible: Blocked people
