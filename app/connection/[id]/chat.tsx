@@ -36,6 +36,7 @@ import { retryAllInOrder } from '@/lib/retryPolicy';
 import { supabase, USE_MOCKS } from '@/lib/supabase';
 import { testIds } from '@/lib/testIds';
 import { useAuth } from '@/state/auth';
+import { useFeatureFlags } from '@/state/featureFlags';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 import type { ChatMessage } from '@/types';
 import type { MessagePage } from '@/api/connections';
@@ -48,6 +49,7 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { isRTL, t } = useI18n();
   const { user } = useAuth();
+  const { inChatVoiceNotes, liveCalling } = useFeatureFlags();
   const queryClient = useQueryClient();
   const listRef = useRef<FlatList<ConversationItem>>(null);
   const shouldScrollToEndRef = useRef(true);
@@ -359,17 +361,17 @@ export default function ChatScreen() {
             </Text>
           </View>
 
+          {liveCalling ? (
           <Pressable
             testID={testIds.chat.call}
             accessibilityRole="button"
             accessibilityLabel={t('chat.callA11y', { name: connection.profile.firstName })}
-            // A release flag is not a calling provider. Real members must never
-            // be shown a simulated connection as though it were a live call.
-            onPress={() => setCallState(USE_MOCKS ? 'calling' : 'unavailable')}
+            onPress={() => setCallState('calling')}
             style={styles.callButton}
           >
             <Text style={styles.callGlyph}>☎</Text>
           </Pressable>
+          ) : null}
 
           <Pressable
             testID={testIds.chat.safety}
@@ -491,21 +493,21 @@ export default function ChatScreen() {
             multiline
             maxLength={2000}
           />
+          {inChatVoiceNotes ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('chat.recordUnavailable')}
-            accessibilityState={{ disabled: !USE_MOCKS }}
-            disabled={!USE_MOCKS}
             onPress={() =>
               Alert.alert(
                 t('chat.voiceTitle'),
                 t('chat.voiceBody')
               )
             }
-            style={[styles.recordButton, !USE_MOCKS && styles.controlDisabled]}
+            style={styles.recordButton}
           >
             <Text style={styles.recordGlyph}>●</Text>
           </Pressable>
+          ) : null}
           <Pressable
             testID={testIds.chat.send}
             accessibilityRole="button"

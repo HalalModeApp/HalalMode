@@ -21,7 +21,7 @@ export async function fetchMyProfileReadiness(): Promise<ProfileReadinessStatus>
   const payload = (data ?? {}) as Record<string, unknown>;
   const missing = Array.isArray(payload.missing)
     ? payload.missing.filter((item): item is ProfileReadinessIssue =>
-      item === 'name' || item === 'location' || item === 'bio' || item === 'photo'
+      item === 'name' || item === 'location' || item === 'bio' || item === 'photo' || item === 'preferences'
     )
     : [];
   return { ready: payload.ready === true, missing };

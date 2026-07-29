@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { fetchConnections } from '@/api/connections';
@@ -21,6 +22,7 @@ type Tab = 'profile' | 'private' | 'settings';
 
 export default function YouScreen() {
   const { t, isRTL } = useI18n();
+  const { tab: requestedTab } = useLocalSearchParams<{ tab?: string }>();
   const [tab, setTab] = useState<Tab>('profile');
   const { live } = useRound();
 
@@ -38,6 +40,12 @@ export default function YouScreen() {
     queryKey: queryKeys.connections,
     queryFn: fetchConnections,
   });
+
+  useEffect(() => {
+    if (requestedTab === 'profile' || requestedTab === 'private' || requestedTab === 'settings') {
+      setTab(requestedTab);
+    }
+  }, [requestedTab]);
 
   if (profileQuery.isPending || preferencesQuery.isPending) {
     return (
@@ -108,7 +116,7 @@ export default function YouScreen() {
           </View>
         </View>
 
-        {tab === 'profile' ? <ProfileTab profile={profile} /> : null}
+        {tab === 'profile' ? <ProfileTab profile={profile} onOpenPreferences={() => setTab('private')} /> : null}
         {tab === 'private' ? <PrivateTab preferences={preferences} /> : null}
         {tab === 'settings' ? (
           <SettingsTab

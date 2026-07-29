@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
@@ -26,6 +26,7 @@ import {
   formatHeightImperial,
 } from '@/data/preferences';
 import { alpha, color, font, radius } from '@/theme/tokens';
+import { queryKeys } from '@/lib/queryClient';
 import type { MarriageTimeline, PrivatePreferences, ReligiousPractice } from '@/types';
 
 type SubTab = 'them' | 'you';
@@ -43,9 +44,14 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
   const [draft, setDraft] = useState(preferences);
   const [countrySheet, setCountrySheet] = useState(false);
   const [clearConfirm, setClearConfirm] = useState(false);
+  const queryClient = useQueryClient();
 
   const save = useMutation({
     mutationFn: () => updateMyPreferences(draft),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.profileReadiness });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.preferences });
+    },
   });
 
   const patch = <K extends keyof PrivatePreferences>(

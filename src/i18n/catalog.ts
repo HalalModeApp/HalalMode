@@ -112,6 +112,9 @@ export const en = {
   'daily.loadErrorBody': 'We could not load today’s introductions. Your choices have not changed.',
   'daily.emptyTitle': 'No introductions yet',
   'daily.emptyBody': 'Your next reciprocal set will appear after Fajr in Madinah.',
+  'daily.readinessTitle': 'Finish your introduction first',
+  'daily.readinessBody': 'Add a clear photo, a short bio, your location and matching preferences before we prepare introductions for you.',
+  'daily.finishProfile': 'Finish my introduction',
   'daily.today': 'Today · resets at Fajr',
   'daily.title': '{{count}} introductions,\none at a time.',
   'daily.demoResetLabel': 'Start the demo round again',
@@ -590,6 +593,8 @@ export const en = {
   'profile.readinessLocation': 'your location',
   'profile.readinessBio': 'a short biography',
   'profile.readinessPhoto': 'a clear photo',
+  'profile.readinessPreferences': 'your matching preferences',
+  'profile.openMatchingPreferences': 'Open matching preferences',
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -706,6 +711,9 @@ export const ar: TranslationCatalog = {
   'daily.loadErrorBody': 'لم نتمكن من تحميل تعارف اليوم. لم تتغير اختياراتك.',
   'daily.emptyTitle': 'لا يوجد تعارف بعد',
   'daily.emptyBody': 'ستظهر مجموعتك التالية بعد فجر المدينة المنورة.',
+  'daily.readinessTitle': 'أكمل تقديمك أولاً',
+  'daily.readinessBody': 'أضف صورة واضحة ونبذة قصيرة وموقعك وتفضيلات المطابقة قبل أن نُعدّ لك التعارف.',
+  'daily.finishProfile': 'إكمال تقديمي',
   'daily.today': 'اليوم · تتجدد عند الفجر',
   'daily.title': '{{count}} تعارفات،\nواحدًا تلو الآخر.',
   'daily.demoResetLabel': 'بدء الجولة التجريبية من جديد',
@@ -1180,4 +1188,6 @@ export const ar: TranslationCatalog = {
   'profile.readinessLocation': 'موقعك',
   'profile.readinessBio': 'نبذة قصيرة',
   'profile.readinessPhoto': 'صورة واضحة',
+  'profile.readinessPreferences': 'تفضيلات المطابقة',
+  'profile.openMatchingPreferences': 'فتح تفضيلات المطابقة',
 };

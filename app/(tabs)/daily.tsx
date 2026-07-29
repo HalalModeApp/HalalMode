@@ -1,6 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -24,7 +25,9 @@ import { Text } from '@/components/ui/Text';
 import { useCameraShake } from '@/hooks/useCameraShake';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useI18n } from '@/i18n';
+import { fetchMyProfileReadiness } from '@/api/profile';
 import { trackProductEvent } from '@/lib/analytics';
+import { queryKeys } from '@/lib/queryClient';
 import { acceptConduct, hasAcceptedConduct } from '@/lib/conductAcknowledgement';
 import { playPop, startShimmer, stopShimmer } from '@/lib/sound';
 import { USE_MOCKS } from '@/lib/supabase';
@@ -36,6 +39,11 @@ import { alpha, color, font, radius, space } from '@/theme/tokens';
 export default function DailyScreen() {
   const { t, isRTL } = useI18n();
   const { user } = useAuth();
+  const readinessQuery = useQuery({
+    queryKey: queryKeys.profileReadiness,
+    queryFn: fetchMyProfileReadiness,
+    enabled: !USE_MOCKS,
+  });
   const {
     round,
     isLoading,
@@ -193,6 +201,26 @@ export default function DailyScreen() {
           message={t('daily.loadErrorBody')}
           onRetry={refresh}
         />
+      </Screen>
+    );
+  }
+
+  if (!round && readinessQuery.data && !readinessQuery.data.ready) {
+    const onlyPreferencesMissing = readinessQuery.data.missing.length === 1
+      && readinessQuery.data.missing[0] === 'preferences';
+    return (
+      <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
+        <BrandHeader />
+        <View style={styles.readinessEmpty}>
+          <EmptyState
+            title={t('daily.readinessTitle')}
+            message={t('daily.readinessBody')}
+          />
+          <Button
+            label={t('daily.finishProfile')}
+            onPress={() => router.push({ pathname: '/(tabs)/you', params: { tab: onlyPreferencesMissing ? 'private' : 'profile' } })}
+          />
+        </View>
       </Screen>
     );
   }
@@ -494,4 +522,5 @@ const styles = StyleSheet.create({
   completeTitle: { marginTop: 4 },
   completeBody: { maxWidth: 250 },
   completeReset: { marginTop: space.sm },
+  readinessEmpty: { flex: 1, paddingHorizontal: 26, paddingBottom: 30 },
 });

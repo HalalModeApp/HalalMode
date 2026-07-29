@@ -11,7 +11,13 @@ const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
  * network. Set `EXPO_PUBLIC_USE_MOCKS=0` and supply credentials to go live.
  */
 export const USE_MOCKS =
-  process.env.EXPO_PUBLIC_USE_MOCKS === '1' || !url || !anonKey;
+  process.env.EXPO_PUBLIC_USE_MOCKS === '1';
+
+if (!USE_MOCKS && (!url || !anonKey)) {
+  throw new Error(
+    'Live Halal Mode builds require EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY. Set EXPO_PUBLIC_USE_MOCKS=1 only for intentional demo builds.'
+  );
+}
 
 /**
  * Single Supabase client. Native bearer sessions persist in the OS secure

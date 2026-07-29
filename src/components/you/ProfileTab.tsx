@@ -57,7 +57,7 @@ function profileSchema(t: Translate) {
 
 type FormValues = z.infer<ReturnType<typeof profileSchema>>;
 
-export function ProfileTab({ profile }: { profile: Profile }) {
+export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; onOpenPreferences?: () => void }) {
   const { localeTag, isRTL, t } = useI18n();
   const schema = useMemo(() => profileSchema(t), [t]);
   const queryClient = useQueryClient();
@@ -416,6 +416,13 @@ export function ProfileTab({ profile }: { profile: Profile }) {
             ? t('profile.readinessReadyBody')
             : t('profile.readinessBody', { items: readiness.missing.map((item) => t(readinessKey[item])).join(', ') })}
         </Text>
+        {!readiness.ready && readiness.missing.includes('preferences') && onOpenPreferences ? (
+          <Button
+            label={t('profile.openMatchingPreferences')}
+            variant="quiet"
+            onPress={onOpenPreferences}
+          />
+        ) : null}
       </Card>
       {photos.length === 0 ? (
         <Card testID={testIds.you.photoGuide} tone="filled" style={styles.photoGuide}>
@@ -775,11 +782,12 @@ function timelineLabel(value: MarriageTimeline, t: Translate): string {
   return t(keys[value]);
 }
 
-const readinessKey: Record<ProfileReadinessIssue, 'profile.readinessName' | 'profile.readinessLocation' | 'profile.readinessBio' | 'profile.readinessPhoto'> = {
+const readinessKey: Record<ProfileReadinessIssue, 'profile.readinessName' | 'profile.readinessLocation' | 'profile.readinessBio' | 'profile.readinessPhoto' | 'profile.readinessPreferences'> = {
   name: 'profile.readinessName',
   location: 'profile.readinessLocation',
   bio: 'profile.readinessBio',
   photo: 'profile.readinessPhoto',
+  preferences: 'profile.readinessPreferences',
 };
 
 function showPermissionRecovery(

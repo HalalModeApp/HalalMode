@@ -6,7 +6,7 @@ export interface ProfileReadinessInput {
   photoCount?: number | null;
 }
 
-export type ProfileReadinessIssue = 'name' | 'location' | 'bio' | 'photo';
+export type ProfileReadinessIssue = 'name' | 'location' | 'bio' | 'photo' | 'preferences';
 
 /** Pure policy; enforce server-side only after migration/backfill approval. */
 export function getProfileReadiness(input: ProfileReadinessInput) {
