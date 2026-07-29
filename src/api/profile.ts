@@ -31,11 +31,7 @@ export async function fetchMyProfile(): Promise<Profile> {
   if (USE_MOCKS) return MOCK_SELF;
 
   const client = requireSupabase();
-  const { data, error } = await client
-    .from('profiles')
-    .select('*')
-    .eq('id', (await client.auth.getUser()).data.user?.id ?? '')
-    .single();
+  const { data, error } = await client.rpc('get_my_profile');
   if (error) throw error;
   return hydrateProfileMedia(profileFromRow(data as Record<string, unknown>));
 }
