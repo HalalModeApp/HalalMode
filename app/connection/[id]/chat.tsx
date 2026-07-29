@@ -33,6 +33,7 @@ import { trackProductEvent } from '@/lib/analytics';
 import { enqueueMessage, getPendingMessages, removePendingMessage } from '@/lib/messageOutbox';
 import { supabase, USE_MOCKS } from '@/lib/supabase';
 import { testIds } from '@/lib/testIds';
+import { useFeatureFlags } from '@/state/featureFlags';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 import type { ChatMessage } from '@/types';
 import type { MessagePage } from '@/api/connections';
@@ -44,6 +45,7 @@ type ConversationItem =
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { isRTL, t } = useI18n();
+  const { liveCalling } = useFeatureFlags();
   const queryClient = useQueryClient();
   const listRef = useRef<FlatList<ConversationItem>>(null);
   const shouldScrollToEndRef = useRef(true);
@@ -298,7 +300,7 @@ export default function ChatScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('chat.callA11y', { name: connection.profile.firstName })}
             onPress={() =>
-              setCallState(USE_MOCKS ? 'calling' : 'unavailable')
+              setCallState((USE_MOCKS || liveCalling) ? 'calling' : 'unavailable')
             }
             style={styles.callButton}
           >

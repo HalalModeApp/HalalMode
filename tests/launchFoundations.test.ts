@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { trackProductEvent } from '../src/lib/analytics';
 import { defaultFeatureFlags, resolveFeatureFlags } from '../src/lib/featureFlags';
+import { mapServerReleaseFlags } from '../src/lib/releaseFlagMapping';
 import { getProfileReadiness } from '../src/lib/profileReadiness';
 
 test('feature flags fail closed and ignore unknown values', () => {
@@ -27,4 +28,11 @@ test('analytics strips non-primitive and unsafe properties', () => {
 test('profile readiness names exactly what is missing', () => {
   assert.deepEqual(getProfileReadiness({ firstName: 'Amina', city: 'Madinah', country: 'Saudi Arabia', bio: 'A considered profile with enough detail to introduce myself.', photoCount: 1 }), { ready: true, missing: [] });
   assert.deepEqual(getProfileReadiness({}), { ready: false, missing: ['name', 'location', 'bio', 'photo'] });
+});
+
+test('server release flags map only known, enabled capabilities', () => {
+  assert.deepEqual(
+    mapServerReleaseFlags({ live_calling: true, premium_purchases: false, unknown_flag: true }),
+    { ...defaultFeatureFlags, liveCalling: true }
+  );
 });

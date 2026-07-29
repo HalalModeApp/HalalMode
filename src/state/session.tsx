@@ -12,6 +12,8 @@ import {
 import type { Language, MembershipTier } from '@/types';
 import { isSupportedLocale } from '@/i18n/locales';
 import { normalizeMembershipTier } from '@/lib/membership';
+import { supabase, USE_MOCKS } from '@/lib/supabase';
+import { useAuth } from '@/state/auth';
 
 const STORAGE_KEY = 'halalmode.session.v1';
 
@@ -33,6 +35,8 @@ const SessionContext = createContext<SessionValue | null>(null);
  * re-checked server-side. Flipping this value locally buys nothing.
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const userId = user?.id;
   const [tier, setTierState] = useState<MembershipTier>('free');
   const [language, setLanguageState] = useState<Language>('en');
   const [ready, setReady] = useState(false);
@@ -45,7 +49,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (cancelled || !raw) return;
         const parsed = JSON.parse(raw) as Partial<SessionValue>;
         const savedTier = normalizeMembershipTier(parsed.tier);
-        if (savedTier) {
+        if (savedTier && USE_MOCKS) {
           setTierState(savedTier);
           if (savedTier !== parsed.tier) {
             void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -69,6 +73,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (USE_MOCKS) return;
+    if (!userId || !supabase) {
+      setTierState('free');
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_my_membership_entitlement');
+        if (cancelled) return;
+        const payload = data as { tier?: unknown } | null;
+        const tier = error ? undefined : normalizeMembershipTier(payload?.tier);
+        // A missing/failed entitlement response never gives client-side Premium.
+        setTierState(tier ?? 'free');
+      } catch {
+        if (!cancelled) setTierState('free');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userId]);
 
   const persist = useCallback((next: { tier: MembershipTier; language: Language }) => {
     void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});

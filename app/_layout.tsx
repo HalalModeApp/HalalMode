@@ -23,6 +23,7 @@ import { I18nProvider } from '@/i18n';
 import { AuthGate, AuthProvider } from '@/state/auth';
 import { RoundProvider } from '@/state/round';
 import { SessionProvider } from '@/state/session';
+import { FeatureFlagsProvider } from '@/state/featureFlags';
 import { color } from '@/theme/tokens';
 
 void SplashScreen.preventAutoHideAsync();
@@ -59,7 +60,8 @@ export default function RootLayout() {
           <AuthProvider>
             <AuthGate>
               <SessionProvider>
-                <I18nProvider>
+                <FeatureFlagsProvider>
+                  <I18nProvider>
                   <RoundProvider>
                   <StatusBar style="dark" />
                   <Stack
@@ -87,7 +89,8 @@ export default function RootLayout() {
                 />
                   </Stack>
                   </RoundProvider>
-                </I18nProvider>
+                  </I18nProvider>
+                </FeatureFlagsProvider>
               </SessionProvider>
             </AuthGate>
           </AuthProvider>
