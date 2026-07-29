@@ -106,11 +106,14 @@ app or repository.
 
 ## Known release blockers
 
-- Database pgTAP tests are not yet automated in CI because a local Supabase
-  configuration is not committed.
-- There are no stable `testID`s or Maestro end-to-end flows yet.
+- The isolated database contract gate is passing in CI, but production schema
+  deployment remains deliberately separate until remote Supabase access and
+  release approval are verified.
+- Stable `testID`s and Maestro smoke contracts exist, but they still need to
+  run on a configured native build with controlled test accounts.
 - iOS and full Android device/accessibility/RTL verification are incomplete.
-- Chat needs cursor pagination, direct realtime cache insertion, and a durable
-  offline outbox before high-volume scale.
+- Chat has cursor pagination, direct realtime cache insertion, and a durable
+  offline outbox; native reconnect, memory, and recovery testing are still
+  required before a high-volume release.
 - Real purchases, entitlement verification, subscription restore, real calling,
   and in-chat voice-note sending are not implemented.

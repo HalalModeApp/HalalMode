@@ -61,8 +61,8 @@ Repeat each relevant path in English and Arabic after a cold restart, at 200% fo
   advisories. `npm audit --omit=dev` still has 11 moderate Expo-tooling
   advisories with no compatible automated fix; see `docs/DEPENDENCY_SECURITY.md`.
 - Stable `testID`s and source-controlled Maestro smoke contracts exist for authentication, daily introductions, recap, and chat; they have not yet run against a configured native build with controlled test accounts.
-- pgTAP is wired to an isolated CI database, but its first successful remote CI
-  run is pending a repository push. This machine cannot run it yet because
+- pgTAP passed in GitHub Actions on commit `663737f` against a fresh isolated
+  Supabase stack. This machine still cannot run the same gate locally because
   Docker Desktop/Podman is unavailable.
 - The Android/iOS matrix remains incomplete; a stale emulator bundle is not release evidence.
 - The gallery still needs memory/error-state measurement. The daily deck keeps full-size images mounted to avoid card handoff flashes.
@@ -70,4 +70,4 @@ Repeat each relevant path in English and Arabic after a cold restart, at 200% fo
 - Calling and in-chat voice-note sending are not production features. Profile voice introductions use private storage and must be tested against real permissions and signed-URL expiry.
 - Subscription purchase, entitlement verification, restore, cancellation, and localized pricing are not implemented. A mock membership preview cannot be marketed as Halal Mode Premium.
 - Account deletion requests immediately pause a profile and close connections. The service-only finalizer is coded but must not be deployed or scheduled before retention/support approval and worker-secret configuration.
-- Blocked-member management, notification-consent registration, and profile-readiness guidance have server contracts and pgTAP coverage, but still require isolated database and native-device validation.
+- Blocked-member management, notification-consent registration, and profile-readiness guidance have server contracts and passing isolated pgTAP coverage, but still require native-device validation.
