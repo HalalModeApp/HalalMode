@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { normalizeMembershipTier } from '../src/lib/membership';
 
-test('membership normalizer upgrades the retired Plus local value', () => {
+test('membership normalizer upgrades the retired legacy local value', () => {
   assert.equal(normalizeMembershipTier('plus'), 'premium');
   assert.equal(normalizeMembershipTier('premium'), 'premium');
   assert.equal(normalizeMembershipTier('free'), 'free');

@@ -6,7 +6,7 @@ import {
   resolveActiveId,
 } from '../src/lib/roundInvariants';
 
-test('Plus Pop mode remains available in the chosen zone until one remains', () => {
+test('Premium Pop mode remains available in the chosen zone until one remains', () => {
   assert.deepEqual(getRoundInteractionState(3, 3), {
     inChosenZone: true,
     remaining: 0,

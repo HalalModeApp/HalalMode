@@ -18,7 +18,7 @@ import { ErrorState, InlineNotice, LoadingState } from '@/components/ui/AsyncSta
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { QUESTION_LIBRARY } from '@/data/questions';
+import { questionText, QUESTION_LIBRARY } from '@/data/questions';
 import { queryKeys } from '@/lib/queryClient';
 import { useI18n } from '@/i18n';
 import { alpha, color, radius, space } from '@/theme/tokens';
@@ -140,7 +140,7 @@ export default function AnswersScreen() {
             {t(`answers.origin.${current.origin}`, { name: firstName })}
           </Text>
           <Text variant="display" style={styles.question}>
-            {language === 'ar' ? question.textAr : question.text}
+            {questionText(question, language)}
           </Text>
 
           <View style={[styles.answerBox, committed && styles.answerBoxLocked]}>

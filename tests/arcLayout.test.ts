@@ -39,7 +39,7 @@ test('stale active ids fall back to exactly one active face', () => {
   assert.equal(layout.slots.filter((slot) => slot.isActive).length, 1);
 });
 
-test('Plus rounds use a bounded, centred two-row grid', () => {
+test('Premium rounds use a bounded, centred two-row grid', () => {
   const layout = computeArcLayout(items(10), 'profile-7');
   assert.equal(layout.isGrid, true);
   assert.equal(layout.slots.length, 10);

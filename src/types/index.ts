@@ -144,8 +144,12 @@ export type QuestionCategory =
 export interface CompatibilityQuestion {
   id: string;
   category: QuestionCategory;
+  /** English source copy; used as the safe fallback for an unfinished locale. */
   text: string;
+  /** @deprecated Kept while the server catalogue migrates to `translations`. */
   textAr: string;
+  /** Locale-keyed copy makes adding a language a content task, not a UI rewrite. */
+  translations?: Partial<Record<AppLocale, string>>;
 }
 
 /** Who put this question on the shared list. Drives the "Chosen by" line. */

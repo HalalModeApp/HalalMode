@@ -1,3 +1,4 @@
+import type { AppLocale } from '@/i18n/locales';
 import type { CompatibilityQuestion, QuestionCategory } from '@/types';
 
 export const CATEGORY_LABELS: Record<QuestionCategory, string> = {
@@ -22,7 +23,7 @@ export const QUESTION_LIBRARY: CompatibilityQuestion[] = [
   {
     id: 'q1',
     category: 'faith',
-    text: 'How do we keep prayer the rhythm of the house, not a duty we remind each other of?',
+    text: 'How do we make prayer a steady part of life at home, without having to remind each other?',
     textAr: 'كيف نجعل الصلاة إيقاع البيت، لا واجبًا نذكّر به بعضنا؟',
   },
   {
@@ -95,3 +96,13 @@ export const QUESTION_LIBRARY: CompatibilityQuestion[] = [
 
 /** How many questions each side picks. The overlap becomes the shared five. */
 export const QUESTIONS_TO_PICK = 5;
+
+/**
+ * One rendering boundary for question copy. New locales can provide a
+ * translation without every connection screen learning about that locale.
+ */
+export function questionText(question: CompatibilityQuestion, locale: AppLocale): string {
+  return question.translations?.[locale]
+    ?? (locale === 'ar' ? question.textAr : undefined)
+    ?? question.text;
+}

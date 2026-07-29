@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { ErrorState, InlineNotice, LoadingState } from '@/components/ui/AsyncState';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { QUESTIONS_TO_PICK, QUESTION_LIBRARY } from '@/data/questions';
+import { questionText, QUESTIONS_TO_PICK, QUESTION_LIBRARY } from '@/data/questions';
 import { useI18n } from '@/i18n';
 import { queryClient, queryKeys } from '@/lib/queryClient';
 import { alpha, color, radius, space } from '@/theme/tokens';
@@ -93,7 +93,7 @@ export default function QuestionSelectScreen() {
               key={question.id}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: selected, disabled: blocked }}
-              accessibilityLabel={language === 'ar' ? question.textAr : question.text}
+              accessibilityLabel={questionText(question, language)}
               disabled={blocked}
               onPress={() => toggle(question.id)}
               style={[
@@ -105,7 +105,7 @@ export default function QuestionSelectScreen() {
             >
               <View style={styles.optionText}>
                 <Text variant="micro">{t(`questions.category.${question.category}`)}</Text>
-                <Text style={styles.questionText}>{language === 'ar' ? question.textAr : question.text}</Text>
+                <Text style={styles.questionText}>{questionText(question, language)}</Text>
               </View>
               <View style={[styles.dot, selected && styles.dotSelected]} />
             </Pressable>
