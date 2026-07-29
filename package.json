@@ -14,7 +14,8 @@
     "verify:client": "npm run typecheck && npm run lint && npm test",
     "export:android": "expo export --platform android --output-dir dist/ci-android",
     "db:push": "supabase db push",
-    "db:reset": "supabase db reset"
+    "db:reset": "supabase db reset",
+    "db:test:local": "supabase db reset --local && supabase test db"
   },
   "dependencies": {
     "@expo-google-fonts/beiruti": "^0.4.1",

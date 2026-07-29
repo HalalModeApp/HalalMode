@@ -30,8 +30,23 @@ jobs:
       - run: npm run verify:client
       - run: npm run export:android
 
-# Database contract tests intentionally are not run here yet. They require a
-# committed Supabase local configuration plus Docker, neither of which is in a
-# release-safe state in this repository. See docs/QUALITY_GATES.md before
-# enabling a database job: it must run `supabase db reset --local` followed by
-# `supabase test db` against an isolated database, never the linked project.
+  database-contracts:
+    name: Isolated database contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.110.0
+
+      - name: Start isolated Supabase services
+        run: supabase start
+
+      - name: Reset local database and run pgTAP contracts
+        run: supabase db reset --local && supabase test db
+
+      - name: Stop isolated Supabase services
+        if: always()
+        run: supabase stop

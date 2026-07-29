@@ -1,0 +1,55 @@
+# Local-only Supabase configuration for migrations and pgTAP contracts.
+#
+# This file intentionally contains no project reference, database password, API
+# key, provider secret, or production URL. `supabase start`, `db reset`, and
+# `test db` target Docker containers on the developer/CI machine only.
+project_id = "halal-mode-local"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+# The contract suite builds every required fixture itself. Keeping seeds off
+# makes a reset deterministic and prevents sample data from masking a failure.
+enabled = false
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:8081"
+additional_redirect_urls = ["exp://127.0.0.1:8081", "halalmode://"]
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[realtime]
+enabled = true
+
+[edge_runtime]
+enabled = true
+policy = "oneshot"
+
+[analytics]
+enabled = false

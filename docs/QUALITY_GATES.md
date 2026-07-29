@@ -11,14 +11,20 @@ This document describes evidence required for a release candidate. It does not c
 | Unit invariants | `npm test` | Daily-round rules, carousel geometry, compatibility privacy, memberships, launch foundations, and question locale fallback. |
 | Client bundle | `npm run export:android` | Android JavaScript bundle/export on Linux CI. |
 | Combined client gate | `npm run verify:client` | Typecheck, lint, then unit invariants. |
+| Database contracts | `npm run db:test:local` | Resets only Docker's local Supabase database, then runs pgTAP. |
 
-The GitHub workflow at `.github/workflows/quality.yml` runs the client gate and Android export on pull requests and pushes to `main` or `codex/**` branches.
+The GitHub workflow at `.github/workflows/quality.yml` runs the client gate,
+Android export, and the isolated database contract job on pull requests and
+pushes to `main` or `codex/**` branches. The database job uses the committed
+`supabase/config.toml`, starts a fresh Docker stack, and has no linked-project
+or production credential step.
 
 ## Database contract gate: required before production database changes
 
-The repository contains pgTAP tests through migration `0035`, but they are not yet wired to CI because there is no committed local Supabase configuration. Do not point tests at the linked project.
+The repository contains pgTAP tests through migration `0035`. They run in CI
+against an isolated local database. Do not point tests at the linked project.
 
-When local Supabase configuration and Docker are deliberately added, enable this sequence in CI against an isolated local database:
+Run this sequence locally when Docker Desktop or Podman is available:
 
 ```bash
 supabase start
@@ -27,7 +33,10 @@ supabase test db
 supabase stop
 ```
 
-The job must fail on any pgTAP failure and never carry production credentials. Until then, every database deployment must record a manual isolated-run result in the release checklist.
+The job fails on any pgTAP failure and never carries production credentials.
+Local runs need Docker Desktop or Podman on `PATH`; without either, the CLI
+will fail before migration execution, which is expected and is not evidence of
+database correctness.
 
 ## Native device matrix
 
@@ -52,7 +61,9 @@ Repeat each relevant path in English and Arabic after a cold restart, at 200% fo
   advisories. `npm audit --omit=dev` still has 11 moderate Expo-tooling
   advisories with no compatible automated fix; see `docs/DEPENDENCY_SECURITY.md`.
 - Stable `testID`s and source-controlled Maestro smoke contracts exist for authentication, daily introductions, recap, and chat; they have not yet run against a configured native build with controlled test accounts.
-- pgTAP exists but has not run through an isolated local CI database.
+- pgTAP is wired to an isolated CI database, but its first successful remote CI
+  run is pending a repository push. This machine cannot run it yet because
+  Docker Desktop/Podman is unavailable.
 - The Android/iOS matrix remains incomplete; a stale emulator bundle is not release evidence.
 - The gallery still needs memory/error-state measurement. The daily deck keeps full-size images mounted to avoid card handoff flashes.
 - Chat has cursor paging, direct cache insertion, DELETE-event safety, and a durable text outbox; pgTAP and native reconnect testing remain required before treating it as production proven.
