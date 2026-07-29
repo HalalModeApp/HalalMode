@@ -639,16 +639,26 @@ function CallOverlay({
   }, [visible]);
 
   return (
-    <Modal visible={visible} animationType="fade" onRequestClose={onEnd}>
-      <View style={[styles.callScreen, isRTL && styles.rtl]}>
+    <Modal
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onEnd}
+      accessibilityViewIsModal
+    >
+      <View style={[styles.callScreen, isRTL && styles.rtl]} accessibilityViewIsModal>
         <Text variant="microAccent">
           {state === 'unavailable' ? t('chat.call.private') : t('chat.call.preview')}
         </Text>
-        <Image source={photo} style={styles.callAvatar} contentFit="cover" />
+        <Image
+          source={photo}
+          style={styles.callAvatar}
+          contentFit="cover"
+          accessibilityLabel={name}
+        />
         <Text variant="displaySmall" style={styles.callName}>
           {name}
         </Text>
-        <Text variant="bodySmall" style={styles.callStatus}>
+        <Text variant="bodySmall" style={styles.callStatus} accessibilityRole="alert">
           {state === 'unavailable'
             ? t('chat.call.unavailable')
             : state === 'calling'
@@ -658,6 +668,7 @@ function CallOverlay({
         {state === 'unavailable' ? (
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={t('chat.call.back')}
             onPress={onEnd}
             style={styles.callUnavailableAction}
           >
