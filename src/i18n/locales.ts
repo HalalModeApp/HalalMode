@@ -1,4 +1,5 @@
 import { ar, en, type TranslationKey } from '@/i18n/catalog';
+import { nextLocale } from '@/lib/localePolicy';
 
 export type TextDirection = 'ltr' | 'rtl';
 
@@ -26,10 +27,18 @@ export const localeRegistry = {
 
 export type AppLocale = keyof typeof localeRegistry;
 
+/** The ordered member-facing language list used by compact language controls. */
+export const supportedLocales = Object.keys(localeRegistry) as AppLocale[];
+
 export function isSupportedLocale(value: unknown): value is AppLocale {
   return typeof value === 'string' && value in localeRegistry;
 }
 
 export function getLocale(locale: AppLocale) {
   return localeRegistry[locale];
+}
+
+/** Advances compact language controls without assuming there are exactly two locales. */
+export function nextSupportedLocale(locale: AppLocale): AppLocale {
+  return nextLocale(supportedLocales, locale);
 }

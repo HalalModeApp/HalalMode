@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Text } from '@/components/ui/Text';
 import { BlockedMembersSheet } from '@/components/you/BlockedMembersSheet';
 import { useI18n } from '@/i18n';
+import { nextSupportedLocale } from '@/i18n/locales';
 import { useSession } from '@/state/session';
 import { useAuth } from '@/state/auth';
 import { useFeatureFlags } from '@/state/featureFlags';
@@ -154,7 +155,7 @@ export function SettingsTab({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('settings.switchLanguage')}
-              onPress={() => setLanguage(language === 'en' ? 'ar' : 'en')}
+              onPress={() => setLanguage(nextSupportedLocale(language))}
               style={styles.languagePill}
             >
               <Text style={styles.languagePillLabel}>{language.toUpperCase()}</Text>

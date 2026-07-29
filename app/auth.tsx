@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useI18n } from '@/i18n';
+import { nextSupportedLocale } from '@/i18n/locales';
 import { requireSupabase } from '@/lib/supabase';
 import { testIds } from '@/lib/testIds';
 import { useSession } from '@/state/session';
@@ -64,7 +65,7 @@ export default function AuthScreen() {
             testID={testIds.auth.language}
             accessibilityRole="button"
             accessibilityLabel={t('auth.switchLanguageLabel')}
-            onPress={() => setLanguage(language === 'en' ? 'ar' : 'en')}
+            onPress={() => setLanguage(nextSupportedLocale(language))}
             style={[styles.language, isRTL && styles.languageRTL]}
           >
             <Text style={styles.languageLabel}>
