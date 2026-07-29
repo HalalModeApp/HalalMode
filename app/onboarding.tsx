@@ -151,6 +151,7 @@ export default function OnboardingScreen() {
         }
         setDraft((current) => ({ ...current, city, country, latitude: position.coords.latitude, longitude: position.coords.longitude }));
         setErrors({});
+        setStep((current) => Math.min(LAST_STEP, current + 1));
       } catch {
         setErrors({ city: t('onboarding.locationUnavailable') });
       } finally {
