@@ -98,20 +98,31 @@ export default function ChatScreen() {
         (payload) => {
           void client.auth.getUser().then(({ data, error: authError }) => {
             if (authError || !data.user) return;
-            const row = payload.new as Record<string, unknown>;
-            const message = messageFromRow(row, data.user.id);
             queryClient.setQueryData<MessagePage>(queryKeys.messages(id), (current) => {
               if (!current) return current;
               if (payload.eventType === 'DELETE') {
                 return { ...current, messages: current.messages.filter((item) => item.id !== String(payload.old.id)) };
               }
+
+              // Realtime DELETE payloads intentionally have no `new` record.
+              // Parsing one first creates a transient empty message in the cache.
+              const message = messageFromRow(
+                payload.new as Record<string, unknown>,
+                data.user.id
+              );
               const exists = current.messages.some((item) => item.id === message.id);
               const messages = exists
                 ? current.messages.map((item) => item.id === message.id ? message : item)
                 : [...current.messages, message].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
               return { ...current, messages };
             });
-            if (payload.eventType === 'INSERT' && message.sender === 'them') void markMessagesRead(id);
+            if (payload.eventType === 'INSERT') {
+              const message = messageFromRow(
+                payload.new as Record<string, unknown>,
+                data.user.id
+              );
+              if (message.sender === 'them') void markMessagesRead(id);
+            }
           });
         }
       )
