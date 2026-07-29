@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Halal Mode",
-    "slug": "halal-mode",
+    "slug": "halalmode",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
@@ -25,7 +25,15 @@
       "package": "com.halalmode.app",
       "adaptiveIcon": {
         "backgroundColor": "#FCFCFB"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -69,8 +77,10 @@
     },
     "extra": {
       "eas": {
-        "projectId": "00000000-0000-0000-0000-000000000000"
-      }
-    }
+        "projectId": "73e752a3-067d-40d4-b218-06ca25723fbe"
+      },
+      "router": {}
+    },
+    "owner": "halalmode"
   }
 }
