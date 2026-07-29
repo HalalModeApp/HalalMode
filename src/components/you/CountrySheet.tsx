@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { Text } from '@/components/ui/Text';
 import { COUNTRIES } from '@/data/preferences';
 import { useI18n } from '@/i18n';
+import { testIds } from '@/lib/testIds';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 
 export interface CountrySheetProps {
@@ -65,11 +66,27 @@ export function CountrySheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+      accessibilityViewIsModal
+    >
       <View style={[styles.scrim, isRTL && styles.rtl]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={t('country.close')} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        />
 
-        <Animated.View entering={FadeInDown.duration(280)} style={styles.sheet}>
+        <Animated.View
+          entering={FadeInDown.duration(280)}
+          style={styles.sheet}
+          accessibilityViewIsModal
+          testID={testIds.you.countrySheet}
+        >
           <View style={styles.head}>
             <View style={[styles.headTop, isRTL && styles.rowReverse]}>
               <View>
@@ -90,6 +107,7 @@ export function CountrySheet({
 
             <TextInput
               accessibilityLabel={t('country.search')}
+              testID={testIds.you.countrySearch}
               value={search}
               onChangeText={setSearch}
               placeholder={t('country.search')}
@@ -120,16 +138,17 @@ export function CountrySheet({
             </View>
           </View>
 
-          <ScrollView
+          <FlashList
+            data={results}
+            keyExtractor={(country) => country}
+            style={styles.list}
             contentContainerStyle={styles.rows}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-          >
-            {results.map((country) => {
+            renderItem={({ item: country }) => {
               const isSelected = pending.includes(country);
               return (
                 <Pressable
-                  key={country}
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: isSelected }}
                   accessibilityLabel={country}
@@ -144,14 +163,13 @@ export function CountrySheet({
                   </View>
                 </Pressable>
               );
-            })}
-
-            {results.length === 0 ? (
+            }}
+            ListEmptyComponent={
               <Text variant="bodySmall" center style={styles.noResults}>
                 {t('country.noResults')}
               </Text>
-            ) : null}
-          </ScrollView>
+            }
+          />
 
           <View style={[styles.foot, { paddingBottom: insets.bottom + 20 }]}>
             <Button
@@ -164,6 +182,7 @@ export function CountrySheet({
                 onChange(pending);
                 onClose();
               }}
+              testID={testIds.you.countryApply}
             />
           </View>
         </Animated.View>
@@ -241,6 +260,7 @@ const styles = StyleSheet.create({
   bulkQuiet: { fontFamily: font.bodySemi, fontSize: 11, color: color.faintest },
 
   rows: { padding: space.gutter, gap: 8 },
+  list: { flexGrow: 1, flexShrink: 1 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

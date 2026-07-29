@@ -8,6 +8,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { alpha, color, radius } from '@/theme/tokens';
+import { useI18n } from '@/i18n';
 
 const THUMB = 22;
 const TRACK_HEIGHT = 3;
@@ -39,6 +40,7 @@ export function RangeSlider({
   lowAccessibilityLabel,
   highAccessibilityLabel,
 }: RangeSliderProps) {
+  const { isRTL } = useI18n();
   const [width, setWidth] = useState(0);
   const usable = Math.max(width - THUMB, 1);
 
@@ -88,15 +90,18 @@ export function RangeSlider({
     .onBegin((event) => {
       'worklet';
       const span = max - min || 1;
-      const lowX = ((lowValue.value - min) / span) * usable;
-      const highX = ((highValue.value - min) / span) * usable;
+      const lowX =
+        (isRTL ? 1 - (lowValue.value - min) / span : (lowValue.value - min) / span) * usable;
+      const highX =
+        (isRTL ? 1 - (highValue.value - min) / span : (highValue.value - min) / span) * usable;
       const x = event.x - THUMB / 2;
       dragging.value = Math.abs(x - lowX) <= Math.abs(x - highX) ? 'low' : 'high';
     })
     .onUpdate((event) => {
       'worklet';
       const span = max - min || 1;
-      const ratio = Math.min(1, Math.max(0, (event.x - THUMB / 2) / usable));
+      const physicalRatio = Math.min(1, Math.max(0, (event.x - THUMB / 2) / usable));
+      const ratio = isRTL ? 1 - physicalRatio : physicalRatio;
       const raw = min + ratio * span;
       const snapped = Math.round(raw / step) * step;
       const clamped = Math.min(max, Math.max(min, snapped));
@@ -115,20 +120,32 @@ export function RangeSlider({
 
   const lowStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: ((lowValue.value - min) / (max - min || 1)) * usable },
+      {
+        translateX:
+          (isRTL
+            ? 1 - (lowValue.value - min) / (max - min || 1)
+            : (lowValue.value - min) / (max - min || 1)) * usable,
+      },
     ],
   }));
 
   const highStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: ((highValue.value - min) / (max - min || 1)) * usable },
+      {
+        translateX:
+          (isRTL
+            ? 1 - (highValue.value - min) / (max - min || 1)
+            : (highValue.value - min) / (max - min || 1)) * usable,
+      },
     ],
   }));
 
   const fillStyle = useAnimatedStyle(() => {
     const span = max - min || 1;
-    const start = ((lowValue.value - min) / span) * usable;
-    const end = ((highValue.value - min) / span) * usable;
+    const low = ((lowValue.value - min) / span) * usable;
+    const high = ((highValue.value - min) / span) * usable;
+    const start = isRTL ? usable - high : low;
+    const end = isRTL ? usable - low : high;
     return { left: start + THUMB / 2, width: Math.max(0, end - start) };
   });
 

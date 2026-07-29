@@ -8,6 +8,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { alpha, color, radius } from '@/theme/tokens';
+import { useI18n } from '@/i18n';
 
 const THUMB = 22;
 const TRACK_HEIGHT = 3;
@@ -30,6 +31,7 @@ export function Slider({
   onChange,
   accessibilityLabel,
 }: SliderProps) {
+  const { isRTL } = useI18n();
   const [width, setWidth] = useState(0);
   const usable = Math.max(width - THUMB, 1);
 
@@ -63,7 +65,8 @@ export function Slider({
     })
     .onUpdate((event) => {
       'worklet';
-      const ratio = Math.min(1, Math.max(0, (event.x - THUMB / 2) / usable));
+      const physicalRatio = Math.min(1, Math.max(0, (event.x - THUMB / 2) / usable));
+      const ratio = isRTL ? 1 - physicalRatio : physicalRatio;
       const raw = min + ratio * (max - min);
       const snapped = Math.min(max, Math.max(min, Math.round(raw / step) * step));
       current.value = snapped;
@@ -76,12 +79,18 @@ export function Slider({
 
   const thumbStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: ((current.value - min) / (max - min || 1)) * usable },
+      {
+        translateX:
+          (isRTL
+            ? 1 - (current.value - min) / (max - min || 1)
+            : (current.value - min) / (max - min || 1)) * usable,
+      },
     ],
   }));
 
   const fillStyle = useAnimatedStyle(() => ({
     width: ((current.value - min) / (max - min || 1)) * usable + THUMB / 2,
+    ...(isRTL ? { right: 0 } : { left: 0 }),
   }));
 
   return (

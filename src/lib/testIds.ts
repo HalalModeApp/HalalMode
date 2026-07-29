@@ -3,7 +3,14 @@ export const testIds = {
   auth: { email: 'auth-email', submit: 'auth-send-link', language: 'auth-language' },
   onboarding: { next: 'onboarding-next', back: 'onboarding-back', submit: 'onboarding-submit' },
   daily: { reset: 'daily-reset', deck: 'daily-hero-deck', pop: 'daily-pop-mode', primary: 'daily-primary-action' },
-  you: { profile: 'you-tab-profile', matching: 'you-tab-private', settings: 'you-tab-settings' },
+  you: {
+    profile: 'you-tab-profile',
+    matching: 'you-tab-private',
+    settings: 'you-tab-settings',
+    countrySheet: 'matching-country-sheet',
+    countrySearch: 'matching-country-search',
+    countryApply: 'matching-country-apply',
+  },
   settings: {
     blocked: 'settings-blocked-members',
     blockedTitle: 'settings-blocked-title',
