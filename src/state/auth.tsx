@@ -13,7 +13,7 @@ import {
 import type { User } from '@supabase/supabase-js';
 
 import { requireSupabase, supabase, USE_MOCKS } from '@/lib/supabase';
-import { hasAuthPrincipalChanged } from '@/lib/authSessionScope';
+import { canApplyProfileStatus, hasAuthPrincipalChanged } from '@/lib/authSessionScope';
 import { queryClient } from '@/lib/queryClient';
 
 interface AuthValue {
@@ -34,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [onboardingComplete, setOnboardingComplete] = useState(USE_MOCKS);
   const [authError, setAuthError] = useState<'invalid_link' | null>(null);
   const activeUserId = useRef<string | null>(null);
+  const profileStatusRequest = useRef(0);
 
   const adoptUser = useCallback((nextUser: User | null) => {
     if (hasAuthPrincipalChanged(activeUserId.current, nextUser?.id ?? null)) {
@@ -50,8 +51,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (USE_MOCKS) return;
     const client = requireSupabase();
     const { data: current } = await client.auth.getUser();
+    const requestId = ++profileStatusRequest.current;
     if (!current.user) {
-      setOnboardingComplete(false);
+      if (requestId === profileStatusRequest.current) setOnboardingComplete(false);
       return;
     }
     const { data, error } = await client
@@ -60,6 +62,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('id', current.user.id)
       .maybeSingle();
     if (error) throw error;
+    // A late response for a signed-out or replaced account must not alter the
+    // next member's route gate.
+    if (!canApplyProfileStatus(
+      requestId,
+      profileStatusRequest.current,
+      current.user.id,
+      activeUserId.current
+    )) return;
     setOnboardingComplete(data?.onboarding_complete === true);
   }, []);
 
