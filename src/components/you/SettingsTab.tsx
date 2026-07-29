@@ -220,7 +220,7 @@ export function SettingsTab({
           ))}
         </View>
         <Button
-          label={isPremium ? t('settings.managePlus') : t('settings.explorePlus')}
+          label={isPremium ? t('settings.managePremium') : t('settings.explorePremium')}
           variant="onDark"
           onPress={() => setPremiumConfirm(true)}
         />
@@ -338,13 +338,13 @@ export function SettingsTab({
 
       <ConfirmDialog
         visible={premiumConfirm}
-        title={isPremium ? t('settings.leavePlus') : t('settings.tryPlus')}
+        title={isPremium ? t('settings.leavePremium') : t('settings.tryPremium')}
         body={USE_MOCKS
           ? (isPremium
             ? t('settings.demoFree')
-            : t('settings.demoPlus'))
+            : t('settings.demoPremium'))
           : t('settings.purchaseUnavailable')}
-        confirmLabel={USE_MOCKS ? (isPremium ? t('settings.useFree') : t('settings.activatePlus')) : t('settings.okay')}
+        confirmLabel={USE_MOCKS ? (isPremium ? t('settings.useFree') : t('settings.activatePremium')) : t('settings.okay')}
         cancelLabel={t('settings.notNow')}
         onConfirm={() => {
           if (USE_MOCKS) setTier(isPremium ? 'free' : 'premium');
