@@ -270,6 +270,7 @@ export function SettingsTab({
           subtitle={t('settings.deleteBody')}
           trailing={
             <Button
+              testID={testIds.settings.delete}
               label={t('settings.deleteAction')}
               variant="quiet"
               block={false}
@@ -298,6 +299,7 @@ export function SettingsTab({
       />
 
       <ConfirmDialog
+        testID={testIds.settings.deleteDialog}
         visible={deleteConfirm}
         title={t('settings.deleteTitle')}
         body={t('settings.deleteConfirmBody')}

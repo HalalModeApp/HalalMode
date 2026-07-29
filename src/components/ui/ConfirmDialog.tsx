@@ -15,6 +15,8 @@ export interface ConfirmDialogProps {
   cancelLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Stable semantic prefix for native automation. */
+  testID?: string;
 }
 
 /**
@@ -29,6 +31,7 @@ export function ConfirmDialog({
   cancelLabel,
   onConfirm,
   onCancel,
+  testID,
 }: ConfirmDialogProps) {
   const reducedMotion = useReducedMotion();
   const { isRTL } = useI18n();
@@ -51,6 +54,7 @@ export function ConfirmDialog({
           accessibilityLabel={cancelLabel}
         />
         <Animated.View
+          testID={testID}
           accessible
           accessibilityRole="alert"
           entering={reducedMotion ? undefined : FadeInUp.duration(200)}
@@ -66,12 +70,14 @@ export function ConfirmDialog({
           ) : null}
           <View style={[styles.row, isRTL && styles.rowReverse]}>
             <Button
+              testID={testID ? `${testID}-cancel` : undefined}
               label={cancelLabel}
               variant="secondary"
               onPress={onCancel}
               style={styles.action}
             />
             <Button
+              testID={testID ? `${testID}-confirm` : undefined}
               label={confirmLabel}
               onPress={onConfirm}
               style={styles.action}

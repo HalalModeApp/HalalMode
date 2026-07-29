@@ -12,3 +12,14 @@ appId: com.halalmode.app
     id: settings-blocked-members
 - assertVisible:
     id: settings-blocked-title
+- pressKey: back
+- scrollUntilVisible:
+    element:
+      id: settings-delete-account
+    direction: DOWN
+- tapOn:
+    id: settings-delete-account
+- assertVisible:
+    id: settings-delete-dialog
+- tapOn:
+    id: settings-delete-dialog-cancel
