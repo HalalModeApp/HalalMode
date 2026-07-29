@@ -480,6 +480,7 @@ export default function ChatScreen() {
             placeholderTextColor={color.whisper}
             style={styles.input}
             multiline
+            maxLength={2000}
           />
           <Pressable
             accessibilityRole="button"
