@@ -10,11 +10,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import * as Location from 'expo-location';
 
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { CountrySheet } from '@/components/you/CountrySheet';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useI18n, type Translate } from '@/i18n';
 import { requireSupabase } from '@/lib/supabase';
@@ -46,6 +46,8 @@ interface OnboardingDraft {
   gender: Gender | null;
   city: string;
   country: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 type DraftField = keyof OnboardingDraft;
@@ -75,7 +77,7 @@ export default function OnboardingScreen() {
   const [completed, setCompleted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [countrySheetOpen, setCountrySheetOpen] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [ageConfirmationOpen, setAgeConfirmationOpen] = useState(false);
   const [legalAccepted, setLegalAccepted] = useState(false);
 
@@ -130,7 +132,32 @@ export default function OnboardingScreen() {
     setSubmitError(null);
   };
 
-  const goNext = () => {
+  const goNext = async () => {
+    if (step === 3 && (draft.latitude === undefined || draft.longitude === undefined)) {
+      setLocating(true);
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status !== 'granted') {
+          setErrors({ city: t('onboarding.locationPermissionRequired') });
+          return;
+        }
+        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const [place] = await Location.reverseGeocodeAsync(position.coords);
+        const city = place?.city ?? place?.subregion ?? place?.region ?? '';
+        const country = place?.country ?? '';
+        if (city.length < 2 || country.length < 2) {
+          setErrors({ city: t('onboarding.locationUnavailable') });
+          return;
+        }
+        setDraft((current) => ({ ...current, city, country, latitude: position.coords.latitude, longitude: position.coords.longitude }));
+        setErrors({});
+      } catch {
+        setErrors({ city: t('onboarding.locationUnavailable') });
+      } finally {
+        setLocating(false);
+      }
+      return;
+    }
     const nextErrors = validateStep(step, draft, t);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
@@ -172,6 +199,8 @@ export default function OnboardingScreen() {
         p_gender: draft.gender,
         p_city: draft.city.trim(),
         p_country: draft.country.trim(),
+        p_latitude: draft.latitude,
+        p_longitude: draft.longitude,
         p_terms_version: LEGAL_DOCUMENTS.terms.version,
         p_privacy_version: LEGAL_DOCUMENTS.privacy.version,
       });
@@ -253,12 +282,7 @@ export default function OnboardingScreen() {
             <BasicDetailsStep draft={draft} errors={errors} patch={patch} />
           ) : null}
           {step === 3 ? (
-            <LocationStep
-              draft={draft}
-              errors={errors}
-              patch={patch}
-              onChooseCountry={() => setCountrySheetOpen(true)}
-            />
+            <LocationStep draft={draft} errors={errors} locating={locating} />
           ) : null}
           {step === 4 ? <ReviewStep draft={draft} birthDate={birthDate} legalAccepted={legalAccepted} onLegalAcceptedChange={setLegalAccepted} legalError={errors.legal} /> : null}
 
@@ -293,17 +317,6 @@ export default function OnboardingScreen() {
             style={styles.next}
           />
         </View>
-        <CountrySheet
-          visible={countrySheetOpen}
-          selected={draft.country ? [draft.country] : []}
-          selectionMode="single"
-          eyebrow={t('onboarding.locationTitle')}
-          title={t('onboarding.country')}
-          applyLabel={t('common.continue')}
-          testID={testIds.onboarding.countrySheet}
-          onChange={(next) => patch('country', next[0] ?? '')}
-          onClose={() => setCountrySheetOpen(false)}
-        />
         <ConfirmDialog
           testID={testIds.onboarding.ageConfirm}
           visible={ageConfirmationOpen}
@@ -446,12 +459,7 @@ function BasicDetailsStep({ draft, errors, patch }: StepProps) {
   );
 }
 
-function LocationStep({
-  draft,
-  errors,
-  patch,
-  onChooseCountry,
-}: StepProps & { onChooseCountry: () => void }) {
+function LocationStep({ draft, errors, locating }: Pick<StepProps, 'draft' | 'errors'> & { locating: boolean }) {
   const { t } = useI18n();
   return (
     <View>
@@ -460,30 +468,9 @@ function LocationStep({
         body={t('onboarding.locationBody')}
       />
       <View style={styles.form}>
-        <Field
-          label={t('onboarding.city')}
-          value={draft.city}
-          onChangeText={(value) => patch('city', value)}
-          autoCapitalize="words"
-          autoComplete="postal-address-locality"
-          error={errors.city}
-        />
-        <View style={styles.field}>
-          <Text variant="label">{t('onboarding.country')}</Text>
-          <Pressable
-            testID={testIds.onboarding.country}
-            accessibilityRole="button"
-            accessibilityLabel={t('onboarding.country')}
-            accessibilityHint={t('country.search')}
-            onPress={onChooseCountry}
-            style={styles.countryPicker}
-          >
-            <Text style={[styles.countryPickerLabel, !draft.country && styles.countryPickerPlaceholder]}>
-              {draft.country || t('country.search')}
-            </Text>
-            <Text style={styles.countryPickerArrow}>›</Text>
-          </Pressable>
-          {errors.country ? <InlineError message={errors.country} /> : null}
+        <View style={styles.locationPanel}>
+          <Text variant="label">{draft.city && draft.country ? `${draft.city}, ${draft.country}` : locating ? t('onboarding.locationFinding') : t('onboarding.locationPermissionBody')}</Text>
+          {errors.city ? <InlineError message={errors.city} /> : null}
         </View>
       </View>
     </View>
@@ -753,6 +740,7 @@ const styles = StyleSheet.create({
   countryPickerLabel: { fontFamily: font.body, fontSize: 16, color: color.ink },
   countryPickerPlaceholder: { color: color.faintest },
   countryPickerArrow: { fontFamily: font.body, fontSize: 22, color: color.inkSoft },
+  locationPanel: { minHeight: 88, padding: 16, borderRadius: radius.lg, backgroundColor: color.sandLight, justifyContent: 'center', gap: 8 },
   inputRTL: { textAlign: 'right', writingDirection: 'rtl' },
   errorText: { fontFamily: font.bodyMedium, fontSize: 12, lineHeight: 18, color: '#A33A3A' },
   dateRow: { flexDirection: 'row', gap: 9 },
