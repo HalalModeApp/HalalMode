@@ -7,6 +7,8 @@ export const testIds = {
     submit: 'onboarding-submit',
     country: 'onboarding-country',
     countrySheet: 'onboarding-country-sheet',
+    ageConfirm: 'onboarding-age-confirm',
+    legalConsent: 'onboarding-legal-consent',
   },
   daily: { reset: 'daily-reset', deck: 'daily-hero-deck', pop: 'daily-pop-mode', primary: 'daily-primary-action' },
   you: {
@@ -16,6 +18,7 @@ export const testIds = {
     countrySheet: 'matching-country-sheet',
     countrySearch: 'matching-country-search',
     countryApply: 'matching-country-apply',
+    photoGuide: 'profile-photo-guide',
   },
   settings: {
     blocked: 'settings-blocked-members',

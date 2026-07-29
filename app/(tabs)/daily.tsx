@@ -13,6 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { ArcCarousel } from '@/components/introductions/ArcCarousel';
+import { ConductAcknowledgement } from '@/components/introductions/ConductAcknowledgement';
 import { HeroCard } from '@/components/introductions/HeroCard';
 import { BrandHeader } from '@/components/navigation/BrandHeader';
 import { Button } from '@/components/ui/Button';
@@ -24,14 +25,17 @@ import { useCameraShake } from '@/hooks/useCameraShake';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useI18n } from '@/i18n';
 import { trackProductEvent } from '@/lib/analytics';
+import { acceptConduct, hasAcceptedConduct } from '@/lib/conductAcknowledgement';
 import { playPop, startShimmer, stopShimmer } from '@/lib/sound';
 import { USE_MOCKS } from '@/lib/supabase';
 import { testIds } from '@/lib/testIds';
 import { useRound } from '@/state/round';
+import { useAuth } from '@/state/auth';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
 
 export default function DailyScreen() {
   const { t, isRTL } = useI18n();
+  const { user } = useAuth();
   const {
     round,
     isLoading,
@@ -61,11 +65,29 @@ export default function DailyScreen() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmLetGo, setConfirmLetGo] = useState(false);
   const [interestTargetId, setInterestTargetId] = useState<string | null>(null);
+  const [conductVisible, setConductVisible] = useState(false);
   const { shake, style: shakeStyle } = useCameraShake();
   const reducedMotion = useReducedMotion();
   const popPulse = useSharedValue(0);
   const roundId = round?.id;
   const introductionCount = round?.introductions.length;
+  const conductMemberId = user?.id ?? 'mock-member';
+
+  useEffect(() => {
+    let active = true;
+    void hasAcceptedConduct(conductMemberId)
+      .then((accepted) => active && setConductVisible(!accepted))
+      // Storage should not prevent a member from entering their daily round.
+      .catch(() => active && setConductVisible(true));
+    return () => { active = false; };
+  }, [conductMemberId]);
+
+  const acknowledgeConduct = useCallback(() => {
+    setConductVisible(false);
+    void acceptConduct(conductMemberId).catch(() => {
+      // The current session remains acknowledged; the next launch can retry persistence.
+    });
+  }, [conductMemberId]);
 
   useEffect(() => {
     if (!roundId || introductionCount === undefined) return;
@@ -358,6 +380,7 @@ export default function DailyScreen() {
         onConfirm={() => void handleLetGoFinal()}
         onCancel={() => setConfirmLetGo(false)}
       />
+      <ConductAcknowledgement visible={conductVisible} onAccept={acknowledgeConduct} />
     </Screen>
   );
 }

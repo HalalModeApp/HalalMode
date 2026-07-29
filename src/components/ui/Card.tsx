@@ -8,10 +8,12 @@ export interface CardProps {
   /** `dark` is the inverted panel used for Premium and the "Start here" prompt. */
   tone?: 'outlined' | 'filled' | 'dark' | 'accent';
   style?: ViewStyle;
+  /** Stable selector for native automation when a card is an interaction landmark. */
+  testID?: string;
 }
 
-export function Card({ children, tone = 'outlined', style }: CardProps) {
-  return <View style={[styles.base, styles[tone], style]}>{children}</View>;
+export function Card({ children, tone = 'outlined', style, testID }: CardProps) {
+  return <View testID={testID} style={[styles.base, styles[tone], style]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({

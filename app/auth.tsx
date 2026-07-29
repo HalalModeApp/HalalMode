@@ -95,6 +95,9 @@ export default function AuthScreen() {
             onChangeText={setEmail}
             style={[styles.input, isRTL && styles.inputRTL]}
           />
+          <Text variant="caption" style={[styles.privacyNote, isRTL && styles.rtlText]}>
+            {t('auth.privacyNote')}
+          </Text>
           <Button
             testID={testIds.auth.submit}
             label={secondsUntilResend > 0 ? t('auth.waitToResend', { seconds: secondsUntilResend }) : t('auth.send')}
@@ -120,6 +123,7 @@ const styles = StyleSheet.create({
   title: { marginTop: 10, fontSize: 32, lineHeight: 38 },
   copy: { marginTop: 12, maxWidth: 310 },
   authError: { color: color.inkSoft, lineHeight: 18 },
+  privacyNote: { color: color.inkSoft, lineHeight: 18 },
   form: { gap: 10 },
   input: {
     borderWidth: 1, borderColor: '#D9D6CE', borderRadius: radius.lg,

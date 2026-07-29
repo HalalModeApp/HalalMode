@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -14,8 +15,10 @@ import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { CountrySheet } from '@/components/you/CountrySheet';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useI18n, type Translate } from '@/i18n';
 import { requireSupabase } from '@/lib/supabase';
+import { LEGAL_DOCUMENTS } from '@/lib/legalDocuments';
 import {
   clearOnboardingDraft,
   clearLegacyOnboardingDraft,
@@ -25,6 +28,7 @@ import {
 import { useAuth } from '@/state/auth';
 import {
   birthDateValidationIssue,
+  ageForBirthDateParts,
   formatBirthDate,
   normaliseDecimalDigits,
 } from '@/lib/birthDate';
@@ -45,7 +49,7 @@ interface OnboardingDraft {
 }
 
 type DraftField = keyof OnboardingDraft;
-type ValidationErrors = Partial<Record<DraftField | 'birthDate', string>>;
+type ValidationErrors = Partial<Record<DraftField | 'birthDate' | 'legal', string>>;
 
 const LAST_STEP = 4;
 const EMPTY_DRAFT: OnboardingDraft = {
@@ -72,6 +76,8 @@ export default function OnboardingScreen() {
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [countrySheetOpen, setCountrySheetOpen] = useState(false);
+  const [ageConfirmationOpen, setAgeConfirmationOpen] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -116,6 +122,7 @@ export default function OnboardingScreen() {
   }, [completed, draft, draftMemberId, restoring, step]);
 
   const birthDate = useMemo(() => formatBirthDate(draft), [draft]);
+  const derivedAge = useMemo(() => ageForBirthDateParts(draft), [draft]);
 
   const patch = <K extends DraftField>(field: K, value: OnboardingDraft[K]) => {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -127,6 +134,10 @@ export default function OnboardingScreen() {
     const nextErrors = validateStep(step, draft, t);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
+    if (step === 2 && derivedAge !== null) {
+      setAgeConfirmationOpen(true);
+      return;
+    }
     setStep((current) => Math.min(LAST_STEP, current + 1));
   };
 
@@ -144,7 +155,8 @@ export default function OnboardingScreen() {
       }),
       {}
     );
-    if (Object.keys(allErrors).length > 0 || !birthDate || !draft.gender) {
+    if (!legalAccepted) allErrors.legal = t('onboarding.error.legal');
+    if (Object.keys(allErrors).length > 0 || !birthDate || !draft.gender || !legalAccepted) {
       setErrors(allErrors);
       setSubmitError(t('onboarding.submitCheck'));
       return;
@@ -160,6 +172,8 @@ export default function OnboardingScreen() {
         p_gender: draft.gender,
         p_city: draft.city.trim(),
         p_country: draft.country.trim(),
+        p_terms_version: LEGAL_DOCUMENTS.terms.version,
+        p_privacy_version: LEGAL_DOCUMENTS.privacy.version,
       });
       if (error) throw error;
       await clearOnboardingDraft(draftMemberId);
@@ -246,7 +260,7 @@ export default function OnboardingScreen() {
               onChooseCountry={() => setCountrySheetOpen(true)}
             />
           ) : null}
-          {step === 4 ? <ReviewStep draft={draft} birthDate={birthDate} /> : null}
+          {step === 4 ? <ReviewStep draft={draft} birthDate={birthDate} legalAccepted={legalAccepted} onLegalAcceptedChange={setLegalAccepted} legalError={errors.legal} /> : null}
 
           {submitError ? (
             <View
@@ -289,6 +303,19 @@ export default function OnboardingScreen() {
           testID={testIds.onboarding.countrySheet}
           onChange={(next) => patch('country', next[0] ?? '')}
           onClose={() => setCountrySheetOpen(false)}
+        />
+        <ConfirmDialog
+          testID={testIds.onboarding.ageConfirm}
+          visible={ageConfirmationOpen}
+          title={t('onboarding.ageConfirmTitle', { age: derivedAge ?? '' })}
+          body={t('onboarding.ageConfirmBody')}
+          confirmLabel={t('onboarding.ageConfirmAccept')}
+          cancelLabel={t('onboarding.ageConfirmChange')}
+          onConfirm={() => {
+            setAgeConfirmationOpen(false);
+            setStep(3);
+          }}
+          onCancel={() => setAgeConfirmationOpen(false)}
         />
       </KeyboardAvoidingView>
     </Screen>
@@ -362,29 +389,32 @@ function BasicDetailsStep({ draft, errors, patch }: StepProps) {
         body={t('onboarding.detailsBody')}
       />
       <View style={styles.form}>
-        <Text variant="label">{t('onboarding.birthDate')}</Text>
-        <View style={[styles.dateRow, isRTL && styles.rowReverse]}>
-          <DatePart
-            kind="day"
-            label={t('onboarding.day')}
-            value={draft.birthDay}
-            maxLength={2}
-            onChangeText={(value) => patch('birthDay', normaliseDecimalDigits(value))}
-          />
-          <DatePart
-            kind="month"
-            label={t('onboarding.month')}
-            value={draft.birthMonth}
-            maxLength={2}
-            onChangeText={(value) => patch('birthMonth', normaliseDecimalDigits(value))}
-          />
-          <DatePart
-            kind="year"
-            label={t('onboarding.year')}
-            value={draft.birthYear}
-            maxLength={4}
-            onChangeText={(value) => patch('birthYear', normaliseDecimalDigits(value))}
-          />
+        <View style={styles.datePanel}>
+          <Text variant="label">{t('onboarding.birthDate')}</Text>
+          <Text variant="caption" style={styles.dateHint}>{t('onboarding.birthDateHint')}</Text>
+          <View style={[styles.dateRow, isRTL && styles.rowReverse]}>
+            <DatePart
+              kind="day"
+              label={t('onboarding.day')}
+              value={draft.birthDay}
+              maxLength={2}
+              onChangeText={(value) => patch('birthDay', normaliseDecimalDigits(value))}
+            />
+            <DatePart
+              kind="month"
+              label={t('onboarding.month')}
+              value={draft.birthMonth}
+              maxLength={2}
+              onChangeText={(value) => patch('birthMonth', normaliseDecimalDigits(value))}
+            />
+            <DatePart
+              kind="year"
+              label={t('onboarding.year')}
+              value={draft.birthYear}
+              maxLength={4}
+              onChangeText={(value) => patch('birthYear', normaliseDecimalDigits(value))}
+            />
+          </View>
         </View>
         {errors.birthDate ? <InlineError message={errors.birthDate} /> : null}
 
@@ -460,7 +490,19 @@ function LocationStep({
   );
 }
 
-function ReviewStep({ draft, birthDate }: { draft: OnboardingDraft; birthDate: string | null }) {
+function ReviewStep({
+  draft,
+  birthDate,
+  legalAccepted,
+  onLegalAcceptedChange,
+  legalError,
+}: {
+  draft: OnboardingDraft;
+  birthDate: string | null;
+  legalAccepted: boolean;
+  onLegalAcceptedChange: (value: boolean) => void;
+  legalError?: string;
+}) {
   const { t, localeTag, isRTL } = useI18n();
   return (
     <View>
@@ -481,6 +523,29 @@ function ReviewStep({ draft, birthDate }: { draft: OnboardingDraft; birthDate: s
       <Text variant="caption" style={styles.reviewNote}>
         {t('onboarding.reviewNote')}
       </Text>
+      <Pressable
+        testID={testIds.onboarding.legalConsent}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: legalAccepted }}
+        accessibilityLabel={t('onboarding.legalConsent')}
+        onPress={() => onLegalAcceptedChange(!legalAccepted)}
+        style={[styles.legalConsent, isRTL && styles.rowReverse, legalAccepted && styles.legalConsentSelected]}
+      >
+        <View style={[styles.legalCheck, legalAccepted && styles.legalCheckSelected]}>
+          {legalAccepted ? <Text style={styles.legalCheckMark}>✓</Text> : null}
+        </View>
+        <Text variant="caption" style={styles.legalConsentText}>{t('onboarding.legalConsent')}</Text>
+      </Pressable>
+      <View style={[styles.legalLinks, isRTL && styles.rowReverse]}>
+        <Pressable accessibilityRole="link" accessibilityLabel={t('onboarding.termsLink')} onPress={() => void Linking.openURL(LEGAL_DOCUMENTS.terms.url)}>
+          <Text style={styles.legalLink}>{t('onboarding.termsLink')}</Text>
+        </Pressable>
+        <Text variant="caption">{t('onboarding.legalAnd')}</Text>
+        <Pressable accessibilityRole="link" accessibilityLabel={t('onboarding.privacyLink')} onPress={() => void Linking.openURL(LEGAL_DOCUMENTS.privacy.url)}>
+          <Text style={styles.legalLink}>{t('onboarding.privacyLink')}</Text>
+        </Pressable>
+      </View>
+      {legalError ? <InlineError message={legalError} /> : null}
     </View>
   );
 }
@@ -535,7 +600,7 @@ function DatePart(
         keyboardType="number-pad"
         placeholder={kind === 'year' ? 'YYYY' : kind === 'month' ? 'MM' : 'DD'}
         placeholderTextColor={color.faintest}
-        style={[styles.input, isRTL && styles.inputRTL]}
+        style={[styles.input, styles.dateInput, isRTL && styles.inputRTL]}
       />
     </View>
   );
@@ -691,7 +756,15 @@ const styles = StyleSheet.create({
   inputRTL: { textAlign: 'right', writingDirection: 'rtl' },
   errorText: { fontFamily: font.bodyMedium, fontSize: 12, lineHeight: 18, color: '#A33A3A' },
   dateRow: { flexDirection: 'row', gap: 9 },
+  datePanel: {
+    gap: 9,
+    padding: 15,
+    borderRadius: radius.lg,
+    backgroundColor: color.sandLight,
+  },
+  dateHint: { color: color.inkSoft },
   datePart: { flex: 1, gap: 6 },
+  dateInput: { textAlign: 'center', paddingHorizontal: 8, fontFamily: font.bodySemi },
   genderBlock: { marginTop: 5, gap: 8 },
   genderRow: { flexDirection: 'row', gap: 10, marginTop: 3 },
   genderOption: {
@@ -739,6 +812,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   reviewNote: { marginTop: 15 },
+  legalConsent: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 18, padding: 13, borderRadius: radius.lg, borderWidth: 1, borderColor: alpha.lineStrong },
+  legalConsentSelected: { borderColor: color.ink, backgroundColor: color.sandLight },
+  legalCheck: { width: 20, height: 20, borderRadius: radius.sm, borderWidth: 1, borderColor: alpha.lineButton, alignItems: 'center', justifyContent: 'center' },
+  legalCheckSelected: { backgroundColor: color.ink, borderColor: color.ink },
+  legalCheckMark: { fontFamily: font.bodyBold, fontSize: 12, color: color.white },
+  legalConsentText: { flex: 1, color: color.ink },
+  legalLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  legalLink: { fontFamily: font.bodySemi, fontSize: 12, color: color.ink, textDecorationLine: 'underline' },
   submitError: {
     marginTop: 18,
     padding: 14,

@@ -27,14 +27,17 @@ import {
 import { AudioGreeting } from '@/components/introductions/AudioGreeting';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Chip } from '@/components/ui/Chip';
 import { Field } from '@/components/ui/Field';
 import { Text } from '@/components/ui/Text';
 import { queryKeys } from '@/lib/queryClient';
+import { testIds } from '@/lib/testIds';
+import { PRACTICE_LABELS, TIMELINE_LABELS } from '@/data/preferences';
 import { getProfileReadiness, type ProfileReadinessIssue } from '@/lib/profileReadiness';
 import { useI18n, type Translate } from '@/i18n';
 import { USE_MOCKS } from '@/lib/supabase';
 import { alpha, color, font, radius } from '@/theme/tokens';
-import type { Profile } from '@/types';
+import type { MarriageTimeline, Profile, ReligiousPractice } from '@/types';
 
 function profileSchema(t: Translate) {
   return z.object({
@@ -45,6 +48,10 @@ function profileSchema(t: Translate) {
     occupation: z.string().min(2, t('profile.validation.occupation')),
     education: z.string().max(120, t('profile.validation.education')),
     bio: z.string().min(80, t('profile.validation.bioShort')).max(600, t('profile.validation.bioLong')),
+    values: z.string().max(180, t('profile.validation.values')),
+    languages: z.string().max(120, t('profile.validation.languages')),
+    religiousPractice: z.enum(['very_practicing', 'practicing', 'moderate', 'learning']),
+    timeline: z.enum(['within_3_months', 'within_6_months', 'within_1_year', '1_to_2_years']),
   });
 }
 
@@ -83,6 +90,10 @@ export function ProfileTab({ profile }: { profile: Profile }) {
       occupation: profile.occupation,
       education: profile.education ?? '',
       bio: profile.bio,
+      values: profile.chips.join(', '),
+      languages: profile.languagesSpoken.join(', '),
+      religiousPractice: profile.religiousPractice,
+      timeline: profile.timeline,
     },
   });
   const draft = useWatch({ control });
@@ -122,6 +133,10 @@ export function ProfileTab({ profile }: { profile: Profile }) {
       occupation: profile.occupation,
       education: profile.education ?? '',
       bio: profile.bio,
+      values: profile.chips.join(', '),
+      languages: profile.languagesSpoken.join(', '),
+      religiousPractice: profile.religiousPractice,
+      timeline: profile.timeline,
     });
   }, [profile, reset]);
 
@@ -219,6 +234,10 @@ export function ProfileTab({ profile }: { profile: Profile }) {
         // The server converts an empty string to NULL, so members can clear it.
         education: values.education.trim(),
         bio: values.bio.trim(),
+        chips: splitProfileList(values.values),
+        languagesSpoken: splitProfileList(values.languages),
+        religiousPractice: values.religiousPractice,
+        timeline: values.timeline,
       };
       if (USE_MOCKS && photosDirty) patch.photos = photos;
       return updateMyProfile(patch);
@@ -229,6 +248,10 @@ export function ProfileTab({ profile }: { profile: Profile }) {
         ...values,
         education: values.education.trim() || undefined,
         photos,
+        chips: splitProfileList(values.values),
+        languagesSpoken: splitProfileList(values.languages),
+        religiousPractice: values.religiousPractice,
+        timeline: values.timeline,
       };
       queryClient.setQueryData(queryKeys.profile('me'), saved);
       void queryClient.invalidateQueries({ queryKey: queryKeys.profileReadiness });
@@ -394,6 +417,44 @@ export function ProfileTab({ profile }: { profile: Profile }) {
             : t('profile.readinessBody', { items: readiness.missing.map((item) => t(readinessKey[item])).join(', ') })}
         </Text>
       </Card>
+      {photos.length === 0 ? (
+        <Card testID={testIds.you.photoGuide} tone="filled" style={styles.photoGuide}>
+          <Text variant="micro">{t('profile.photoGuideTitle')}</Text>
+          <Text variant="caption" style={styles.photoGuideBody}>
+            {t('profile.photoGuideBody')}
+          </Text>
+          <View style={styles.photoGuideRules}>
+            {[
+              'profile.photoGuideFace',
+              'profile.photoGuideSelf',
+              'profile.photoGuideFilter',
+            ].map((key) => (
+              <View key={key} style={[styles.photoGuideRule, isRTL && styles.rowRTL]}>
+                <View style={styles.photoGuideMark} />
+                <Text variant="caption" style={styles.photoGuideRuleText}>
+                  {t(key as 'profile.photoGuideFace' | 'profile.photoGuideSelf' | 'profile.photoGuideFilter')}
+                </Text>
+              </View>
+            ))}
+          </View>
+          <View style={[styles.photoActions, isRTL && styles.rowRTL]}>
+            <Button
+              label={t('profile.photoGuideCamera')}
+              variant="secondary"
+              disabled={uploadingPhoto}
+              onPress={() => void addPhoto('camera')}
+              style={styles.photoGuideAction}
+            />
+            <Button
+              label={t('profile.photoGuideLibrary')}
+              disabled={uploadingPhoto}
+              loading={uploadingPhoto}
+              onPress={() => void addPhoto('library')}
+              style={styles.photoGuideAction}
+            />
+          </View>
+        </Card>
+      ) : null}
       <Card>
         <View style={[styles.cardHead, isRTL && styles.rowRTL]}>
           <Text variant="micro">{t('profile.gallery')}</Text>
@@ -605,6 +666,74 @@ export function ProfileTab({ profile }: { profile: Profile }) {
             />
           )}
         />
+
+        <Controller
+          control={control}
+          name="values"
+          render={({ field }) => (
+            <Field
+              label={t('profile.values')}
+              placeholder={t('profile.valuesPlaceholder')}
+              value={field.value}
+              onChangeText={field.onChange}
+              error={errors.values?.message}
+            />
+          )}
+        />
+
+        <Controller
+          control={control}
+          name="languages"
+          render={({ field }) => (
+            <Field
+              label={t('profile.languages')}
+              placeholder={t('profile.languagesPlaceholder')}
+              value={field.value}
+              onChangeText={field.onChange}
+              error={errors.languages?.message}
+            />
+          )}
+        />
+
+        <View style={styles.profileChoice}>
+          <Text variant="micro">{t('profile.practice')}</Text>
+          <Controller
+            control={control}
+            name="religiousPractice"
+            render={({ field }) => (
+              <View style={styles.choiceChips}>
+                {(Object.keys(PRACTICE_LABELS) as ReligiousPractice[]).map((value) => (
+                  <Chip
+                    key={value}
+                    label={practiceLabel(value, t)}
+                    selected={field.value === value}
+                    onPress={() => field.onChange(value)}
+                  />
+                ))}
+              </View>
+            )}
+          />
+        </View>
+
+        <View style={styles.profileChoice}>
+          <Text variant="micro">{t('profile.timing')}</Text>
+          <Controller
+            control={control}
+            name="timeline"
+            render={({ field }) => (
+              <View style={styles.choiceChips}>
+                {(Object.keys(TIMELINE_LABELS) as MarriageTimeline[]).map((value) => (
+                  <Chip
+                    key={value}
+                    label={timelineLabel(value, t)}
+                    selected={field.value === value}
+                    onPress={() => field.onChange(value)}
+                  />
+                ))}
+              </View>
+            )}
+          />
+        </View>
       </Card>
 
       <Button
@@ -620,6 +749,30 @@ export function ProfileTab({ profile }: { profile: Profile }) {
       ) : null}
     </View>
   );
+}
+
+function splitProfileList(value: string): string[] {
+  return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))].slice(0, 8);
+}
+
+function practiceLabel(value: ReligiousPractice, t: Translate): string {
+  const keys: Record<ReligiousPractice, 'filters.practice.very' | 'filters.practice.practicing' | 'filters.practice.moderate' | 'filters.practice.learning'> = {
+    very_practicing: 'filters.practice.very',
+    practicing: 'filters.practice.practicing',
+    moderate: 'filters.practice.moderate',
+    learning: 'filters.practice.learning',
+  };
+  return t(keys[value]);
+}
+
+function timelineLabel(value: MarriageTimeline, t: Translate): string {
+  const keys: Record<MarriageTimeline, 'filters.timeline.3m' | 'filters.timeline.6m' | 'filters.timeline.1y' | 'filters.timeline.2y'> = {
+    within_3_months: 'filters.timeline.3m',
+    within_6_months: 'filters.timeline.6m',
+    within_1_year: 'filters.timeline.1y',
+    '1_to_2_years': 'filters.timeline.2y',
+  };
+  return t(keys[value]);
 }
 
 const readinessKey: Record<ProfileReadinessIssue, 'profile.readinessName' | 'profile.readinessLocation' | 'profile.readinessBio' | 'profile.readinessPhoto'> = {
@@ -654,6 +807,13 @@ const styles = StyleSheet.create({
   wrap: { gap: 12, paddingBottom: 24 },
   readinessCard: { gap: 5 },
   readinessBody: { color: color.inkSoft },
+  photoGuide: { gap: 10 },
+  photoGuideBody: { color: color.inkSoft },
+  photoGuideRules: { gap: 8, marginTop: 2 },
+  photoGuideRule: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  photoGuideMark: { width: 7, height: 7, borderRadius: 4, backgroundColor: color.gold },
+  photoGuideRuleText: { flex: 1, color: color.ink },
+  photoGuideAction: { flex: 1, paddingHorizontal: 8 },
 
   cardHead: {
     flexDirection: 'row',
@@ -775,6 +935,8 @@ const styles = StyleSheet.create({
   voiceNote: { marginTop: 10 },
 
   formCard: { gap: 14 },
+  profileChoice: { gap: 9 },
+  choiceChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   formRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   saveError: { color: color.inkSoft, textAlign: 'center' },
 });

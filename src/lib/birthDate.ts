@@ -49,6 +49,21 @@ export function birthDateValidationIssue(
   return null;
 }
 
+/**
+ * Returns the age shown to a member for a valid date of birth. Keeping this
+ * alongside validation prevents the confirmation sheet from disagreeing with
+ * the server-bound date format.
+ */
+export function ageForBirthDateParts(
+  parts: BirthDateParts,
+  today: Date = new Date()
+): number | null {
+  if (birthDateValidationIssue(parts, today)) return null;
+  const value = formatBirthDate(parts);
+  if (!value) return null;
+  return ageOnDate(new Date(`${value}T00:00:00`), today);
+}
+
 export function ageOnDate(birthDate: Date, today: Date): number {
   let age = today.getFullYear() - birthDate.getFullYear();
   if (
