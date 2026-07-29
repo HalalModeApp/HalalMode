@@ -294,7 +294,7 @@ export function buildMockRound(size: number): IntroductionRound {
 const MOCK_RECAP: RecapItem[] = [
   {
     questionId: 'q1',
-    heading: 'Prayer as rhythm',
+    heading: 'Daily prayer',
     verdict: 'aligned',
     note: 'Both described shared Fajr without policing.',
   },
@@ -339,7 +339,7 @@ const MOCK_COMPATIBILITY_BREAKDOWN = [
 
 /** Their answers — revealed only once the member submits their own. */
 export const MOCK_THEIR_ANSWERS: Record<string, string> = {
-  q1: 'Fajr together when we can, and never guilt-tripping each other about the ones we miss. Rhythm, not policing.',
+  q1: 'Fajr together when we can, and supporting each other without guilt when we miss one.',
   q2: 'Small and unglamorous. Two salaries, one flat, Thursday dinners with both families, and a lot of learning how the other person likes silence.',
   q3: 'You provide the household as a duty; my income is mine and I will still put it in when it matters. One honest look at the numbers each month.',
   q4: 'We stop. Fifteen minutes apart, then we sit down. No raised voices, no leaving the house, no involving family in the first hour.',

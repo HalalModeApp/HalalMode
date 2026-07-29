@@ -189,7 +189,7 @@ export interface CompatibilityBreakdownItem {
 
 export interface RecapItem {
   questionId: string;
-  /** Short neutral heading, e.g. "Prayer as rhythm". */
+  /** Short neutral heading, e.g. "Daily prayer". */
   heading: string;
   verdict: RecapVerdict;
   /** One neutral sentence. Never a score, never a judgement. */
