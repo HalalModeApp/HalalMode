@@ -114,6 +114,7 @@ function profileFromRow(row: Record<string, unknown>): Profile {
     familyGoals: row.family_goals as Profile['familyGoals'],
     languagesSpoken: (row.languages_spoken as string[] | null) ?? [],
     isVerified: Boolean(row.is_verified),
+    isPaused: Boolean(row.is_paused),
     audioGreetingUrl: row.audio_greeting_url as string | undefined,
     audioDurationSeconds: row.audio_duration_seconds as number | undefined,
   };

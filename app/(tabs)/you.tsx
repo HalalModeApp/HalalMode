@@ -114,6 +114,7 @@ export default function YouScreen() {
           <SettingsTab
             liveCount={live.length}
             openConnections={connections.length}
+            profilePaused={profile.isPaused ?? false}
           />
         ) : null}
       </ScrollView>

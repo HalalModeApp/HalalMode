@@ -244,6 +244,7 @@ export const MOCK_SELF: Profile = {
   familyGoals: 'wants_children_soon',
   languagesSpoken: ['English', 'Arabic'],
   isVerified: true,
+  isPaused: false,
 };
 
 export const MOCK_PREFERENCES: PrivatePreferences = {

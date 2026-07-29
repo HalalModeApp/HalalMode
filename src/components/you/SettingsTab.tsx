@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
@@ -16,38 +15,25 @@ import { useAuth } from '@/state/auth';
 import { useFeatureFlags } from '@/state/featureFlags';
 import { USE_MOCKS } from '@/lib/supabase';
 import { testIds } from '@/lib/testIds';
+import { queryKeys } from '@/lib/queryClient';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
-import { TIER_LIMITS } from '@/types';
-
-const SETTINGS_KEY = 'halalmode.preferences.v1';
-
-interface LocalSettings {
-  quietActivity: boolean;
-  contactShield: boolean;
-  gentleReminders: boolean;
-  paused: boolean;
-}
-
-const DEFAULT_SETTINGS: LocalSettings = {
-  quietActivity: true,
-  contactShield: false,
-  gentleReminders: true,
-  paused: false,
-};
+import { TIER_LIMITS, type Profile } from '@/types';
 
 export function SettingsTab({
   liveCount,
   openConnections,
+  profilePaused,
 }: {
   liveCount: number;
   openConnections: number;
+  profilePaused: boolean;
 }) {
   const { t, isRTL, localeTag, nativeRestartRequired } = useI18n();
   const { tier, setTier, language, setLanguage } = useSession();
   const { signOut } = useAuth();
   const { pushNotifications } = useFeatureFlags();
   const queryClient = useQueryClient();
-  const [settings, setSettings] = useState<LocalSettings>(DEFAULT_SETTINGS);
+  const [paused, setPaused] = useState(profilePaused);
   const [pauseConfirm, setPauseConfirm] = useState(false);
   const [premiumConfirm, setPremiumConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -81,33 +67,16 @@ export function SettingsTab({
     t('settings.premium.f4'),
   ];
 
-  useEffect(() => {
-    let active = true;
-    void AsyncStorage.getItem(SETTINGS_KEY)
-      .then((raw) => {
-        if (!active || !raw) return;
-        const saved = JSON.parse(raw) as Partial<LocalSettings>;
-        setSettings((current) => ({ ...current, ...saved }));
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const patch = (key: keyof LocalSettings, value: boolean) => {
-    setSettings((current) => {
-      const next = { ...current, [key]: value };
-      void AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(next)).catch(() => {});
-      return next;
-    });
-  };
+  useEffect(() => setPaused(profilePaused), [profilePaused]);
 
   const confirmPause = async () => {
-    const next = !settings.paused;
+    const next = !paused;
     try {
       await setProfilePaused(next);
-      patch('paused', next);
+      setPaused(next);
+      queryClient.setQueryData<Profile>(queryKeys.profile('me'), (current) =>
+        current ? { ...current, isPaused: next } : current
+      );
       setPauseConfirm(false);
     } catch {
       Alert.alert(t('settings.pauseErrorTitle'), t('settings.pauseErrorBody'));
@@ -269,13 +238,13 @@ export function SettingsTab({
 
       <Section eyebrow={t('settings.account')} title={t('settings.accountTitle')}>
         <SettingRow
-          title={settings.paused ? t('settings.paused') : t('settings.pause')}
+          title={paused ? t('settings.paused') : t('settings.pause')}
           subtitle={
-            settings.paused
+            paused
               ? t('settings.pausedBody')
               : t('settings.pauseBody')
           }
-          value={settings.paused}
+          value={paused}
           onValueChange={() => setPauseConfirm(true)}
         />
         <View style={styles.paceCard}>
@@ -314,13 +283,13 @@ export function SettingsTab({
 
       <ConfirmDialog
         visible={pauseConfirm}
-        title={settings.paused ? t('settings.resumeTitle') : t('settings.pauseTitle')}
+        title={paused ? t('settings.resumeTitle') : t('settings.pauseTitle')}
         body={
-          settings.paused
+          paused
             ? t('settings.resumeBody')
             : t('settings.pauseConfirmBody')
         }
-        confirmLabel={settings.paused ? t('settings.resume') : t('settings.pauseNow')}
+        confirmLabel={paused ? t('settings.resume') : t('settings.pauseNow')}
         cancelLabel={t('settings.notNow')}
         onConfirm={() => void confirmPause()}
         onCancel={() => setPauseConfirm(false)}

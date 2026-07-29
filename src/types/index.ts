@@ -79,6 +79,8 @@ export interface Profile {
   familyGoals: FamilyGoals;
   languagesSpoken: string[];
   isVerified: boolean;
+  /** Present for the owner profile only; matching eligibility stays server-authoritative. */
+  isPaused?: boolean;
   audioGreetingUrl?: string;
   audioGreetingStoragePath?: string;
   audioDurationSeconds?: number;
