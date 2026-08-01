@@ -52,6 +52,8 @@ export interface AllocationResult {
     rejectedBelowFloor: number;
     /** Members given a best-available partner before the greedy fill. */
     anchoredMembers: number;
+    /** Slots deliberately given to a lower-ranked edge to gather evidence. */
+    exploratorySlots: number;
     repairSwaps: number;
     repairTimedOut: boolean;
   };
@@ -150,6 +152,17 @@ export function allocate(input: AllocationInput): AllocationResult {
     assigned.push(edge);
   }
 
+
+  const explored = explorationPass({
+    ordered,
+    assigned,
+    takenPairs,
+    remaining,
+    capacities,
+    config,
+    seed,
+  });
+
   const repair = repairPass({
     ordered,
     assigned,
@@ -173,6 +186,7 @@ export function allocate(input: AllocationInput): AllocationResult {
       assignedEdges: assigned.length,
       rejectedBelowFloor,
       anchoredMembers: anchored,
+    exploratorySlots: explored,
     repairSwaps: repair.swaps,
       repairTimedOut: repair.timedOut,
     },
@@ -251,6 +265,94 @@ function anchorPass(input: AnchorInput): number {
   }
 
   return placed;
+}
+
+interface ExplorationInput {
+  ordered: ScoredEdge[];
+  assigned: ScoredEdge[];
+  takenPairs: Set<string>;
+  remaining: Map<string, number>;
+  capacities: Map<string, Capacity>;
+  config: MatchingConfig;
+  seed: number;
+}
+
+/**
+ * Spends a small share of slots on edges the model did not rank highest.
+ *
+ * The matcher improves by watching what happens to the pairs it chose, which
+ * means it only ever sees its own beliefs confirmed. If it is systematically
+ * wrong about a kind of pair, nothing in a purely greedy round will ever tell
+ * it so. Exploration is the only mechanism that can correct a mistaken model
+ * rather than reinforce it.
+ *
+ * Three constraints keep the cost honest. It never touches a member's strongest
+ * introduction — only positions from `exploration_min_slot` onward. The
+ * substitute must still clear the score floor, so an experiment is never an
+ * incompatible pair. And every swap frees both sides' capacity before spending
+ * it again, so reciprocity and limits hold exactly as before.
+ */
+function explorationPass(input: ExplorationInput): number {
+  const { ordered, assigned, takenPairs, remaining, capacities, config, seed } = input;
+  if (config.exploration_rate <= 0) return 0;
+
+  // Where each member's edges sit in their own set, best first.
+  const setOf = new Map<string, ScoredEdge[]>();
+  for (const edge of assigned) {
+    for (const id of [edge.a, edge.b]) {
+      const list = setOf.get(id);
+      if (list) list.push(edge);
+      else setOf.set(id, [edge]);
+    }
+  }
+
+  let swapped = 0;
+  for (const [id, set] of setOf) {
+    if (set.length < config.exploration_min_slot) continue;
+
+    // Deterministic per member and seed, so a run is reproducible.
+    const draw = (tieBreak(seed, id, 'explore') % 10000) / 10000;
+    if (draw >= config.exploration_rate) continue;
+
+    // The weakest edge in their set is the one worth risking.
+    const weakest = set[set.length - 1];
+    if (!weakest) continue;
+
+    const alternative = ordered.find((candidate) => {
+      if (candidate.a !== id && candidate.b !== id) return false;
+      if (takenPairs.has(pairKey(candidate.a, candidate.b))) return false;
+      if (candidate.reciprocal < config.min_reciprocal_score) return false;
+      const other = candidate.a === id ? candidate.b : candidate.a;
+      // Capacity for the partner, counting the slot the swap is about to free.
+      const freed = other === weakest.a || other === weakest.b ? 1 : 0;
+      return (remaining.get(other) ?? 0) + freed > 0 && capacities.has(other);
+    });
+    if (!alternative) continue;
+
+    const removeIndex = assigned.indexOf(weakest);
+    if (removeIndex < 0) continue;
+    assigned.splice(removeIndex, 1);
+    takenPairs.delete(pairKey(weakest.a, weakest.b));
+    remaining.set(weakest.a, (remaining.get(weakest.a) ?? 0) + 1);
+    remaining.set(weakest.b, (remaining.get(weakest.b) ?? 0) + 1);
+
+    if ((remaining.get(alternative.a) ?? 0) <= 0 || (remaining.get(alternative.b) ?? 0) <= 0) {
+      // Putting it back is always safe: the capacity was just freed from it.
+      assigned.push(weakest);
+      takenPairs.add(pairKey(weakest.a, weakest.b));
+      remaining.set(weakest.a, (remaining.get(weakest.a) ?? 1) - 1);
+      remaining.set(weakest.b, (remaining.get(weakest.b) ?? 1) - 1);
+      continue;
+    }
+
+    assigned.push(alternative);
+    takenPairs.add(pairKey(alternative.a, alternative.b));
+    remaining.set(alternative.a, (remaining.get(alternative.a) ?? 1) - 1);
+    remaining.set(alternative.b, (remaining.get(alternative.b) ?? 1) - 1);
+    swapped += 1;
+  }
+
+  return swapped;
 }
 
 interface RepairInput {

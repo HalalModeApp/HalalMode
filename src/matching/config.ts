@@ -75,6 +75,21 @@ export interface MatchingConfig {
    */
   rotation_min_set_size: number;
 
+  // --- Exploration --------------------------------------------------------
+  /**
+   * Share of eligible slots given to an edge the model did *not* rank highest.
+   *
+   * Without this the matcher only ever observes pairs it already believed in,
+   * so it can confirm its estimates but never correct them. Learning has a
+   * price, and this is it, paid deliberately rather than pretended away.
+   */
+  exploration_rate: number;
+  /**
+   * Exploration only touches a set from this position onward, so a member's
+   * strongest introduction is never spent on an experiment.
+   */
+  exploration_min_slot: number;
+
   // --- Allocation ---------------------------------------------------------
   repair_time_budget_ms: number;
   /**
@@ -120,6 +135,9 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
   repeat_cooldown_days: 14,
   max_pair_appearances: 3,
   repeat_abandon_drop: 0.35,
+
+  exploration_rate: 0.1,
+  exploration_min_slot: 4,
 
   rotation_enabled: true,
   rotation_min_set_size: 3,

@@ -11,11 +11,16 @@ const config = DEFAULT_MATCHING_CONFIG;
  * hundred", so that is what these run against rather than a hypothetical
  * large population.
  */
+/**
+ * Exploration is held at zero across these runs. It deliberately trades a slot
+ * for evidence, so leaving it on would let a randomiser contaminate tests whose
+ * subject is ranking quality. Its own cost is asserted separately at the end.
+ */
 const LAUNCH = {
   seed: 20260801,
   perGender: 150,
   rounds: 12,
-  config,
+  config: resolveConfig({ exploration_rate: 0 }),
   pickModel: 'mixed' as const,
 };
 
@@ -183,5 +188,26 @@ test('premium capacity never reduces qualified exposure for free members', () =>
   assert.ok(
     mixed.zeroMatchShare <= allFree.zeroMatchShare + 0.05,
     `a premium-heavy pool starved free members: ${mixed.zeroMatchShare} vs ${allFree.zeroMatchShare}`
+  );
+});
+
+
+test('exploration costs a bounded, small share of set size', () => {
+  // Learning is not free: an exploratory slot is one the model did not believe
+  // was best. The point is not that it costs nothing, but that the price stays
+  // small and stays measured.
+  const without = simulate({ ...LAUNCH, strategy: 'v1' });
+  const with10 = simulate({
+    ...LAUNCH,
+    config: resolveConfig({ exploration_rate: 0.1 }),
+    strategy: 'v1',
+  });
+
+  const cost = (without.meanSetSize - with10.meanSetSize) / without.meanSetSize;
+  assert.ok(cost >= 0, 'exploration should not somehow enlarge sets');
+  assert.ok(cost < 0.02, `exploration cost too much set size: ${cost}`);
+  assert.ok(
+    with10.meanReciprocalQuality > without.meanReciprocalQuality * 0.95,
+    'exploration must not drag quality down materially'
   );
 });

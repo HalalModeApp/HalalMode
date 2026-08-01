@@ -318,6 +318,7 @@ test('verification rejects a round that breaks capacity', () => {
       assignedEdges: 2,
       rejectedBelowFloor: 0,
       anchoredMembers: 0,
+      exploratorySlots: 0,
       repairSwaps: 0,
       repairTimedOut: false,
     },
@@ -338,6 +339,7 @@ test('verification rejects a self-pair', () => {
         assignedEdges: 1,
         rejectedBelowFloor: 0,
         anchoredMembers: 0,
+        exploratorySlots: 0,
         repairSwaps: 0,
         repairTimedOut: false,
       },
@@ -494,4 +496,92 @@ test('the allocator choice is deterministic and reversible', () => {
   // no residue in either direction.
   const greedy = allocate({ edges, capacities: caps, config: resolveConfig(), seed: 3 });
   assert.equal(greedy.stats.anchoredMembers, 0);
+});
+
+// --- Exploration -----------------------------------------------------------
+
+test('exploration never touches a small set', () => {
+  // Below the minimum slot there is no position to spare: every edge in the
+  // set is one of the member's strongest.
+  const config = resolveConfig({ exploration_rate: 1 });
+  const edges = [scored('a', 'x', 0.9), scored('a', 'y', 0.8), scored('a', 'z', 0.7)];
+  const caps = capacities([
+    ['a', 3],
+    ['x', 1],
+    ['y', 1],
+    ['z', 1],
+  ]);
+
+  const result = allocate({ edges, capacities: caps, config, seed: 4 });
+  assert.equal(result.stats.exploratorySlots, 0);
+});
+
+test('exploration is off when the rate is zero', () => {
+  const config = resolveConfig({ exploration_rate: 0 });
+  const edges = Array.from({ length: 8 }, (_, i) => scored('a', `p${i}`, 0.9 - i * 0.05));
+  const caps = capacities([
+    ['a', 6],
+    ...Array.from({ length: 8 }, (_, i) => [`p${i}`, 1] as [string, number]),
+  ]);
+
+  const result = allocate({ edges, capacities: caps, config, seed: 4 });
+  assert.equal(result.stats.exploratorySlots, 0);
+});
+
+test('exploration keeps capacity and reciprocity intact', () => {
+  const config = resolveConfig({ exploration_rate: 1, exploration_min_slot: 2 });
+  const edges: ScoredEdge[] = [];
+  for (let i = 0; i < 10; i += 1) {
+    edges.push(scored('a', `p${i}`, 0.9 - i * 0.05));
+    edges.push(scored('b', `p${i}`, 0.85 - i * 0.05));
+  }
+  const caps = capacities([
+    ['a', 4],
+    ['b', 4],
+    ...Array.from({ length: 10 }, (_, i) => [`p${i}`, 2] as [string, number]),
+  ]);
+
+  const result = allocate({ edges, capacities: caps, config, seed: 9 });
+  assert.deepEqual(verifyAllocation(result, caps), { ok: true });
+});
+
+test('an exploratory swap still respects the score floor', () => {
+  // The only alternative is below the floor, so the weakest edge is kept.
+  const config = resolveConfig({ exploration_rate: 1, exploration_min_slot: 2 });
+  const edges = [
+    scored('a', 'x', 0.9),
+    scored('a', 'y', 0.8),
+    scored('a', 'z', config.min_reciprocal_score - 0.01),
+  ];
+  const caps = capacities([
+    ['a', 3],
+    ['x', 1],
+    ['y', 1],
+    ['z', 1],
+  ]);
+
+  const result = allocate({ edges, capacities: caps, config, seed: 4 });
+  for (const edge of result.assigned) {
+    assert.ok(
+      edge.reciprocal >= config.min_reciprocal_score,
+      'exploration must never place an edge below the floor'
+    );
+  }
+});
+
+test('exploration is deterministic for a given seed', () => {
+  const config = resolveConfig({ exploration_rate: 0.5, exploration_min_slot: 2 });
+  const edges = Array.from({ length: 10 }, (_, i) => scored('a', `p${i}`, 0.9 - i * 0.04));
+  const caps = capacities([
+    ['a', 5],
+    ...Array.from({ length: 10 }, (_, i) => [`p${i}`, 1] as [string, number]),
+  ]);
+
+  const first = allocate({ edges, capacities: caps, config, seed: 31 });
+  const second = allocate({ edges, capacities: caps, config, seed: 31 });
+  assert.deepEqual(
+    first.assigned.map((e) => pairKey(e.a, e.b)).sort(),
+    second.assigned.map((e) => pairKey(e.a, e.b)).sort()
+  );
+  assert.equal(first.stats.exploratorySlots, second.stats.exploratorySlots);
 });
