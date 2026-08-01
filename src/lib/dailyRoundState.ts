@@ -3,6 +3,8 @@ export const dailyRoundStatuses = [
   'profile_not_ready',
   'no_suitable_introductions',
   'matching_inputs_unavailable',
+  'awaiting_turn',
+  'at_match_capacity',
   'legal_consent_required',
 ] as const;
 

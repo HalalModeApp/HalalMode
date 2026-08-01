@@ -258,16 +258,28 @@ export default function DailyScreen() {
 
   if (!round || round.introductions.length === 0) {
     const matchingInputsUnavailable = emptyReason === 'matching_inputs_unavailable';
+    const awaitingTurn = emptyReason === 'awaiting_turn';
+    const atMatchCapacity = emptyReason === 'at_match_capacity';
+    const emptyTitle = awaitingTurn
+      ? 'daily.awaitingTurnTitle'
+      : atMatchCapacity
+        ? 'daily.atCapacityTitle'
+        : matchingInputsUnavailable
+          ? 'daily.matchingInputsUnavailableTitle'
+          : 'daily.noSuitableTitle';
+    const emptyBody = awaitingTurn
+      ? 'daily.awaitingTurnBody'
+      : atMatchCapacity
+        ? 'daily.atCapacityBody'
+        : matchingInputsUnavailable
+          ? 'daily.matchingInputsUnavailableBody'
+          : 'daily.noSuitableBody';
     return (
       <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
         <BrandHeader />
         <EmptyState
-          title={t(matchingInputsUnavailable
-            ? 'daily.matchingInputsUnavailableTitle'
-            : 'daily.noSuitableTitle')}
-          message={t(matchingInputsUnavailable
-            ? 'daily.matchingInputsUnavailableBody'
-            : 'daily.noSuitableBody')}
+          title={t(emptyTitle)}
+          message={t(emptyBody)}
         />
       </Screen>
     );
