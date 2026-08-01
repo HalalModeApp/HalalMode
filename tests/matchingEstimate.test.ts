@@ -13,6 +13,7 @@ import {
   directionalEstimate,
   evaluatePairResurface,
   mayResurface,
+  pairPrior,
   NO_PAIR_HISTORY,
   reciprocalScore,
   type MemberSignals,
@@ -139,6 +140,7 @@ test('not being picked is situational — a pair may return after cooldown', () 
     timesShown: 1,
     firstReciprocalScore: 0.6,
     lastReciprocalScore: 0.58,
+    explicitPassCount: 0,
   };
 
   assert.equal(
@@ -159,6 +161,7 @@ test('a pair stops resurfacing once it hits the repeat limit or is retired', () 
     timesShown: config.max_pair_appearances,
     firstReciprocalScore: 0.6,
     lastReciprocalScore: 0.6,
+    explicitPassCount: 0,
   };
 
   assert.equal(mayResurface(exhausted, 0.6, null, null, now, config), false);
@@ -175,6 +178,7 @@ test('a pair whose estimate keeps collapsing is abandoned', () => {
     timesShown: 1,
     firstReciprocalScore: 0.7,
     lastReciprocalScore: 0.3,
+    explicitPassCount: 0,
   };
 
   // 0.7 -> 0.3 is a 0.4 drop, past the 0.35 abandon threshold.
@@ -190,6 +194,7 @@ test('the repeat-abandon boundary is inclusive and emits a durable retirement pr
     timesShown: 1,
     firstReciprocalScore: first,
     lastReciprocalScore: first,
+    explicitPassCount: 0,
   };
 
   assert.deepEqual(
@@ -225,6 +230,7 @@ test('repeat exhaustion proposes retirement while an already-retired pair propos
     timesShown: config.max_pair_appearances,
     firstReciprocalScore: 0.7,
     lastReciprocalScore: 0.7,
+    explicitPassCount: 0,
   };
 
   assert.deepEqual(
@@ -243,6 +249,69 @@ test('repeat exhaustion proposes retirement while an already-retired pair propos
     { eligible: false, retirementReason: null },
     'a later run sees durable retired state and must not propose the write again'
   );
+});
+
+test('one pass costs the pair no rank at all', () => {
+  const once: PairHistory = {
+    timesShown: 1,
+    firstReciprocalScore: null,
+    lastReciprocalScore: null,
+    explicitPassCount: 1,
+  };
+  // A single pass has already been answered with months of silence, and it is
+  // one reading of one day. It must not also follow them back.
+  assert.equal(
+    pairPrior(once, config),
+    pairPrior({ ...once, explicitPassCount: 0 }, config)
+  );
+});
+
+test('a second pass costs rank, and does not close the pair', () => {
+  const twice: PairHistory = {
+    timesShown: 1,
+    firstReciprocalScore: null,
+    lastReciprocalScore: null,
+    explicitPassCount: 2,
+  };
+  const once = { ...twice, explicitPassCount: 1 };
+
+  assert.ok(pairPrior(twice, config) < pairPrior(once, config), 'the second no should cost them');
+  assert.equal(pairPrior(twice, config), pairPrior(once, config) * config.repeat_pass_penalty);
+
+  // Lower, never zero. They can still be shown and still be chosen — only a
+  // member closes a pair, by hiding someone.
+  assert.ok(pairPrior(twice, config) > 0);
+  assert.equal(
+    mayResurface(twice, 0.6, null, null, new Date('2026-03-01T00:00:00Z'), config),
+    true,
+    'a twice-passed pair is ranked down, not retired'
+  );
+});
+
+test('the pass penalty compounds and stays inside the prior', () => {
+  const history = (explicitPassCount: number): PairHistory => ({
+    timesShown: 1,
+    firstReciprocalScore: null,
+    lastReciprocalScore: null,
+    explicitPassCount,
+  });
+  assert.equal(
+    pairPrior(history(3), config),
+    pairPrior(history(2), config) * config.repeat_pass_penalty
+  );
+  for (const count of [0, 1, 2, 5, 20]) {
+    const value = pairPrior(history(count), config);
+    assert.ok(value > 0 && value <= 1, `prior stayed in range at ${count} passes`);
+  }
+});
+
+test('the pass penalty is configurable and fails closed', () => {
+  assert.throws(() => resolveConfig({ repeat_pass_penalty: 0 }), /Explicit pass/);
+  assert.throws(() => resolveConfig({ repeat_pass_penalty: 1.2 }), /Explicit pass/);
+  assert.throws(() => resolveConfig({ explicit_pass_cooldown_days: 0 }), /Explicit pass/);
+  // 1 is legal and means "a second pass costs nothing", which is a choice
+  // somebody may want to make deliberately.
+  assert.equal(resolveConfig({ repeat_pass_penalty: 1 }).repeat_pass_penalty, 1);
 });
 
 test('a pair below the score floor is never resurfaced', () => {

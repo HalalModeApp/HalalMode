@@ -199,9 +199,16 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   const ledger = useRef(new DwellLedger()).current;
   const profileOpened = useCallback((id: string) => ledger.opened(id), [ledger]);
   const profileClosed = useCallback((id: string) => ledger.closed(id), [ledger]);
+  // The whole set, not just the survivors: the rule is about how the member
+  // worked through everyone they were given, so the ones they let go still
+  // count as having been read.
   const passCandidate = useCallback(
-    () => inferPassCandidate(ledger.records(), Object.keys(released)),
-    [ledger, released]
+    () => inferPassCandidate(
+      ledger.records(),
+      (round?.introductions ?? []).map((item) => item.id),
+      Object.keys(released)
+    ),
+    [ledger, released, round]
   );
 
   const passMutation = useMutation({ mutationFn: passIntroduction });

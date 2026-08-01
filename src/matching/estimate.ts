@@ -61,12 +61,18 @@ export interface PairHistory {
   timesShown: number;
   firstReciprocalScore: number | null;
   lastReciprocalScore: number | null;
+  /**
+   * Deliberate passes, counted only once each has expired. A pass still inside
+   * its cooldown never reaches here at all — the pair is filtered out upstream.
+   */
+  explicitPassCount: number;
 }
 
 export const NO_PAIR_HISTORY: PairHistory = {
   timesShown: 0,
   firstReciprocalScore: null,
   lastReciprocalScore: null,
+  explicitPassCount: 0,
 };
 
 export type PairRetirementReason = 'repeat_limit' | 'score_collapse';
@@ -109,9 +115,22 @@ export function confidence(member: MemberSignals, config: MatchingConfig): numbe
 /**
  * The pair's own prior, decaying with each appearance that did not produce a
  * mutual pick. Fresh pairs start at 1 and are neither rewarded nor punished.
+ *
+ * A deliberate pass is stronger evidence than an appearance that simply went
+ * nowhere, so from the second one it costs the pair rank on top of the ordinary
+ * decay. The first pass costs nothing here — it has already been answered with
+ * a few months of silence, and one pass is a single reading of a single day.
+ * The second is a member telling us the same thing twice, months apart.
+ *
+ * It is a lower rank, not a removal. They can still be shown, and still be
+ * chosen; they simply stop displacing people who were never turned down. Only a
+ * member closes a pair for good, by hiding someone.
  */
 export function pairPrior(history: PairHistory, config: MatchingConfig): number {
-  return clamp(Math.pow(config.repeat_decay, Math.max(0, history.timesShown)), 0, 1);
+  const decay = Math.pow(config.repeat_decay, Math.max(0, history.timesShown));
+  const repeatedPasses = Math.max(0, history.explicitPassCount - 1);
+  const passPenalty = Math.pow(config.repeat_pass_penalty, repeatedPasses);
+  return clamp(decay * passPenalty, 0, 1);
 }
 
 /**

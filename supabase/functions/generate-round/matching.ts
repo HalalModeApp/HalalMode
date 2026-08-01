@@ -39,6 +39,8 @@ export interface CandidateEdgeRow {
   pair_last_score: number | null;
   pair_cooldown_until: string | null;
   pair_retired_at: string | null;
+  /** Absent from an older snapshot; treated as never passed. */
+  pair_explicit_pass_count?: number;
 }
 
 export interface MemberSignalRow {
@@ -184,6 +186,7 @@ export function planRound(
         timesShown: row.pair_times_shown,
         firstReciprocalScore: row.pair_first_score,
         lastReciprocalScore: row.pair_last_score,
+        explicitPassCount: row.pair_explicit_pass_count ?? 0,
       };
 
       // Each direction is estimated against the *subject* of that direction.

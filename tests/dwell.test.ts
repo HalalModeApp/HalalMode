@@ -1,13 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  DWELL_THRESHOLDS,
-  DwellLedger,
-  inferPassCandidate,
-  median,
-  type DwellRecord,
-} from '../src/lib/dwell';
+import { DwellLedger, inferPassCandidate, type DwellRecord } from '../src/lib/dwell';
 
 const record = (introductionId: string, totalMs: number, opens = 1): DwellRecord => ({
   introductionId,
@@ -15,90 +9,126 @@ const record = (introductionId: string, totalMs: number, opens = 1): DwellRecord
   opens,
 });
 
-test('median handles both odd and even counts', () => {
-  assert.equal(median([3, 1, 2]), 2);
-  assert.equal(median([4, 1, 2, 3]), 2.5);
-  assert.equal(median([]), 0);
-});
+/** A full free-tier set. */
+const FIVE = ['a', 'b', 'c', 'd', 'e'];
 
-test('no candidate before enough profiles have actually been read', () => {
-  const two = [record('a', 1_000), record('b', 30_000)];
-  assert.equal(inferPassCandidate(two, ['a']), null);
-});
+// --- Shape one: everyone read, one read least -------------------------------
 
-test('a mis-tap counts neither toward the minimum nor as a candidate', () => {
-  // Three entries, but one is a 200ms bounce: only two profiles were read, so
-  // there is no basis for comparison and nothing should be asked.
-  const records = [record('a', 200), record('b', 30_000), record('c', 28_000)];
-  assert.equal(inferPassCandidate(records, ['a', 'b', 'c']), null);
-
-  // With a fourth genuine read the bounce still cannot be the candidate.
-  const withFourth = [...records, record('d', 26_000), record('e', 4_000)];
-  assert.equal(inferPassCandidate(withFourth, ['a', 'd', 'e']), 'e');
-});
-
-test('the shortest read among released profiles is the candidate', () => {
+test('all five read and one read least is a pass', () => {
   const records = [
-    record('a', 40_000),
-    record('b', 36_000),
-    record('c', 38_000),
-    record('d', 3_000),
+    record('a', 30_000),
+    record('b', 28_000),
+    record('c', 26_000),
+    record('d', 24_000),
+    record('e', 4_000),
   ];
-  assert.equal(inferPassCandidate(records, ['b', 'd']), 'd');
+  assert.equal(inferPassCandidate(records, FIVE, ['b', 'c', 'd', 'e']), 'e');
+});
+
+test('least is least — the margin does not have to be large', () => {
+  // The rule is structural, not a judgement about how much less. A member who
+  // read everyone closely and one person slightly less is still asked; they can
+  // simply answer no, which is what the confirmation is for.
+  const records = [
+    record('a', 30_000),
+    record('b', 29_000),
+    record('c', 28_000),
+    record('d', 27_000),
+    record('e', 26_000),
+  ];
+  assert.equal(inferPassCandidate(records, FIVE, ['e']), 'e');
+});
+
+test('a tie at the bottom singles nobody out', () => {
+  const records = [
+    record('a', 30_000),
+    record('b', 28_000),
+    record('c', 26_000),
+    record('d', 5_000),
+    record('e', 5_000),
+  ];
+  assert.equal(inferPassCandidate(records, FIVE, ['d', 'e']), null);
+});
+
+// --- Shape two: everyone but one read, that one never opened ----------------
+
+test('four read and the fifth never opened is a pass', () => {
+  const records = [
+    record('a', 30_000),
+    record('b', 28_000),
+    record('c', 26_000),
+    record('d', 24_000),
+  ];
+  assert.equal(inferPassCandidate(records, FIVE, ['b', 'c', 'd', 'e']), 'e');
+});
+
+test('a mis-tap counts as never opened, not as the shortest read', () => {
+  const records = [
+    record('a', 30_000),
+    record('b', 28_000),
+    record('c', 26_000),
+    record('d', 24_000),
+    record('e', 300),
+  ];
+  // Backing straight out is not a reading. It resolves as the second shape,
+  // which reaches the same answer by the more honest route.
+  assert.equal(inferPassCandidate(records, FIVE, ['e']), 'e');
+});
+
+// --- Everything else ---------------------------------------------------------
+
+test('two left unopened is not a judgement about either', () => {
+  const records = [record('a', 30_000), record('b', 28_000), record('c', 26_000)];
+  assert.equal(
+    inferPassCandidate(records, FIVE, ['d', 'e']),
+    null,
+    'the member did not work through the set, so nobody was left at the bottom of it'
+  );
+});
+
+test('a barely-read set tells you nothing', () => {
+  const records = [record('a', 30_000)];
+  assert.equal(inferPassCandidate(records, FIVE, ['b', 'c', 'd', 'e']), null);
 });
 
 test('someone kept is never a candidate, however briefly they were read', () => {
   const records = [
-    record('kept', 2_000),
-    record('a', 40_000),
-    record('b', 36_000),
-    record('c', 38_000),
-  ];
-  // 'kept' is the shortest read by far but was not let go, so there is no no to
-  // strengthen. The next shortest is nowhere near the threshold.
-  assert.equal(inferPassCandidate(records, ['a', 'b', 'c']), null);
-});
-
-test('a member who reads everything closely is not asked about anyone', () => {
-  const records = [
-    record('a', 50_000),
-    record('b', 44_000),
-    record('c', 40_000),
-    record('d', 38_000),
-  ];
-  // The shortest is still well past a fair look, even though it is the least.
-  assert.ok(38_000 >= DWELL_THRESHOLDS.fairLookMs);
-  assert.equal(inferPassCandidate(records, ['a', 'b', 'c', 'd']), null);
-});
-
-test('an evenly skimmed set singles nobody out', () => {
-  // Everyone got roughly the same short look. Nobody was dismissed; the member
-  // was simply quick, and should not be asked to condemn whoever came last.
-  const records = [record('a', 6_000), record('b', 5_500), record('c', 5_000)];
-  assert.equal(inferPassCandidate(records, ['a', 'b', 'c']), null);
-});
-
-test('a tie is not a singling-out', () => {
-  const records = [
-    record('a', 40_000),
-    record('b', 36_000),
-    record('c', 2_000),
-    record('d', 2_000),
+    record('a', 30_000),
+    record('b', 28_000),
+    record('c', 26_000),
+    record('d', 24_000),
+    record('e', 2_000),
   ];
   assert.equal(
-    inferPassCandidate(records, ['c', 'd']),
+    inferPassCandidate(records, FIVE, ['b', 'c', 'd']),
     null,
-    'two equally brief reads make neither of them the one'
+    'e was read least but kept, so there is no no to strengthen'
   );
 });
 
-test('the candidate must be well below the member own pace, not merely last', () => {
-  const records = [record('a', 12_000), record('b', 11_000), record('c', 7_000)];
-  // 7s against a median of 11s is 0.64 — the least, but not a dismissal.
-  assert.equal(inferPassCandidate(records, ['a', 'b', 'c']), null);
+test('a set too small to have a bottom is not judged', () => {
+  const two = ['a', 'b'];
+  assert.equal(inferPassCandidate([record('a', 20_000)], two, ['b']), null);
+  assert.equal(
+    inferPassCandidate([record('a', 20_000), record('b', 2_000)], two, ['b']),
+    null
+  );
+});
 
-  const clearer = [record('a', 12_000), record('b', 11_000), record('c', 4_000)];
-  assert.equal(inferPassCandidate(clearer, ['a', 'b', 'c']), 'c');
+test('the rule scales to a premium set of ten', () => {
+  const ten = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
+  const records = ten.slice(0, 9).map((id, i) => record(id, 30_000 - i * 1_000));
+  assert.equal(inferPassCandidate(records, ten, ['j']), 'j', 'nine read, the tenth never opened');
+});
+
+test('duplicate ids in the set do not create a phantom unread profile', () => {
+  const records = [
+    record('a', 30_000),
+    record('b', 28_000),
+    record('c', 26_000),
+    record('d', 4_000),
+  ];
+  assert.equal(inferPassCandidate(records, ['a', 'b', 'c', 'd', 'a'], ['d']), 'd');
 });
 
 // --- The ledger -------------------------------------------------------------

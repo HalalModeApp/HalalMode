@@ -1,10 +1,21 @@
 /**
- * Inferring a deliberate pass from how long a profile was read.
+ * Inferring a deliberate pass from how a whole set was read.
  *
  * The alternative was a second button on every face — "not now" beside "no,
  * really" — which turns a calm screen into an interrogation and gets answered
  * by mood as much as by meaning. Time spent reading is the one signal already
  * being produced honestly, because nobody is performing it.
+ *
+ * Two shapes qualify, and nothing else does:
+ *
+ *   every profile was read, and one was read least
+ *   every profile but one was read, and that one was never opened
+ *
+ * Both mean the member worked through their whole set and left the same person
+ * at the bottom of it. What they have in common is the comparison: the answer
+ * is only legible because everyone else got attention. A member who read two of
+ * five tells you nothing about the three they skipped, so no reading of a
+ * partial set counts, however lopsided it looks.
  *
  * It is still only a guess, so nothing here decides anything on its own: the
  * member is asked once, before the round is submitted, and the answer they give
@@ -24,46 +35,23 @@ export interface DwellRecord {
 
 export interface DwellThresholds {
   /**
-   * Profiles that must have been genuinely read before any comparison is drawn.
-   * Below this there is no basis for "least" — one short look among two is not
-   * evidence of anything.
+   * Sets smaller than this are not judged at all. "Everyone but one" needs
+   * enough people for the exception to mean something; in a set of two it is
+   * just a coin landing.
    */
-  minProfilesRead: number;
+  minSetSize: number;
   /**
-   * A candidate must have had at most this share of the median attention.
-   * Someone who read everyone for roughly as long has not singled anybody out,
-   * and should not be asked to.
-   */
-  maxShareOfMedian: number;
-  /**
-   * Above this, even the shortest look was a real look. Prevents a careful
-   * member who reads everything closely from being asked about whoever they
-   * happened to finish first.
-   */
-  fairLookMs: number;
-  /**
-   * Below this a profile was not read at all — a mis-tap, or a screen opened
-   * and immediately backed out of. It counts neither toward the minimum nor as
-   * a candidate, because it is indistinguishable from an accident.
+   * Below this a profile was not read — a mis-tap, or a screen opened and
+   * immediately backed out of. Counted as never opened, which is what it
+   * amounts to, rather than as the shortest read.
    */
   minMeaningfulMs: number;
 }
 
 export const DWELL_THRESHOLDS: DwellThresholds = {
-  minProfilesRead: 3,
-  maxShareOfMedian: 0.5,
-  fairLookMs: 20_000,
+  minSetSize: 3,
   minMeaningfulMs: 1_500,
 };
-
-/** Median of a non-empty list. Even lengths take the mean of the middle pair. */
-export function median(values: number[]): number {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 1) return sorted[mid]!;
-  return (sorted[mid - 1]! + sorted[mid]!) / 2;
-}
 
 /**
  * Picks at most one introduction worth asking about.
@@ -71,42 +59,54 @@ export function median(values: number[]): number {
  * Restricted to profiles the member let go: a pass is a stronger version of a
  * no, so it can only apply where a no was already given. Someone kept is not a
  * candidate however briefly their profile was open.
- *
- * Returns null far more often than not, which is the intended behaviour — the
- * question should feel rare enough to be worth answering.
  */
 export function inferPassCandidate(
   records: DwellRecord[],
+  setIntroductionIds: readonly string[],
   releasedIntroductionIds: Iterable<string>,
   thresholds: DwellThresholds = DWELL_THRESHOLDS
 ): string | null {
-  const read = records.filter((r) => r.totalMs >= thresholds.minMeaningfulMs);
-  if (read.length < thresholds.minProfilesRead) return null;
+  const set = [...new Set(setIntroductionIds)];
+  if (set.length < thresholds.minSetSize) return null;
+
+  const readMs = new Map(
+    records
+      .filter((r) => r.totalMs >= thresholds.minMeaningfulMs)
+      .map((r) => [r.introductionId, r.totalMs] as const)
+  );
+  const unread = set.filter((id) => !readMs.has(id));
+
+  let candidate: string | null = null;
+
+  if (unread.length === 0) {
+    // Everyone was read. The shortest is the answer, and it has to be the
+    // shortest on its own — two people tied at the bottom single out neither,
+    // and picking between them by array order would be inventing a decision.
+    let shortest: { id: string; ms: number } | null = null;
+    let tied = false;
+    for (const id of set) {
+      const ms = readMs.get(id)!;
+      if (!shortest || ms < shortest.ms) {
+        shortest = { id, ms };
+        tied = false;
+      } else if (ms === shortest.ms) {
+        tied = true;
+      }
+    }
+    if (!shortest || tied) return null;
+    candidate = shortest.id;
+  } else if (unread.length === 1) {
+    // Everyone else was read and this one was never opened. Not being clicked
+    // on while the rest of the set was is the clearer of the two answers.
+    candidate = unread[0]!;
+  } else {
+    // Two or more left unopened. The member did not work through the set, so
+    // there is nothing to compare and nobody was singled out.
+    return null;
+  }
 
   const released = new Set(releasedIntroductionIds);
-  const candidates = read.filter((r) => released.has(r.introductionId));
-  if (!candidates.length) return null;
-
-  // Compared against everything that was read, not just what was let go. The
-  // question is whether this profile got less attention than the member's own
-  // normal, and their normal includes whoever they chose.
-  const middle = median(read.map((r) => r.totalMs));
-
-  let shortest: DwellRecord | null = null;
-  for (const record of candidates) {
-    if (!shortest || record.totalMs < shortest.totalMs) shortest = record;
-  }
-  if (!shortest) return null;
-
-  if (shortest.totalMs >= thresholds.fairLookMs) return null;
-  if (shortest.totalMs > middle * thresholds.maxShareOfMedian) return null;
-
-  // A tie is not a singling-out. If two profiles got equally little attention,
-  // neither is *the* one, and picking by array order would be arbitrary.
-  const tied = candidates.filter((r) => r.totalMs === shortest.totalMs);
-  if (tied.length > 1) return null;
-
-  return shortest.introductionId;
+  return released.has(candidate) ? candidate : null;
 }
 
 /**

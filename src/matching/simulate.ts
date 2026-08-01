@@ -235,7 +235,13 @@ export function simulate(options: SimOptions): SimMetrics {
         const history: PairHistory =
           seen === 0
             ? NO_PAIR_HISTORY
-            : { timesShown: seen, firstReciprocalScore: null, lastReciprocalScore: null };
+            : {
+                timesShown: seen,
+                firstReciprocalScore: null,
+                lastReciprocalScore: null,
+                // The simulation has no pass gesture, so no pair ever carries one.
+                explicitPassCount: 0,
+              };
 
         const forward = directionalEstimate(compat, w, history, config);
         const backward = directionalEstimate(compat, m, history, config);

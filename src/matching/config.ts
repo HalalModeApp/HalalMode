@@ -154,8 +154,12 @@ export interface MatchingConfig {
    * is a real no, but not a permanent one — people change, and so do reasons.
    */
   explicit_pass_cooldown_days: number;
-  /** Passes, months apart, that settle a pair for good. */
-  explicit_pass_retire_after: number;
+  /**
+   * What each pass beyond the first multiplies the pair prior by. A second no,
+   * months after the first, costs rank rather than closing the pair — only a
+   * member closes a pair, by hiding someone.
+   */
+  repeat_pass_penalty: number;
 }
 
 /** Matches the seeded row in migration 0049. */
@@ -233,7 +237,7 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
   max_criterion_weight: 0.35,
 
   explicit_pass_cooldown_days: 90,
-  explicit_pass_retire_after: 2,
+  repeat_pass_penalty: 0.5,
 };
 
 /**
@@ -374,12 +378,12 @@ export function validateConfig(config: MatchingConfig): MatchingConfig {
       || config.tuning_min_samples < 1 || !Number.isInteger(config.tuning_min_samples)) {
     throw new Error('Matching scoring and tuning configuration is invalid');
   }
-  // A zero cooldown would make a pass meaningless; a single pass settling the
-  // pair for good would make it permanent, which is what the cooldown replaces.
+  // A zero cooldown would make a pass meaningless. A penalty of 1 would make a
+  // second pass cost nothing, and 0 would be a permanent removal wearing a
+  // multiplier's clothes — the thing this deliberately is not.
   if (config.explicit_pass_cooldown_days < 1
       || !Number.isInteger(config.explicit_pass_cooldown_days)
-      || config.explicit_pass_retire_after < 2
-      || !Number.isInteger(config.explicit_pass_retire_after)) {
+      || !(config.repeat_pass_penalty > 0 && config.repeat_pass_penalty <= 1)) {
     throw new Error('Explicit pass configuration is invalid');
   }
   return config;
