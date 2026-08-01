@@ -421,6 +421,17 @@ Deno.serve(async (request: Request) => {
     await client.from('round_generation_runs').delete().eq('cycle_date', timing.cycleDate);
     return Response.json({ error: expired.error.message }, { status: 500 });
   }
+
+  // A pass holds for a few months and then stops holding. Without this the
+  // cooldown would be a number in a config table that nothing ever read, and
+  // every pass would be permanent — which is the behaviour it replaced.
+  // Idempotent, and must run before candidates are built so a pass that expired
+  // overnight is available to today's round.
+  const passes = await client.rpc('expire_explicit_passes_service');
+  if (passes.error) {
+    await client.from('round_generation_runs').delete().eq('cycle_date', timing.cycleDate);
+    return Response.json({ error: passes.error.message }, { status: 500 });
+  }
   // The v1 pipeline is behind a release flag so the cohort can be widened
   // deliberately. Until it is enabled the previous generator still runs.
   const flag = await client.rpc('release_flag_active', { p_key: 'reciprocal_matching_v1' });
