@@ -67,3 +67,115 @@ or production verification.
   part of the feature, not follow-up polish.
 - Record only approved departures from the core concept in `DECISIONS.md`, each
   with a one-sentence rationale.
+
+---
+
+# Reciprocal matching v1 — handoff (2026-08)
+
+Branch `main`, last commit `788c0e1`. `npm run verify:client` is green:
+typecheck, lint, 113 tests. Read `docs/RECIPROCAL_MATCHING_V1_DESIGN.md` first,
+especially §10 (three design errors simulation caught), §11 (scale) and §12
+(imbalance).
+
+## Assess this work independently before extending it
+
+Do not treat the previous agent's code as correct because the tests pass. The
+tests were written by the same agent that wrote the code, so they encode its
+assumptions as well as its intent. Specifically worth attacking:
+
+- **The estimator is not a calibrated probability.** `directionalEstimate`
+  returns a number in [0,1] used for *ranking*. Nothing validates that it
+  predicts anything. Once real selection data exists, check whether the
+  predicted reciprocal score correlates with observed mutual picks at all. If it
+  does not, the weights are decoration.
+- **`w_compat + w_appeal + w_pair = 1` is asserted in a comment, not in code.**
+  Nothing rejects a config where they do not sum to 1.
+- **The simulation's pick model is the same shape as the estimator.** Members
+  pick by hidden `trueAppeal` and the estimator predicts appeal, so the
+  simulation may be flattering itself. Try a pick model driven by something the
+  estimator cannot see, and check the gains survive.
+- **`repairPass` is O(E) per sweep inside a `while (progressed)` loop.** On a
+  large edge list with many small gaps this could sweep many times. It is time
+  budgeted, so it degrades rather than hangs, but the budget may be doing more
+  work than intended.
+- **Compatibility weights every term equally** (`avg` over the terms array). Age
+  and shared languages count the same as religious practice. That is almost
+  certainly wrong as product judgement; it was chosen for simplicity.
+- **`0052`–`0054` have never executed.** Assume syntax errors.
+
+## What remains to reach done
+
+In dependency order.
+
+1. **Run the SQL.** `supabase db reset`. Migrations `0049`–`0054` are unverified.
+   `0049` has a pgTAP test; `0052`, `0053` and `0054` have none — write them
+   following `supabase/tests/database/0035_*.test.sql`. Cover at minimum: the
+   capacity gate excludes members at their cap, `matching_candidate_edges`
+   excludes cooled/retired/explicitly-passed pairs, `persist_matching_round`
+   writes both twins or neither, and `get_daily_round_state` returns
+   `awaiting_turn` rather than `no_suitable_introductions`.
+
+2. **Seed a realistic population and run a shadow round.**
+   `POST /generate-round?mode=shadow`. Verify `matching_runs` receives stage
+   latencies and `edges_after_filter`, that `shadow_round_edges` fills, and that
+   `introductions`, `connections` and `pair_exposure` are all untouched. That
+   last check is the whole basis for trusting shadow mode.
+
+3. **Benchmark `passes_criteria`.** The entire latency model in §7 rests on an
+   assumed ~25 µs per call. Measure it, then correct §7 rather than leaving an
+   estimate presented as a projection.
+
+4. **Wire the new round states into the app.** `0053` returns `awaiting_turn`
+   and `at_match_capacity`; copy exists in `src/i18n/catalog.ts` in both
+   languages, but `app/(tabs)/daily.tsx` still branches only on
+   `matching_inputs_unavailable`. Deferred members currently see the wrong
+   message until this is done.
+
+5. **`explicit_pass` has no way to be set.** The enum value exists and the
+   prefilter honours it, but no UI or RPC ever writes it. Either add a
+   deliberate "not for me" action or drop the value — a filter nothing can
+   trigger is worse than no filter.
+
+6. **Retire the dead path.** Once v1 is live, `generate_round_for_pairs` and the
+   `|band| <= 1` gate are unused. Removing them is the point at which the band
+   retirement approved in §2 actually happens.
+
+7. **Metrics.** §Metrics of the brief asks for exposure distribution, zero-match
+   rate, time to first mutual, mutual rate, Gini, and free/premium and
+   new/established breakdowns. `matching_runs` records per-run performance only.
+   Nothing yet computes outcome metrics over time.
+
+## How to roll this out — and why "a small cohort" is not what it sounds like
+
+The previous handoff said to enable `reciprocal_matching_v1` "for a small
+cohort". That instruction was wrong and is corrected here.
+
+`release_flags` supports per-member cohorts through `release_flag_members` and
+`rollout_percentage`, and that works for UI features. **It does not work for
+matching.** A round is built for the whole pool at once and every introduction
+is reciprocal: if A is shown B then B is shown A. Two members in the same pool
+cannot be served by different matchers, because each would have to appear in the
+other's set. Splitting the pool by member would either break reciprocity or
+silently divide the pool in half — which in a launch pool of a few hundred is
+severe, since a halved pool is a quartered candidate graph.
+
+`release_flag_active()` therefore reads the global `enabled` column and ignores
+percentage and membership. That is deliberate.
+
+The real options:
+
+- **Shadow first.** Already built. Run v1 in shadow against production data for
+  as many cycles as it takes to compare its output against what live produced.
+  This is the safe canary and costs nothing.
+- **Geographic cohort.** Because distance caps make matching local, regions are
+  near-independent pools, so one country can run v1 while others run the old
+  matcher without breaking reciprocity. This is the only true partial rollout
+  available, and it is not implemented — it would need a region predicate on the
+  pool view and a per-region flag.
+- **Whole-pool switch with instant rollback.** What the flag does today. Viable
+  at launch scale precisely because the pool is small and one bad cycle expires
+  at the next Fajr.
+
+Recommended: shadow until the comparison is convincing, then whole-pool with the
+flag as the rollback switch. Build geographic cohorting only when a single
+region is large enough for the comparison to be meaningful on its own.
