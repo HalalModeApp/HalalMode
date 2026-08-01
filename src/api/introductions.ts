@@ -93,9 +93,14 @@ export async function submitKeeps(
   }
 
   const client = requireSupabase();
-  const { data, error } = await client.rpc('submit_round_selections', {
+  // Order carries the rank: the first element is this member's first choice.
+  // A free member keeps exactly one, so theirs is rank 1 by definition; a
+  // Premium member is asked which of their keeps comes first. Mutual first
+  // choice is the metric all of this is judged against, and without an order it
+  // is unmeasurable for Premium.
+  const { data, error } = await client.rpc('submit_round_selections_ranked', {
     p_round_id: roundId,
-    p_introduction_ids: keptIntroductionIds,
+    p_ordered_introduction_ids: keptIntroductionIds,
   });
   if (error) throw error;
   return data as {

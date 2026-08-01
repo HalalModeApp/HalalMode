@@ -15,6 +15,7 @@ import Animated, {
 
 import { ArcCarousel } from '@/components/introductions/ArcCarousel';
 import { ConductAcknowledgement } from '@/components/introductions/ConductAcknowledgement';
+import { FirstChoiceDialog } from '@/components/introductions/FirstChoiceDialog';
 import { HeroCard } from '@/components/introductions/HeroCard';
 import { BrandHeader } from '@/components/navigation/BrandHeader';
 import { SafetyControl } from '@/components/safety/SafetyControl';
@@ -94,6 +95,10 @@ export default function DailyScreen() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmLetGo, setConfirmLetGo] = useState(false);
   const [interestTargetId, setInterestTargetId] = useState<string | null>(null);
+  // Premium keeps up to three, so which one comes first has to be asked. Free
+  // members keep exactly one, which is their first choice by definition.
+  const [firstChoiceOpen, setFirstChoiceOpen] = useState(false);
+  const [firstChoiceId, setFirstChoiceId] = useState<string | null>(null);
   const [conductVisible, setConductVisible] = useState(false);
   const { shake, style: shakeStyle } = useCameraShake();
   const reducedMotion = useReducedMotion();
@@ -182,20 +187,34 @@ export default function DailyScreen() {
 
   const handleSubmit = useCallback(async () => {
     setConfirmOpen(false);
+    setFirstChoiceOpen(false);
     try {
-      const mutual = await submit(interestTargetId ? [interestTargetId] : undefined);
+      // The array order is the rank, so the named first choice leads.
+      const ordered = interestTargetId
+        ? [interestTargetId]
+        : firstChoiceId
+          ? [firstChoiceId, ...live.map((item) => item.id).filter((id) => id !== firstChoiceId)]
+          : undefined;
+      const mutual = await submit(ordered);
       if (mutual.length > 0 && mutual[0]) {
         router.push(`/match/${mutual[0]}`);
       }
     } catch {
       // The provider keeps the round open and exposes an actionable error.
     }
-  }, [interestTargetId, submit]);
+  }, [firstChoiceId, interestTargetId, live, submit]);
 
   const openInterestConfirmation = useCallback((id?: string) => {
     setInterestTargetId(id ?? null);
+    // Sending to a whole set of more than one means we still do not know which
+    // of them comes first, so ask before confirming.
+    if (!id && live.length > 1) {
+      setFirstChoiceId(null);
+      setFirstChoiceOpen(true);
+      return;
+    }
     setConfirmOpen(true);
-  }, []);
+  }, [live.length]);
 
   /**
    * The card deck reports the exact profile it selected rather than only a
@@ -473,6 +492,18 @@ export default function DailyScreen() {
           />
         </View>
       </View>
+
+      <FirstChoiceDialog
+        visible={firstChoiceOpen}
+        introductions={live}
+        selectedId={firstChoiceId}
+        onSelect={setFirstChoiceId}
+        onConfirm={() => void handleSubmit()}
+        onCancel={() => {
+          setFirstChoiceOpen(false);
+          setFirstChoiceId(null);
+        }}
+      />
 
       <ConfirmDialog
         visible={confirmOpen}
