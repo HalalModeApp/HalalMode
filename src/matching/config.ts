@@ -11,6 +11,8 @@
 
 export const ALGORITHM_VERSION = 'greedy_global_v1';
 
+export const ALLOCATORS = ['greedy_global_v1', 'anchored_maxmin_v1'] as const;
+
 export interface MatchingConfig {
   // --- Estimation ---------------------------------------------------------
   /** Weight on how well the subject fits the viewer's stated preferences. */
@@ -75,7 +77,13 @@ export interface MatchingConfig {
 
   // --- Allocation ---------------------------------------------------------
   repair_time_budget_ms: number;
-  allocator: string;
+  /**
+   * 'greedy_global_v1' maximises the total of the edge weights.
+   * 'anchored_maxmin_v1' first gives every member their best available partner,
+   * then fills greedily — the objective that actually serves mutual first
+   * choices. Both are kept so the two can be compared in shadow.
+   */
+  allocator: 'greedy_global_v1' | 'anchored_maxmin_v1';
 
   // --- Guards -------------------------------------------------------------
   warn_round_latency_ms: number;
@@ -219,7 +227,10 @@ export function validateConfig(config: MatchingConfig): MatchingConfig {
   if (config.rotation_enabled !== true && config.rotation_enabled !== false) {
     throw new Error('Matching rotation flag must be boolean');
   }
-  if (config.allocator !== ALGORITHM_VERSION) {
+  // Fails closed on an unrecognised value: an unknown allocator would silently
+  // fall through to the greedy path, which is not what a config change asking
+  // for something else intends.
+  if (!ALLOCATORS.includes(config.allocator)) {
     throw new Error('Unknown matching allocator');
   }
   if (config.exposure_target_multiplier <= 0

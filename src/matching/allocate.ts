@@ -50,6 +50,8 @@ export interface AllocationResult {
     consideredEdges: number;
     assignedEdges: number;
     rejectedBelowFloor: number;
+    /** Members given a best-available partner before the greedy fill. */
+    anchoredMembers: number;
     repairSwaps: number;
     repairTimedOut: boolean;
   };
@@ -129,6 +131,11 @@ export function allocate(input: AllocationInput): AllocationResult {
   const assigned: ScoredEdge[] = [];
   const takenPairs = new Set<string>();
 
+  // Give everyone their best available partner before anyone gets a second.
+  const anchored = config.allocator === 'anchored_maxmin_v1'
+    ? anchorPass({ ordered, assigned, takenPairs, remaining, seed })
+    : 0;
+
   for (const edge of ordered) {
     const roomA = remaining.get(edge.a) ?? 0;
     const roomB = remaining.get(edge.b) ?? 0;
@@ -165,10 +172,85 @@ export function allocate(input: AllocationInput): AllocationResult {
       consideredEdges: edges.length,
       assignedEdges: assigned.length,
       rejectedBelowFloor,
-      repairSwaps: repair.swaps,
+      anchoredMembers: anchored,
+    repairSwaps: repair.swaps,
       repairTimedOut: repair.timedOut,
     },
   };
+}
+
+interface AnchorInput {
+  ordered: ScoredEdge[];
+  assigned: ScoredEdge[];
+  takenPairs: Set<string>;
+  remaining: Map<string, number>;
+  seed: number;
+}
+
+/**
+ * Anchor pass — one strong edge each, before anyone gets a second.
+ *
+ * Sorting globally and taking greedily maximises the *total* of the edge
+ * weights, which is not the goal. The goal is that each member's set contains
+ * someone likely to choose them back, and a sum can be maximised while leaving
+ * individual members with nothing worth picking: three excellent edges for one
+ * person and three mediocre ones for another beats an even split on total.
+ *
+ * So each member first claims their single best available partner, processed
+ * most-constrained-first — a member with three options loses their best to
+ * someone with thirty far more often than the reverse, so serving the
+ * constrained first costs the flexible almost nothing.
+ *
+ * This is the tractable stand-in for maximising mutual first choices. Ranking
+ * probabilities are set-dependent — B may be A's first choice in one set and
+ * third in another — so scoring pairs independently and then allocating is
+ * circular. Guaranteeing each member one high-reciprocity edge captures most of
+ * the benefit without needing a choice model.
+ *
+ * Returns the number of anchors placed. The ordinary greedy fill runs
+ * afterwards and takes the remaining capacity.
+ */
+function anchorPass(input: AnchorInput): number {
+  const { ordered, assigned, takenPairs, remaining, seed } = input;
+
+  // Best-first per member, following the already-sorted global order.
+  const options = new Map<string, ScoredEdge[]>();
+  for (const edge of ordered) {
+    for (const id of [edge.a, edge.b]) {
+      if ((remaining.get(id) ?? 0) <= 0) continue;
+      const list = options.get(id);
+      if (list) list.push(edge);
+      else options.set(id, [edge]);
+    }
+  }
+
+  const queue = [...options.keys()].sort((left, right) => {
+    const byChoice = (options.get(left)?.length ?? 0) - (options.get(right)?.length ?? 0);
+    if (byChoice !== 0) return byChoice;
+    return tieBreak(seed, left, left) - tieBreak(seed, right, right);
+  });
+
+  let placed = 0;
+  for (const id of queue) {
+    if ((remaining.get(id) ?? 0) <= 0) continue;
+
+    for (const edge of options.get(id) ?? []) {
+      const key = pairKey(edge.a, edge.b);
+      if (takenPairs.has(key)) continue;
+      const roomA = remaining.get(edge.a) ?? 0;
+      const roomB = remaining.get(edge.b) ?? 0;
+      if (roomA <= 0 || roomB <= 0) continue;
+
+      remaining.set(edge.a, roomA - 1);
+      remaining.set(edge.b, roomB - 1);
+      takenPairs.add(key);
+      assigned.push(edge);
+      placed += 1;
+      break;
+    }
+  }
+
+  return placed;
 }
 
 interface RepairInput {

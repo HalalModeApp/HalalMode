@@ -5,6 +5,7 @@ import {
   DEFAULT_MATCHING_CONFIG,
   resolveConfig,
   resolveStoredConfig,
+  type MatchingConfig,
 } from '../src/matching/config';
 import {
   appeal,
@@ -66,7 +67,7 @@ test('invalid matching configuration fails closed', () => {
   assert.throws(() => resolveConfig({ boost_cap: -0.1 }), /fairness/);
   assert.throws(() => resolveConfig({ quality_band_width: 0 }), /quality band/);
   assert.throws(() => resolveConfig({ imbalance_lambda: 2 }), /imbalance/);
-  assert.throws(() => resolveConfig({ allocator: 'unknown' }), /allocator/);
+  assert.throws(() => resolveConfig({ allocator: 'unknown' as MatchingConfig['allocator'] }), /allocator/);
   assert.throws(() => resolveConfig({ repeat_cooldown_days: -1 }), /Repeat/);
   assert.throws(() => resolveConfig({ p_min: 0.9, p_max: 0.2 }), /probability bounds/);
 });

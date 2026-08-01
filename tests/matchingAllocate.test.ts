@@ -39,6 +39,10 @@ function member(overrides: Partial<MemberSignals> = {}): MemberSignals {
 /** Mid-window: a free member should have had 5 x 4 = 20 exposures by now. */
 const window: WindowContext = { roundsElapsed: 4 };
 
+function scored(a: string, b: string, value: number): ScoredEdge {
+  return { a, b, reciprocal: value, quality: value, utility: value };
+}
+
 function edge(a: string, b: string, reciprocal: number, utility = reciprocal): ScoredEdge {
   return { a, b, reciprocal, quality: reciprocal, utility };
 }
@@ -313,6 +317,7 @@ test('verification rejects a round that breaks capacity', () => {
       consideredEdges: 2,
       assignedEdges: 2,
       rejectedBelowFloor: 0,
+      anchoredMembers: 0,
       repairSwaps: 0,
       repairTimedOut: false,
     },
@@ -332,6 +337,7 @@ test('verification rejects a self-pair', () => {
         consideredEdges: 1,
         assignedEdges: 1,
         rejectedBelowFloor: 0,
+        anchoredMembers: 0,
         repairSwaps: 0,
         repairTimedOut: false,
       },
@@ -400,4 +406,92 @@ test('fairness spreads exposure without collapsing match quality', () => {
   const mean =
     result.assigned.reduce((sum, e) => sum + e.reciprocal, 0) / result.assigned.length;
   assert.ok(mean > 0.15, `mean reciprocal quality collapsed: ${mean}`);
+});
+
+// --- Anchored max-min ------------------------------------------------------
+
+test('the anchor pass gives every member with an option at least one edge', () => {
+  // Two hubs everyone wants, and a long tail of weaker but valid pairs. Plain
+  // greedy fills the hubs first and leaves the tail with nothing.
+  const config = resolveConfig({ allocator: 'anchored_maxmin_v1' });
+  const edges: ScoredEdge[] = [];
+  for (let i = 0; i < 12; i += 1) {
+    edges.push(scored(`m${i}`, 'hubW', 0.9));
+    edges.push(scored(`w${i}`, 'hubM', 0.9));
+    edges.push(scored(`m${i}`, `w${i}`, 0.4));
+  }
+  const caps = capacities([
+    ['hubW', 2] as [string, number],
+    ['hubM', 2] as [string, number],
+    ...Array.from({ length: 12 }, (_, i) => [`m${i}`, 2] as [string, number]),
+    ...Array.from({ length: 12 }, (_, i) => [`w${i}`, 2] as [string, number]),
+  ]);
+
+  const result = allocate({ edges, capacities: caps, config, seed: 21 });
+  assert.deepEqual(verifyAllocation(result, caps), { ok: true });
+
+  const served = new Set(result.assigned.flatMap((edge) => [edge.a, edge.b]));
+  for (let i = 0; i < 12; i += 1) {
+    assert.ok(served.has(`m${i}`), `m${i} received nothing`);
+    assert.ok(served.has(`w${i}`), `w${i} received nothing`);
+  }
+  assert.ok(result.stats.anchoredMembers > 0, 'anchors should have been placed');
+});
+
+test('anchoring never breaks capacity or reciprocity', () => {
+  const config = resolveConfig({ allocator: 'anchored_maxmin_v1' });
+  const edges = [
+    scored('a', 'x', 0.9),
+    scored('a', 'y', 0.8),
+    scored('b', 'x', 0.7),
+    scored('b', 'y', 0.6),
+  ];
+  const caps = capacities([
+    ['a', 1],
+    ['b', 1],
+    ['x', 1],
+    ['y', 1],
+  ]);
+
+  const result = allocate({ edges, capacities: caps, config, seed: 5 });
+  assert.deepEqual(verifyAllocation(result, caps), { ok: true });
+  assert.equal(result.assigned.length, 2, 'both sides pair off exactly once');
+});
+
+test('the anchor pass respects the score floor', () => {
+  // A member whose only option is below the floor gets nothing, rather than the
+  // guarantee overriding the one rule fairness may never cross.
+  const config = resolveConfig({ allocator: 'anchored_maxmin_v1' });
+  const edges = [scored('a', 'x', config.min_reciprocal_score - 0.01)];
+  const caps = capacities([
+    ['a', 5],
+    ['x', 5],
+  ]);
+
+  const result = allocate({ edges, capacities: caps, config, seed: 5 });
+  assert.equal(result.assigned.length, 0);
+  assert.equal(result.stats.anchoredMembers, 0);
+});
+
+test('the allocator choice is deterministic and reversible', () => {
+  const edges = [scored('a', 'x', 0.6), scored('a', 'y', 0.5), scored('b', 'x', 0.4)];
+  const caps = capacities([
+    ['a', 2],
+    ['b', 2],
+    ['x', 2],
+    ['y', 2],
+  ]);
+  const anchored = resolveConfig({ allocator: 'anchored_maxmin_v1' });
+
+  const first = allocate({ edges, capacities: caps, config: anchored, seed: 3 });
+  const second = allocate({ edges, capacities: caps, config: anchored, seed: 3 });
+  assert.deepEqual(
+    first.assigned.map((edge) => pairKey(edge.a, edge.b)),
+    second.assigned.map((edge) => pairKey(edge.a, edge.b))
+  );
+
+  // Greedy remains the default, so switching allocator is a config change with
+  // no residue in either direction.
+  const greedy = allocate({ edges, capacities: caps, config: resolveConfig(), seed: 3 });
+  assert.equal(greedy.stats.anchoredMembers, 0);
 });
