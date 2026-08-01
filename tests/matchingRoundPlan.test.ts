@@ -143,3 +143,26 @@ test('only live finalization can carry durable retirement proposals', () => {
   assert.equal(Object.hasOwn(shadow, 'p_outcomes'), false);
   assert.equal(Object.hasOwn(shadow, 'p_expires_at'), false);
 });
+
+test('a repeat arrives at the allocator already handicapped for having been shown', () => {
+  // Novelty is not a rule in the allocator; it is priced in here, once per
+  // showing. This is the only place that multiplication actually happens, so it
+  // is the only place worth asserting it.
+  const score = 0.7;
+  const fresh = plan(edge(score, { pair_times_shown: 0, pair_first_score: null, pair_last_score: null }));
+  const shownOnce = plan(edge(score, { pair_times_shown: 1 }));
+  const shownTwice = plan(edge(score, { pair_times_shown: 2 }));
+
+  const utilityOf = (result: ReturnType<typeof plan>) => result.edges[0]?.utility ?? 0;
+  assert.ok(utilityOf(fresh) > 0, 'the fresh pair should be assigned');
+
+  const decay = DEFAULT_MATCHING_CONFIG.repeat_decay;
+  assert.ok(
+    Math.abs(utilityOf(shownOnce) / utilityOf(fresh) - decay) < 0.02,
+    `one showing should cost about ${decay}x, got ${utilityOf(shownOnce) / utilityOf(fresh)}`
+  );
+  assert.ok(
+    utilityOf(shownTwice) < utilityOf(shownOnce),
+    'and the handicap should compound with each further showing'
+  );
+});

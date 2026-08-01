@@ -1,18 +1,16 @@
 -- A cooldown expiring makes a pair eligible, not due.
 --
--- Two changes, and the first is the one that matters. Repetition now loses to
--- novelty outright: a pair nobody has met is allocated ahead of every pair that
--- has already been shown, whatever the scores say. Somebody a member has
--- already seen has already had their answer; a new face at a slightly lower
--- rank is worth more than a better score on a rerun. Repeats fill what is left
--- over, which in a healthy pool is very little.
+-- Whether a pair is shown is settled in the planner, where repeat_decay has
+-- already multiplied a repeat's score by 0.7 for every showing it has had. A
+-- repeat therefore has to be about 1.4x better than a fresh alternative to hold
+-- a slot, and about 2x after a second showing: new faces win the close calls
+-- and most of the middle, and a genuinely strong pair can still come back.
 --
--- That is enforced in the planner, where allocation happens. Nothing in SQL
--- needs to know: the cooldown here decides when a pair may be considered, and
--- the planner decides whether it actually gets a slot. Those were the same
--- thing when a cooldown expiring meant a showing; they are not any more.
+-- Nothing in SQL needs to know that. The cooldown here decides when a pair may
+-- be considered; the planner decides whether it gets a slot. Those were the
+-- same thing while an expiry meant a showing, and are not any more.
 --
--- The second change reserves the short waits for the top of the range instead
+-- The change below reserves the short waits for the top of the range instead
 -- of handing them to everyone above average. The generosity curve was linear,
 -- so a merely decent pair came back nearly as fast as a strong one. Squared, a
 -- pair halfway up earns a quarter of the patience rather than half, and only

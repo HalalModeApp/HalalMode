@@ -28,11 +28,15 @@ export interface ScoredEdge {
   /**
    * True when this pair has never been shown to each other.
    *
-   * Ranked ahead of every repeat, whatever the scores say. A member who has
-   * already seen somebody has already given their answer about them; showing a
-   * new face instead is worth more than a slightly better score on a rerun,
-   * even when the new face ranks lower. Repeats fill what is left over, which
-   * is why a cooldown expiring makes a pair *eligible* rather than due.
+   * Reported rather than ranked on. Novelty is already priced into `quality`
+   * and `utility` through repeat_decay, which multiplies a pair's score by 0.7
+   * for every showing it has had — so a repeat has to be about 1.4x better than
+   * a fresh alternative to outrank it, and roughly 2x after a second showing.
+   *
+   * That is the intended shape: new faces win the close calls and most of the
+   * middle, and a genuinely strong pair can still come back. Ranking on
+   * freshness outright would throw away the second half of that, which is the
+   * part worth keeping — a 0.9 pair losing to a 0.4 one helps nobody.
    */
   fresh: boolean;
   /**
@@ -82,6 +86,13 @@ export interface AllocationResult {
     compositionSwaps: number;
     repairSwaps: number;
     repairTimedOut: boolean;
+    /**
+     * Assigned edges the pair had already been shown. The number to watch when
+     * judging whether repeats are crowding out new faces: novelty is preferred
+     * by arithmetic rather than by rule, so this is the only way to see where
+     * that balance actually lands.
+     */
+    repeatEdges: number;
   };
 }
 
@@ -111,9 +122,6 @@ export function tieBreak(seed: number, a: string, b: string): number {
  */
 export function compareEdges(seed: number, qualityBandWidth = 0.025) {
   return (left: ScoredEdge, right: ScoredEdge): number => {
-    // Freshness outranks score outright, so greedy exhausts everyone nobody has
-    // met before it reconsiders a single pair that has already been shown.
-    if (left.fresh !== right.fresh) return left.fresh ? -1 : 1;
     const leftBand = qualityBand(left.quality, qualityBandWidth);
     const rightBand = qualityBand(right.quality, qualityBandWidth);
     if (rightBand !== leftBand) return rightBand - leftBand;
@@ -227,6 +235,7 @@ export function allocate(input: AllocationInput): AllocationResult {
     exploratorySlots: explored,
     compositionSwaps: composed,
     repairSwaps: repair.swaps,
+    repeatEdges: assigned.reduce((count, edge) => count + (edge.fresh ? 0 : 1), 0),
       repairTimedOut: repair.timedOut,
     },
   };
@@ -581,9 +590,6 @@ function repairPass(input: RepairInput): { swaps: number; timedOut: boolean } {
         if (qualityBand(replacement.quality, qualityBandWidth) !== displacedBand) continue;
         if (candidate.quality + replacement.quality < displaced.quality) continue;
         if (candidate.utility + replacement.utility < displaced.utility) continue;
-        // Repair trades one edge for two, so it can raise the count while
-        // quietly spending a first meeting to buy two reruns. Never worth it.
-        if (displaced.fresh && !(candidate.fresh && replacement.fresh)) continue;
 
         removeAssigned(displaced, assigned, takenPairs, remaining, assignedByMember);
         addAssigned(candidate, assigned, takenPairs, remaining, assignedByMember);

@@ -327,6 +327,7 @@ test('verification rejects a round that breaks capacity', () => {
       consideredEdges: 2,
       assignedEdges: 2,
       rejectedBelowFloor: 0,
+      repeatEdges: 0,
       anchoredMembers: 0,
       exploratorySlots: 0,
       compositionSwaps: 0,
@@ -349,6 +350,7 @@ test('verification rejects a self-pair', () => {
         consideredEdges: 1,
         assignedEdges: 1,
         rejectedBelowFloor: 0,
+        repeatEdges: 0,
         anchoredMembers: 0,
         exploratorySlots: 0,
         compositionSwaps: 0,
@@ -742,76 +744,90 @@ test('edges without directional data are never counted as reaches', () => {
   assert.equal(result.stats.compositionSwaps, 0);
 });
 
-// --- Novelty before repetition ----------------------------------------------
+// --- Novelty against repetition ---------------------------------------------
+//
+// There is no freshness rule in the allocator. Novelty is priced into the score
+// upstream: planRound multiplies a pair's quality and utility by repeat_decay
+// once per showing, so a repeat arrives here already handicapped. These build
+// that handicap by hand to pin where the balance actually falls.
 
-test('a fresh pair outranks a repeat even at a lower score', () => {
+// Both quality and utility carry the decay in production, and the comparator
+// reads quality first — so a helper that decays only one of them would be
+// testing something the allocator never sees.
+function repeat(a: string, b: string, raw: number, showings: number): ScoredEdge {
+  const decay = Math.pow(DEFAULT_MATCHING_CONFIG.repeat_decay, showings);
+  return { a, b, reciprocal: raw, quality: raw * decay, utility: raw * decay, fresh: false };
+}
+
+function unseen(a: string, b: string, raw: number): ScoredEdge {
+  return { a, b, reciprocal: raw, quality: raw, utility: raw, fresh: true };
+}
+
+test('a genuinely strong repeat still beats a weak fresh pair', () => {
   const config = resolveConfig();
-  const seen = edge('a', 'x', 0.9, 0.9, false);
-  const unseen = edge('a', 'y', 0.4, 0.4, true);
+  const strongRepeat = repeat('a', 'x', 0.9, 1);
+  const weakFresh = unseen('a', 'y', 0.4);
 
   const result = allocate({
-    edges: [seen, unseen],
+    edges: [strongRepeat, weakFresh],
     capacities: capacities([['a', 1], ['x', 1], ['y', 1]]),
     config,
     seed: 1,
   });
 
-  assert.deepEqual(
-    result.assigned.map((e) => e.b),
-    ['y'],
-    'somebody already seen has already given their answer; a new face wins'
-  );
+  // 0.9 x 0.7 = 0.63, comfortably above 0.4. Ranking on freshness outright
+  // would hand this slot to the weaker pair, which helps nobody.
+  assert.deepEqual(result.assigned.map((e) => e.b), ['x']);
+  assert.equal(result.stats.repeatEdges, 1);
 });
 
-test('repeats fill what novelty leaves over, rather than being shut out', () => {
+test('a middling repeat loses to a fresh pair it barely outscores', () => {
   const config = resolveConfig();
-  // One fresh option and one repeat, with room for both.
   const result = allocate({
-    edges: [edge('a', 'x', 0.9, 0.9, false), edge('a', 'y', 0.4, 0.4, true)],
+    edges: [
+      repeat('a', 'x', 0.5, 1),
+      unseen('a', 'y', 0.4),
+    ],
+    capacities: capacities([['a', 1], ['x', 1], ['y', 1]]),
+    config,
+    seed: 1,
+  });
+
+  // 0.5 x 0.7 = 0.35, under 0.4. A repeat has to be about 1.4x better than the
+  // fresh alternative to hold its slot, and about 2x after a second showing.
+  assert.deepEqual(result.assigned.map((e) => e.b), ['y']);
+  assert.equal(result.stats.repeatEdges, 0);
+});
+
+test('the handicap compounds, so a twice-shown pair has to be far better', () => {
+  const config = resolveConfig();
+  const result = allocate({
+    edges: [
+      repeat('a', 'x', 0.8, 2),
+      unseen('a', 'y', 0.45),
+    ],
+    capacities: capacities([['a', 1], ['x', 1], ['y', 1]]),
+    config,
+    seed: 1,
+  });
+
+  // 0.8 x 0.49 = 0.39. Strong on paper, and still beaten by a fresher 0.45.
+  assert.deepEqual(result.assigned.map((e) => e.b), ['y']);
+});
+
+test('repeats take the slots novelty leaves empty', () => {
+  const config = resolveConfig();
+  const result = allocate({
+    edges: [
+      repeat('a', 'x', 0.5, 1),
+      unseen('a', 'y', 0.4),
+    ],
     capacities: capacities([['a', 2], ['x', 1], ['y', 1]]),
     config,
     seed: 1,
   });
 
-  assert.equal(result.assigned.length, 2, 'a repeat still takes a slot nobody else wants');
-  assert.equal(result.assigned[0]?.b, 'y', 'but only after the fresh one');
-});
-
-test('the whole fresh pool is exhausted before any repeat is considered', () => {
-  const config = resolveConfig();
-  const edges = [
-    edge('a', 'x', 0.95, 0.95, false),
-    edge('a', 'y', 0.94, 0.94, false),
-    edge('a', 'z', 0.20, 0.20, true),
-  ];
-  const result = allocate({
-    edges,
-    capacities: capacities([['a', 2], ['x', 1], ['y', 1], ['z', 1]]),
-    config,
-    seed: 1,
-  });
-
-  assert.equal(result.assigned[0]?.b, 'z', 'the only fresh pair leads');
-  assert.equal(result.assigned.length, 2, 'a repeat then fills the spare slot');
-});
-
-test('repair never spends a first meeting to buy two reruns', () => {
-  const config = resolveConfig();
-  // b has room, a is full holding a fresh edge. Repair could displace it for
-  // two higher-utility repeats and raise the count; it must decline.
-  const result = allocate({
-    edges: [
-      edge('a', 'x', 0.30, 0.30, true),
-      edge('a', 'y', 0.95, 0.95, false),
-      edge('x', 'z', 0.95, 0.95, false),
-    ],
-    capacities: capacities([['a', 1], ['x', 1], ['y', 1], ['z', 1]]),
-    config,
-    seed: 1,
-  });
-
-  assert.ok(
-    result.assigned.some((e) => e.a === 'a' && e.b === 'x'),
-    'the fresh pair survives repair'
-  );
+  assert.equal(result.assigned.length, 2, 'a thin round is filled rather than left short');
+  assert.equal(result.assigned[0]?.b, 'y', 'but the fresh pair leads');
+  assert.equal(result.stats.repeatEdges, 1);
 });
