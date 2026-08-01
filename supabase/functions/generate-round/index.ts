@@ -4,12 +4,63 @@ import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import { resolveStoredConfig, type MatchingConfig } from '../../../src/matching/config.ts';
 import {
   ALGORITHM_VERSION,
+  liveFinalizationArgs,
   planRound,
+  shadowFinalizationArgs,
   type CandidateEdgeRow,
   type MemberSignalRow,
 } from './matching.ts';
+import {
+  matchingPlanContext,
+  matchingSeedForCycleDate,
+  isExplicitDatabaseRollback,
+  parseMatchingRunContext,
+  shouldRetryExactFinalization,
+  shouldRetryMatchingRun,
+  shouldReleaseCycleClaim,
+} from './runContext.ts';
 
 const MADINAH_TIME_ZONE = 'Asia/Riyadh';
+
+class MatchingRunError extends Error {
+  constructor(
+    message: string,
+    readonly preserveCycleClaim: boolean,
+    readonly retryCause: unknown = null
+  ) {
+    super(message);
+    this.name = 'MatchingRunError';
+  }
+}
+
+class MatchingFinalizationRpcError extends Error {
+  constructor(readonly rpcError: unknown) {
+    super(
+      rpcError && typeof rpcError === 'object'
+        ? String((rpcError as Record<string, unknown>)['message'] ?? 'Matching finalization failed')
+        : 'Matching finalization failed'
+    );
+    this.name = 'MatchingFinalizationRpcError';
+  }
+}
+
+async function finalizeWithExactRetry<T>(
+  request: () => Promise<{ data: T; error: unknown }>
+): Promise<T> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const result = await request();
+      if (!result.error) return result.data;
+      if (shouldRetryExactFinalization(result.error, attempt)) continue;
+      throw new MatchingFinalizationRpcError(result.error);
+    } catch (error) {
+      if (error instanceof MatchingFinalizationRpcError) throw error;
+      if (shouldRetryExactFinalization(error, attempt)) continue;
+      throw new MatchingFinalizationRpcError(error);
+    }
+  }
+  throw new MatchingFinalizationRpcError(new TypeError('Finalization transport failed twice'));
+}
 
 function madinahParts(date = new Date()) {
   const values = new Intl.DateTimeFormat('en-CA', {
@@ -39,7 +90,11 @@ async function madinahFajrWindow(now = new Date()) {
   const { hour, minute } = await fajrForMadinahDate(current.date);
   const currentMinutes = current.hour * 60 + current.minute;
   const fajrMinutes = hour * 60 + minute;
-  return { cycleDate: current.date, due: currentMinutes >= fajrMinutes && currentMinutes < fajrMinutes + 15 };
+  return {
+    cycleDate: current.date,
+    startsAt: madinahInstant(current.date, hour, minute).toISOString(),
+    due: currentMinutes >= fajrMinutes && currentMinutes < fajrMinutes + 15,
+  };
 }
 
 function nextMadinahDate(cycleDate: string) {
@@ -69,14 +124,16 @@ async function planTomorrowFajr(now = new Date()) {
  * Runs the v1 pipeline.
  *
  * A shadow run computes the identical round and writes it to
- * `shadow_round_edges` only. It never calls `persist_matching_round`, so it
- * cannot create introductions, matches, notifications, limits or cooldowns —
- * the isolation is structural rather than a flag checked in several places.
+ * `shadow_round_edges` only. Its finalizer has no outcomes, expiry or
+ * retirement parameter, so it cannot create introductions, matches,
+ * notifications, limits, cooldowns or durable retirement state.
  */
-async function runMatchingV1(
+async function runMatchingV1Attempt(
   client: SupabaseClient,
   mode: 'live' | 'shadow',
-  expiresAt: string
+  cycleDate: string,
+  evaluatedAt: string,
+  expiresAt: string | null
 ) {
   const config = await client.rpc('matching_run_config');
   if (config.error || !config.data || typeof config.data !== 'object' || Array.isArray(config.data)) {
@@ -90,101 +147,155 @@ async function runMatchingV1(
   }
   const params: MatchingConfig = resolveStoredConfig(payload);
 
-  // Seeded from the cycle so a run is reproducible, and so a shadow run and the
-  // live run it shadows make identical choices.
-  const seed = Math.floor(Date.now() / 86_400_000);
+  // The seed only breaks ties. Fairness-window position comes from the
+  // database-bound Asia/Riyadh run context below, never from seed arithmetic.
+  const seed = matchingSeedForCycleDate(cycleDate);
 
-  const run = await client.rpc('matching_run_start', {
+  const run = await client.rpc('matching_run_start_service', {
     p_algorithm_version: ALGORITHM_VERSION,
     p_config_version: configVersion,
     p_seed: seed,
     p_mode: mode,
+    p_cycle_date: cycleDate,
+    p_evaluated_at: evaluatedAt,
   });
   if (run.error) throw new Error(run.error.message);
-  const runId = run.data as string;
+  const runContext = parseMatchingRunContext(run.data, cycleDate);
+  if (runContext.seed !== seed) {
+    throw new Error('Matching run context returned the wrong seed');
+  }
+  if (Date.parse(runContext.evaluatedAt) !== Date.parse(evaluatedAt)) {
+    throw new Error('Matching run context returned the wrong canonical cycle instant');
+  }
+  const runId = runContext.runId;
+  let finalizationAttempted = false;
 
   try {
     const started = Date.now();
+    const snapshot = await client.rpc('matching_candidate_snapshot_prepare_service', {
+      p_run_id: runId,
+      p_fail_limit: params.fail_edges_after_filter,
+    });
+    if (snapshot.error) throw new Error(snapshot.error.message);
+    const snapshotMetrics = parseCountPayload(snapshot.data, [
+      'candidate_edge_count',
+      'potential_edge_count',
+    ]);
     const [edgeRows, members] = await Promise.all([
-      fetchCandidateEdges(client, params.fail_edges_after_filter),
-      client.rpc('matching_member_signals_service'),
+      fetchCandidateEdges(client, runId, snapshotMetrics.candidate_edge_count),
+      client.rpc('matching_member_signals_service', { p_run_id: runId }),
     ]);
     if (members.error) throw new Error(members.error.message);
+    const memberRows = (members.data ?? []) as MemberSignalRow[];
+    if (memberRows.length !== runContext.poolMemberCount) {
+      throw new Error('Matching member snapshot count changed inside one run');
+    }
     const fetchMs = Date.now() - started;
-
-    const roundsElapsed =
-      (seed % Number(params['exposure_window_rounds'] ?? 7)) + 1;
 
     const plan = planRound(
       edgeRows,
-      (members.data ?? []) as MemberSignalRow[],
+      memberRows,
       params,
-      seed,
-      roundsElapsed,
+      matchingPlanContext(runContext),
       () => Date.now(),
       { fetch: fetchMs }
     );
 
-    let pairsCreated = 0;
+    let finalized;
     if (mode === 'live') {
-      const persisted = await client.rpc('persist_matching_round_service', {
-        p_run_id: runId,
-        p_edges: plan.edges,
-        p_outcomes: plan.memberOutcomes,
-        p_expires_at: expiresAt,
-      });
-      if (persisted.error) throw new Error(persisted.error.message);
-      pairsCreated = persisted.data as number;
+      if (!expiresAt) throw new Error('A live matching run requires an expiry');
+      finalizationAttempted = true;
+      const persisted = await finalizeWithExactRetry(() => client.rpc(
+        'matching_live_finalize_service',
+        liveFinalizationArgs(runId, plan, expiresAt)
+      ));
+      finalized = parseFinalizationResult(persisted);
     } else {
-      const shadow = await client.rpc('matching_shadow_round_service', {
-        p_run_id: runId,
-        p_edges: plan.edges,
-      });
-      if (shadow.error) throw new Error(shadow.error.message);
-      pairsCreated = shadow.data as number;
+      finalizationAttempted = true;
+      const shadow = await finalizeWithExactRetry(() => client.rpc(
+        'matching_shadow_finalize_service',
+        shadowFinalizationArgs(runId, plan)
+      ));
+      finalized = parseFinalizationResult(shadow);
     }
 
-    const finished = await client.rpc('matching_run_finish', {
-      p_run_id: runId,
-      p_eligible_members: plan.eligibleMembers,
-      p_edges_after_filter: plan.edgesAfterFilter,
-      p_pairs_created: pairsCreated,
-      p_rounds_created: plan.memberOutcomes.filter((item) => item.outcome === 'served').length,
-      p_stage_latencies: plan.stageLatencies,
-      p_peak_memory_bytes: plan.peakMemoryBytes,
-      p_threshold_breaches: plan.thresholdBreaches,
-      p_error: null,
-    });
-    if (finished.error) throw new Error(finished.error.message);
+    if (finalized.pairs_created !== plan.edges.length
+        || finalized.rounds_created !== plan.memberOutcomes.filter((item) => item.outcome === 'served').length
+        || finalized.eligible_members !== runContext.poolMemberCount
+        || finalized.edges_after_filter !== snapshotMetrics.candidate_edge_count) {
+      throw new Error('Matching finalizer metrics contradicted the immutable run snapshot');
+    }
 
-    return { runId, mode, pairsCreated, deferred: plan.deferredMembers, breaches: plan.thresholdBreaches };
+    return {
+      runId,
+      mode,
+      pairsCreated: finalized.pairs_created,
+      deferred: plan.deferredMembers,
+      breaches: plan.thresholdBreaches,
+      idempotent: finalized.idempotent,
+    };
   } catch (error) {
-    await client.rpc('matching_run_finish', {
-      p_run_id: runId,
-      p_eligible_members: null,
-      p_edges_after_filter: null,
-      p_pairs_created: null,
-      p_rounds_created: null,
-      p_stage_latencies: {},
-      p_peak_memory_bytes: null,
-      p_threshold_breaches: [],
-      p_error: String(error),
-    });
-    throw error;
+    try {
+      await client.rpc('matching_run_finish', {
+        p_run_id: runId,
+        p_eligible_members: null,
+        p_edges_after_filter: null,
+        p_pairs_created: null,
+        p_rounds_created: null,
+        p_stage_latencies: {},
+        p_peak_memory_bytes: null,
+        p_threshold_breaches: [],
+        p_error: String(error),
+      });
+    } catch {
+      // Preserve the original failure classification even if recording it is
+      // impossible; this is critical after an ambiguous finalization attempt.
+    }
+    const rpcError = error instanceof MatchingFinalizationRpcError ? error.rpcError : null;
+    const explicitRollback = isExplicitDatabaseRollback(rpcError);
+    throw new MatchingRunError(
+      String(error),
+      mode === 'live' && !shouldReleaseCycleClaim(finalizationAttempted, explicitRollback),
+      rpcError
+    );
   }
+}
+
+async function runMatchingV1(
+  client: SupabaseClient,
+  mode: 'live' | 'shadow',
+  cycleDate: string,
+  evaluatedAt: string,
+  expiresAt: string | null
+) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await runMatchingV1Attempt(client, mode, cycleDate, evaluatedAt, expiresAt);
+    } catch (error) {
+      if (mode === 'live'
+          && error instanceof MatchingRunError
+          && shouldRetryMatchingRun(error.retryCause, attempt)) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error('Matching retry loop exhausted unexpectedly');
 }
 
 async function fetchCandidateEdges(
   client: SupabaseClient,
-  failEdgeCount: number
+  runId: string,
+  expectedCount: number
 ): Promise<CandidateEdgeRow[]> {
   const pageSize = 1000;
   const rows: CandidateEdgeRow[] = [];
   let afterLow: string | null = null;
   let afterHigh: string | null = null;
 
-  while (true) {
+  while (rows.length < expectedCount) {
     const page = await client.rpc('matching_candidate_edges_service', {
+      p_run_id: runId,
       p_after_low: afterLow,
       p_after_high: afterHigh,
       p_page_size: pageSize,
@@ -192,10 +303,15 @@ async function fetchCandidateEdges(
     if (page.error) throw new Error(page.error.message);
     const batch = (page.data ?? []) as CandidateEdgeRow[];
     rows.push(...batch);
-    if (rows.length >= failEdgeCount) {
-      throw new Error(`Candidate graph reached fail limit (${failEdgeCount})`);
+    if (rows.length > expectedCount) {
+      throw new Error('Candidate snapshot returned more rows than it recorded');
     }
-    if (batch.length < pageSize) return rows;
+    if (batch.length === 0) {
+      throw new Error('Candidate snapshot ended before its recorded count');
+    }
+    if (batch.length < pageSize && rows.length !== expectedCount) {
+      throw new Error('Candidate snapshot page count contradicted its recorded count');
+    }
     const last = batch[batch.length - 1];
     if (!last || (last.user_low === afterLow && last.user_high === afterHigh)) {
       throw new Error('Candidate pagination did not advance');
@@ -203,6 +319,48 @@ async function fetchCandidateEdges(
     afterLow = last.user_low;
     afterHigh = last.user_high;
   }
+  return rows;
+}
+
+function parseCountPayload<T extends readonly string[]>(
+  payload: unknown,
+  keys: T
+): { [K in T[number]]: number } {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('Matching count payload is invalid');
+  }
+  const record = payload as Record<string, unknown>;
+  const result: Record<string, number> = {};
+  for (const key of keys) {
+    const parsed = typeof record[key] === 'number' ? record[key] : Number(record[key]);
+    if (!Number.isSafeInteger(parsed) || parsed < 0) {
+      throw new Error(`Matching count ${key} is invalid`);
+    }
+    result[key] = parsed;
+  }
+  return result as { [K in T[number]]: number };
+}
+
+interface FinalizationResult {
+  pairs_created: number;
+  rounds_created: number;
+  eligible_members: number;
+  edges_after_filter: number;
+  idempotent: boolean;
+}
+
+function parseFinalizationResult(payload: unknown): FinalizationResult {
+  const counts = parseCountPayload(payload, [
+    'pairs_created',
+    'rounds_created',
+    'eligible_members',
+    'edges_after_filter',
+  ] as const);
+  const idempotent = (payload as Record<string, unknown>)['idempotent'];
+  if (typeof idempotent !== 'boolean') {
+    throw new Error('Matching finalizer idempotent marker is invalid');
+  }
+  return { ...counts, idempotent };
 }
 
 Deno.serve(async (request: Request) => {
@@ -226,8 +384,11 @@ Deno.serve(async (request: Request) => {
   // needs comparing against live.
   if (requestedMode === 'shadow') {
     try {
-      const nextFajr = await planTomorrowFajr();
-      const result = await runMatchingV1(client, 'shadow', nextFajr.startsAt);
+      const requestedCycle = new URL(request.url).searchParams.get('cycleDate');
+      const cycleDate = requestedCycle ?? madinahParts().date;
+      const fajr = await fajrForMadinahDate(cycleDate);
+      const evaluatedAt = madinahInstant(cycleDate, fajr.hour, fajr.minute).toISOString();
+      const result = await runMatchingV1(client, 'shadow', cycleDate, evaluatedAt, null);
       return Response.json(result);
     } catch (error) {
       return Response.json({ error: String(error) }, { status: 500 });
@@ -267,7 +428,13 @@ Deno.serve(async (request: Request) => {
 
   try {
     if (useV1) {
-      const result = await runMatchingV1(client, 'live', expiresAt);
+      const result = await runMatchingV1(
+        client,
+        'live',
+        timing.cycleDate,
+        timing.startsAt,
+        expiresAt
+      );
       return Response.json({
         expiredSelections: expired.data,
         pairsCreated: result.pairsCreated,
@@ -283,7 +450,9 @@ Deno.serve(async (request: Request) => {
     if (generated.error) throw new Error(generated.error.message);
     return Response.json({ expiredSelections: expired.data, pairsCreated: generated.data, expiresAt, cycleDate: timing.cycleDate });
   } catch (error) {
-    await client.from('round_generation_runs').delete().eq('cycle_date', timing.cycleDate);
+    if (!(error instanceof MatchingRunError) || !error.preserveCycleClaim) {
+      await client.from('round_generation_runs').delete().eq('cycle_date', timing.cycleDate);
+    }
     return Response.json({ error: String(error) }, { status: 500 });
   }
 });

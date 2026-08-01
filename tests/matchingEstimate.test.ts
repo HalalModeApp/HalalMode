@@ -10,6 +10,7 @@ import {
   appeal,
   confidence,
   directionalEstimate,
+  evaluatePairResurface,
   mayResurface,
   NO_PAIR_HISTORY,
   reciprocalScore,
@@ -178,6 +179,68 @@ test('a pair whose estimate keeps collapsing is abandoned', () => {
   assert.equal(mayResurface(fading, 0.3, null, null, now, config), false);
   // A shallower decline is still worth another look.
   assert.equal(mayResurface(fading, 0.55, null, null, now, config), true);
+});
+
+test('the repeat-abandon boundary is inclusive and emits a durable retirement proposal', () => {
+  const now = new Date('2026-03-01T00:00:00Z');
+  const first = 0.7;
+  const history: PairHistory = {
+    timesShown: 1,
+    firstReciprocalScore: first,
+    lastReciprocalScore: first,
+  };
+
+  assert.deepEqual(
+    evaluatePairResurface(
+      history,
+      first - config.repeat_abandon_drop,
+      null,
+      null,
+      now,
+      config
+    ),
+    { eligible: false, retirementReason: 'score_collapse' },
+    'equality at repeat_abandon_drop must retire the pair'
+  );
+
+  assert.deepEqual(
+    evaluatePairResurface(
+      history,
+      first - config.repeat_abandon_drop + 0.00001,
+      null,
+      null,
+      now,
+      config
+    ),
+    { eligible: true, retirementReason: null },
+    'a score just inside the allowed drop remains eligible'
+  );
+});
+
+test('repeat exhaustion proposes retirement while an already-retired pair proposes no second write', () => {
+  const now = new Date('2026-03-01T00:00:00Z');
+  const exhausted: PairHistory = {
+    timesShown: config.max_pair_appearances,
+    firstReciprocalScore: 0.7,
+    lastReciprocalScore: 0.7,
+  };
+
+  assert.deepEqual(
+    evaluatePairResurface(exhausted, 0.7, null, null, now, config),
+    { eligible: false, retirementReason: 'repeat_limit' }
+  );
+  assert.deepEqual(
+    evaluatePairResurface(
+      exhausted,
+      0.7,
+      null,
+      new Date('2026-02-01T00:00:00Z'),
+      now,
+      config
+    ),
+    { eligible: false, retirementReason: null },
+    'a later run sees durable retired state and must not propose the write again'
+  );
 });
 
 test('a pair below the score floor is never resurfaced', () => {

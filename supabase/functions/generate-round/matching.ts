@@ -12,19 +12,22 @@
  *
  * The estimation, allocation, fairness and rotation modules are shared verbatim
  * with the app's test suite rather than reimplemented here. That is deliberate:
- * the 113 tests covering them are only meaningful if this is the same code.
+ * those tests are only meaningful if this is the same code.
  */
 
 import { resolveConfig, ALGORITHM_VERSION, type MatchingConfig } from '../../../src/matching/config.ts';
 import {
   directionalEstimate,
+  evaluatePairResurface,
   reciprocalScore,
   type MemberSignals,
   type PairHistory,
+  type PairRetirementReason,
 } from '../../../src/matching/estimate.ts';
 import { adjustedUtility, appearanceLimit, type WindowContext } from '../../../src/matching/fairness.ts';
 import { allocate, verifyAllocation, type Capacity, type ScoredEdge } from '../../../src/matching/allocate.ts';
 import { planRotation, type RotationCandidate } from '../../../src/matching/rotation.ts';
+import type { MatchingPlanContext } from './runContext.ts';
 
 export interface CandidateEdgeRow {
   user_low: string;
@@ -33,6 +36,9 @@ export interface CandidateEdgeRow {
   compat_high_to_low: number;
   pair_times_shown: number;
   pair_first_score: number | null;
+  pair_last_score: number | null;
+  pair_cooldown_until: string | null;
+  pair_retired_at: string | null;
 }
 
 export interface MemberSignalRow {
@@ -49,6 +55,12 @@ export interface MemberSignalRow {
 
 export interface RoundPlan {
   edges: { a: string; b: string; score: number; utility: number }[];
+  retirementProposals: {
+    user_low: string;
+    user_high: string;
+    reason: PairRetirementReason;
+    current_score: number;
+  }[];
   memberOutcomes: { user_id: string; outcome: 'served' | 'deferred' | 'no_candidate' }[];
   stageLatencies: Record<string, number>;
   edgesAfterFilter: number;
@@ -56,6 +68,30 @@ export interface RoundPlan {
   deferredMembers: number;
   peakMemoryBytes: number;
   thresholdBreaches: string[];
+}
+
+export function liveFinalizationArgs(runId: string, plan: RoundPlan, expiresAt: string) {
+  return {
+    p_run_id: runId,
+    p_edges: plan.edges,
+    p_outcomes: plan.memberOutcomes,
+    p_retirements: plan.retirementProposals,
+    p_expires_at: expiresAt,
+    p_stage_latencies: plan.stageLatencies,
+    p_peak_memory_bytes: plan.peakMemoryBytes,
+    p_threshold_breaches: plan.thresholdBreaches,
+  };
+}
+
+/** Shadow has deliberately no live-state inputs, including no retirements. */
+export function shadowFinalizationArgs(runId: string, plan: RoundPlan) {
+  return {
+    p_run_id: runId,
+    p_edges: plan.edges,
+    p_stage_latencies: plan.stageLatencies,
+    p_peak_memory_bytes: plan.peakMemoryBytes,
+    p_threshold_breaches: plan.thresholdBreaches,
+  };
 }
 
 function toSignals(row: MemberSignalRow): MemberSignals {
@@ -70,6 +106,15 @@ function toSignals(row: MemberSignalRow): MemberSignals {
   };
 }
 
+function optionalInstant(value: string | null, field: string): Date | null {
+  if (value === null) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Candidate edge ${field} is invalid`);
+  }
+  return parsed;
+}
+
 /**
  * Computes a full round. Pure: takes fetched rows, returns a decision.
  *
@@ -80,12 +125,21 @@ export function planRound(
   edgeRows: CandidateEdgeRow[],
   memberRows: MemberSignalRow[],
   rawConfig: Partial<MatchingConfig>,
-  seed: number,
-  roundsElapsedInWindow: number,
+  context: MatchingPlanContext,
   now: () => number = () => Date.now(),
   initialStageLatencies: Record<string, number> = {}
 ): RoundPlan {
   const config = resolveConfig(rawConfig);
+  const evaluationNow = new Date(context.evaluatedAt);
+  if (Number.isNaN(evaluationNow.getTime())) {
+    throw new Error('Matching plan evaluation time is invalid');
+  }
+  if (context.fairnessWindow.timeZone !== 'Asia/Riyadh'
+      || !Number.isInteger(context.fairnessWindow.roundsElapsed)
+      || context.fairnessWindow.roundsElapsed < 1
+      || context.fairnessWindow.roundsElapsed > config.exposure_window_rounds) {
+    throw new Error('Matching plan fairness window is invalid');
+  }
   const stageLatencies: Record<string, number> = { ...initialStageLatencies };
   const mark = <T>(stage: string, fn: () => T): T => {
     const started = now();
@@ -94,7 +148,7 @@ export function planRound(
     return value;
   };
 
-  const window: WindowContext = { roundsElapsed: roundsElapsedInWindow };
+  const window: WindowContext = { roundsElapsed: context.fairnessWindow.roundsElapsed };
   const signals = new Map(memberRows.map((row) => [row.user_id, toSignals(row)]));
 
   // --- Rotation: decide who is served at all this round --------------------
@@ -110,16 +164,15 @@ export function planRound(
       memberRows.filter((r) => r.gender === 'male').map(toCandidate),
       memberRows.filter((r) => r.gender === 'female').map(toCandidate),
       config,
-      seed
+      context.seed
     );
   });
 
   // --- Estimation and scoring ----------------------------------------------
   const scored = mark('estimate', () => {
     const out: ScoredEdge[] = [];
+    const retirements: RoundPlan['retirementProposals'] = [];
     for (const row of edgeRows) {
-      if (!plan.serving.has(row.user_low) || !plan.serving.has(row.user_high)) continue;
-
       const low = signals.get(row.user_low);
       const high = signals.get(row.user_high);
       if (!low || !high) continue;
@@ -127,13 +180,34 @@ export function planRound(
       const history: PairHistory = {
         timesShown: row.pair_times_shown,
         firstReciprocalScore: row.pair_first_score,
-        lastReciprocalScore: null,
+        lastReciprocalScore: row.pair_last_score,
       };
 
       // Each direction is estimated against the *subject* of that direction.
       const lowPicksHigh = directionalEstimate(row.compat_low_to_high, high, history, config);
       const highPicksLow = directionalEstimate(row.compat_high_to_low, low, history, config);
       const reciprocal = reciprocalScore(lowPicksHigh, highPicksLow, config);
+
+      const repeat = evaluatePairResurface(
+        history,
+        reciprocal,
+        optionalInstant(row.pair_cooldown_until, 'pair_cooldown_until'),
+        optionalInstant(row.pair_retired_at, 'pair_retired_at'),
+        evaluationNow,
+        config
+      );
+      if (!repeat.eligible) {
+        if (repeat.retirementReason) {
+          retirements.push({
+            user_low: row.user_low,
+            user_high: row.user_high,
+            reason: repeat.retirementReason,
+            current_score: Number(reciprocal.toFixed(5)),
+          });
+        }
+        continue;
+      }
+      if (!plan.serving.has(row.user_low) || !plan.serving.has(row.user_high)) continue;
 
       const decay = Math.pow(config.repeat_decay, Math.max(0, row.pair_times_shown));
       out.push({
@@ -144,7 +218,7 @@ export function planRound(
         utility: adjustedUtility(reciprocal, low, high, config, window) * decay,
       });
     }
-    return out;
+    return { edges: out, retirements };
   });
 
   // --- Allocation -----------------------------------------------------------
@@ -155,7 +229,7 @@ export function planRound(
   }
 
   const result = mark('allocate', () =>
-    allocate({ edges: scored, capacities, config, seed, now })
+    allocate({ edges: scored.edges, capacities, config, seed: context.seed, now })
   );
 
   const verdict = verifyAllocation(result, capacities);
@@ -181,7 +255,7 @@ export function planRound(
 
   // Roughly 24 bytes per edge held plus per-member bookkeeping. Reported so the
   // guard has something real to compare against rather than a guess.
-  const peakMemoryBytes = scored.length * 24 + memberRows.length * 256;
+  const peakMemoryBytes = scored.edges.length * 24 + memberRows.length * 256;
   if (peakMemoryBytes >= config.fail_peak_memory_bytes) {
     thresholdBreaches.push('fail_peak_memory_bytes');
   } else if (peakMemoryBytes >= config.warn_peak_memory_bytes) {
@@ -210,6 +284,7 @@ export function planRound(
       score: Number(edge.reciprocal.toFixed(5)),
       utility: Number(edge.utility.toFixed(5)),
     })),
+    retirementProposals: scored.retirements,
     memberOutcomes,
     stageLatencies,
     edgesAfterFilter: edgeRows.length,
