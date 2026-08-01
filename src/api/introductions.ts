@@ -3,13 +3,20 @@ import { requireSupabase, USE_MOCKS } from '@/lib/supabase';
 import { hydrateProfileMedia } from '@/api/profileMedia';
 import {
   normalizeDailyRoundStatus,
+  normalizeNarrowingCriterion,
   type DailyRoundStatus,
+  type NarrowingCriterion,
 } from '@/lib/dailyRoundState';
 import { TIER_LIMITS, type IntroductionRound, type MembershipTier } from '@/types';
 
 export interface CurrentRoundState {
   status: DailyRoundStatus;
   round: IntroductionRound | undefined;
+  /**
+   * Set only with `filters_too_narrow`: the member's own must-have that is
+   * costing them the most. Never names another member or a pool size.
+   */
+  narrowingCriterion: NarrowingCriterion | null;
 }
 
 /**
@@ -26,6 +33,7 @@ export async function fetchCurrentRoundState(
     return {
       status: 'ready',
       round: buildMockRound(TIER_LIMITS[tier].introductions),
+      narrowingCriterion: null,
     };
   }
 
@@ -33,19 +41,22 @@ export async function fetchCurrentRoundState(
   const { data, error } = await client.rpc('get_current_round_state');
   if (error) throw error;
   const payload = data && typeof data === 'object'
-    ? data as { status?: unknown; round?: IntroductionRound | null }
+    ? data as { status?: unknown; round?: IntroductionRound | null; criterion?: unknown }
     : {};
   const round = payload.round ?? undefined;
   const status = normalizeDailyRoundStatus(payload.status);
+  const narrowingCriterion = normalizeNarrowingCriterion(payload.criterion);
   if (!round) {
     return {
       // A contradictory `ready` response must not render an empty carousel.
       status: status === 'ready' ? 'no_suitable_introductions' : status,
       round: undefined,
+      narrowingCriterion,
     };
   }
   return {
     status: round.introductions.length > 0 ? 'ready' : status,
+    narrowingCriterion,
     round: {
       ...round,
       introductions: await Promise.all(

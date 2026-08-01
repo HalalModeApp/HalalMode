@@ -5,10 +5,29 @@ export const dailyRoundStatuses = [
   'matching_inputs_unavailable',
   'awaiting_turn',
   'at_match_capacity',
+  'filters_too_narrow',
   'legal_consent_required',
 ] as const;
 
 export type DailyRoundStatus = (typeof dailyRoundStatuses)[number];
+
+/**
+ * Criteria the server may name as the costliest must-have. Anything else is
+ * discarded rather than rendered, so a malformed response cannot put arbitrary
+ * text in front of a member.
+ */
+export const mustHaveCriteria = [
+  'age', 'height', 'build', 'distance', 'practice', 'timeline', 'children', 'sect',
+] as const;
+
+export type NarrowingCriterion = (typeof mustHaveCriteria)[number];
+
+export function normalizeNarrowingCriterion(value: unknown): NarrowingCriterion | null {
+  return typeof value === 'string'
+    && (mustHaveCriteria as readonly string[]).includes(value)
+    ? value as NarrowingCriterion
+    : null;
+}
 export type DailyRoundEmptyReason = Exclude<DailyRoundStatus, 'ready'>;
 
 /**

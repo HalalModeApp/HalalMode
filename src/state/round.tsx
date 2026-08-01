@@ -10,7 +10,7 @@ import {
 } from 'react';
 
 import { fetchCurrentRoundState, releaseIntroduction, submitKeeps } from '@/api/introductions';
-import type { DailyRoundEmptyReason } from '@/lib/dailyRoundState';
+import type { DailyRoundEmptyReason, NarrowingCriterion } from '@/lib/dailyRoundState';
 import { queryKeys } from '@/lib/queryClient';
 import { getRoundInteractionState, resolveActiveId } from '@/lib/roundInvariants';
 import { useAuth } from '@/state/auth';
@@ -20,6 +20,8 @@ import { TIER_LIMITS, type Introduction, type IntroductionRound } from '@/types'
 interface RoundValue {
   round: IntroductionRound | undefined;
   emptyReason: DailyRoundEmptyReason | null;
+  /** Which of the member's own must-haves to loosen first, when relevant. */
+  narrowingCriterion: NarrowingCriterion | null;
   isLoading: boolean;
   error: Error | null;
   refresh: () => void;
@@ -100,6 +102,8 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   const emptyReason = roundState?.status && roundState.status !== 'ready'
     ? roundState.status
     : null;
+
+  const narrowingCriterion = roundState?.narrowingCriterion ?? null;
 
   const keepLimit = TIER_LIMITS[tier].keeps;
 
@@ -215,6 +219,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     () => ({
       round,
       emptyReason,
+      narrowingCriterion,
       isLoading,
       error: (error as Error) ?? null,
       refresh: () => void refetch(),
@@ -247,6 +252,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     [
       round,
       emptyReason,
+      narrowingCriterion,
       isLoading,
       error,
       refetch,

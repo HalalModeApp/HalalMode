@@ -26,6 +26,8 @@ import { Text } from '@/components/ui/Text';
 import { useCameraShake } from '@/hooks/useCameraShake';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useI18n } from '@/i18n';
+import type { TranslationKey } from '@/i18n/catalog';
+import type { NarrowingCriterion } from '@/lib/dailyRoundState';
 import { fetchMyProfileReadiness } from '@/api/profile';
 import { trackProductEvent } from '@/lib/analytics';
 import { queryKeys } from '@/lib/queryClient';
@@ -36,6 +38,21 @@ import { testIds } from '@/lib/testIds';
 import { useRound } from '@/state/round';
 import { useAuth } from '@/state/auth';
 import { alpha, color, font, radius, space } from '@/theme/tokens';
+
+/**
+ * Names the criterion in the member's own words, matching the label on the
+ * control they would go and change.
+ */
+const NARROWING_CRITERION_KEYS: Record<NarrowingCriterion, TranslationKey> = {
+  age: 'filters.ageRange',
+  height: 'filters.heightPlain',
+  build: 'filters.bodyTypes',
+  distance: 'filters.searchDistance',
+  practice: 'filters.practice',
+  timeline: 'filters.marriageTiming',
+  children: 'filters.children',
+  sect: 'filters.sect',
+};
 
 export default function DailyScreen() {
   const { t, isRTL } = useI18n();
@@ -48,6 +65,7 @@ export default function DailyScreen() {
   const {
     round,
     emptyReason,
+    narrowingCriterion,
     isLoading,
     error,
     refresh,
@@ -260,6 +278,26 @@ export default function DailyScreen() {
     const matchingInputsUnavailable = emptyReason === 'matching_inputs_unavailable';
     const awaitingTurn = emptyReason === 'awaiting_turn';
     const atMatchCapacity = emptyReason === 'at_match_capacity';
+    // Only shown when the server named a criterion. Without one the message
+    // would ask a member to loosen something without saying what, which is
+    // worse than the established wording.
+    const filtersTooNarrow =
+      emptyReason === 'filters_too_narrow' && narrowingCriterion !== null;
+
+    if (filtersTooNarrow) {
+      return (
+        <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
+          <BrandHeader />
+          <EmptyState
+            title={t('daily.filtersTooNarrowTitle')}
+            message={t('daily.filtersTooNarrowBody', {
+              criterion: t(NARROWING_CRITERION_KEYS[narrowingCriterion]),
+            })}
+          />
+        </Screen>
+      );
+    }
+
     const emptyTitle = awaitingTurn
       ? 'daily.awaitingTurnTitle'
       : atMatchCapacity

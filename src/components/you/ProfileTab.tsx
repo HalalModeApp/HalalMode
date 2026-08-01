@@ -37,9 +37,10 @@ import { PRACTICE_LABELS, TIMELINE_LABELS } from '@/data/preferences';
 import { getProfileReadiness, type ProfileReadinessIssue } from '@/lib/profileReadiness';
 import { deviceLocationFromReverseGeocode } from '@/lib/deviceLocation';
 import { useI18n, type Translate } from '@/i18n';
+import type { TranslationKey } from '@/i18n/catalog';
 import { USE_MOCKS } from '@/lib/supabase';
 import { alpha, color, font, radius } from '@/theme/tokens';
-import type { MarriageTimeline, Profile, ReligiousPractice } from '@/types';
+import type { MarriageTimeline, Profile, ReligiousPractice, Sect } from '@/types';
 
 function profileSchema(t: Translate) {
   return z.object({
@@ -51,6 +52,7 @@ function profileSchema(t: Translate) {
     values: z.string().max(180, t('profile.validation.values')),
     languages: z.string().max(120, t('profile.validation.languages')),
     religiousPractice: z.enum(['very_practicing', 'practicing', 'moderate', 'learning']),
+    sect: z.enum(['sunni', 'shia', 'other', 'prefer_not_to_say']),
     timeline: z.enum(['within_3_months', 'within_6_months', 'within_1_year', '1_to_2_years']),
   });
 }
@@ -95,6 +97,7 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
       values: profile.chips.join(', '),
       languages: profile.languagesSpoken.join(', '),
       religiousPractice: profile.religiousPractice,
+      sect: profile.sect,
       timeline: profile.timeline,
     },
   });
@@ -136,6 +139,7 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
       values: profile.chips.join(', '),
       languages: profile.languagesSpoken.join(', '),
       religiousPractice: profile.religiousPractice,
+      sect: profile.sect,
       timeline: profile.timeline,
     });
   }, [profile, reset]);
@@ -235,6 +239,7 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
         chips: splitProfileList(values.values),
         languagesSpoken: splitProfileList(values.languages),
         religiousPractice: values.religiousPractice,
+        sect: values.sect,
         timeline: values.timeline,
       };
       if (USE_MOCKS && photosDirty) patch.photos = photos;
@@ -249,6 +254,7 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
         chips: splitProfileList(values.values),
         languagesSpoken: splitProfileList(values.languages),
         religiousPractice: values.religiousPractice,
+        sect: values.sect,
         timeline: values.timeline,
       };
       queryClient.setQueryData(queryKeys.profile('me'), saved);
@@ -763,6 +769,29 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
         </View>
 
         <View style={styles.profileChoice}>
+          <Text variant="micro">{t('profile.sect')}</Text>
+          <Text variant="caption" style={styles.choiceNote}>
+            {t('profile.sectBody')}
+          </Text>
+          <Controller
+            control={control}
+            name="sect"
+            render={({ field }) => (
+              <View style={styles.choiceChips}>
+                {PROFILE_SECTS.map((value) => (
+                  <Chip
+                    key={value}
+                    label={sectLabel(value, t)}
+                    selected={field.value === value}
+                    onPress={() => field.onChange(value)}
+                  />
+                ))}
+              </View>
+            )}
+          />
+        </View>
+
+        <View style={styles.profileChoice}>
           <Text variant="micro">{t('profile.timing')}</Text>
           <Controller
             control={control}
@@ -800,6 +829,20 @@ export function ProfileTab({ profile, onOpenPreferences }: { profile: Profile; o
 
 function splitProfileList(value: string): string[] {
   return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))].slice(0, 8);
+}
+
+/** Includes 'prefer_not_to_say', because here it is a real answer. */
+const PROFILE_SECTS: Sect[] = ['sunni', 'shia', 'other', 'prefer_not_to_say'];
+
+const SECT_KEYS: Record<Sect, TranslationKey> = {
+  sunni: 'filters.sect.sunni',
+  shia: 'filters.sect.shia',
+  other: 'filters.sect.other',
+  prefer_not_to_say: 'filters.sect.unstated',
+};
+
+function sectLabel(value: Sect, t: Translate): string {
+  return t(SECT_KEYS[value]);
 }
 
 function practiceLabel(value: ReligiousPractice, t: Translate): string {
@@ -980,6 +1023,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: color.inkSoft,
   },
+  choiceNote: { marginTop: -2 },
   voiceNote: { marginTop: 10 },
 
   formCard: { gap: 14 },
