@@ -41,6 +41,8 @@ export interface MatchingConfig {
   no_match_boost_weight: number;
   /** Ceiling on the total fairness boost, as a fraction of the edge's score. */
   boost_cap: number;
+  /** Raw-quality band inside which fairness may change edge ordering. */
+  quality_band_width: number;
   /**
    * Scales a member's own entitlement to set their fair share. 1.0 means "your
    * tier's allowance, pro rata through the window"; below 1.0 throttles sooner.
@@ -101,6 +103,7 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
   exposure_boost_weight: 0.3,
   no_match_boost_weight: 0.2,
   boost_cap: 0.25,
+  quality_band_width: 0.025,
   exposure_target_multiplier: 1.0,
   exposure_window_rounds: 7,
   no_match_rounds_full: 8,
@@ -139,5 +142,76 @@ export function resolveConfig(params: Partial<MatchingConfig> = {}): MatchingCon
       Reflect.set(merged, key, value);
     }
   }
-  return merged;
+  return validateConfig(merged);
+}
+
+/** Reject malformed server configuration before it can influence a round. */
+export function validateConfig(config: MatchingConfig): MatchingConfig {
+  const numericKeys = (Object.keys(DEFAULT_MATCHING_CONFIG) as (keyof MatchingConfig)[])
+    .filter((key) => typeof DEFAULT_MATCHING_CONFIG[key] === 'number');
+  for (const key of numericKeys) {
+    const value = config[key];
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`Matching config ${String(key)} must be a finite number`);
+    }
+  }
+
+  const weightSum = config.w_compat + config.w_appeal + config.w_pair;
+  if (config.w_compat < 0 || config.w_appeal < 0 || config.w_pair < 0
+      || Math.abs(weightSum - 1) > 1e-9) {
+    throw new Error('Matching estimator weights must be non-negative and sum to 1');
+  }
+  if (!(config.p_min >= 0 && config.p_min < config.p_max && config.p_max <= 1)) {
+    throw new Error('Matching probability bounds must satisfy 0 <= p_min < p_max <= 1');
+  }
+  if (config.min_reciprocal_score < 0 || config.min_reciprocal_score > 1) {
+    throw new Error('Minimum reciprocal score must be between 0 and 1');
+  }
+  if (config.imbalance_lambda < 0 || config.imbalance_lambda > 1) {
+    throw new Error('Matching imbalance penalty must be between 0 and 1');
+  }
+  if (config.boost_cap < 0 || config.boost_cap > 1
+      || config.exposure_boost_weight < 0 || config.no_match_boost_weight < 0) {
+    throw new Error('Matching fairness weights and cap must be bounded and non-negative');
+  }
+  if (!(config.quality_band_width > 0 && config.quality_band_width <= 1)) {
+    throw new Error('Matching quality band width must be greater than 0 and at most 1');
+  }
+  if (!(config.repeat_decay > 0 && config.repeat_decay <= 1)
+      || config.repeat_cooldown_days < 0 || !Number.isInteger(config.repeat_cooldown_days)
+      || config.repeat_abandon_drop < 0 || config.repeat_abandon_drop > 1
+      || config.max_pair_appearances < 1 || !Number.isInteger(config.max_pair_appearances)) {
+    throw new Error('Repeat exposure configuration is invalid');
+  }
+  if (config.exposure_full_confidence < 1
+      || config.exposure_window_rounds < 1
+      || config.no_match_rounds_full < 1
+      || config.rotation_min_set_size < 1
+      || !Number.isInteger(config.exposure_full_confidence)
+      || !Number.isInteger(config.exposure_window_rounds)
+      || !Number.isInteger(config.no_match_rounds_full)
+      || !Number.isInteger(config.rotation_min_set_size)) {
+    throw new Error('Matching window and rotation counts must be positive integers');
+  }
+  if (!['geometric', 'arithmetic', 'min'].includes(config.reciprocal_combiner)) {
+    throw new Error('Unknown reciprocal score combiner');
+  }
+  if (config.rotation_enabled !== true && config.rotation_enabled !== false) {
+    throw new Error('Matching rotation flag must be boolean');
+  }
+  if (config.allocator !== ALGORITHM_VERSION) {
+    throw new Error('Unknown matching allocator');
+  }
+  if (config.exposure_target_multiplier <= 0
+      || config.repair_time_budget_ms < 0 || !Number.isInteger(config.repair_time_budget_ms)
+      || config.warn_round_latency_ms < 0
+      || config.warn_edges_after_filter < 0
+      || config.warn_peak_memory_bytes < 0
+      || config.min_segment_sample < 1 || !Number.isInteger(config.min_segment_sample)
+      || config.fail_round_latency_ms < config.warn_round_latency_ms
+      || config.fail_edges_after_filter < config.warn_edges_after_filter
+      || config.fail_peak_memory_bytes < config.warn_peak_memory_bytes) {
+    throw new Error('Matching runtime guard configuration is invalid');
+  }
+  return config;
 }

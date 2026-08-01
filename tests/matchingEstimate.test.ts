@@ -53,6 +53,19 @@ test('the confidence threshold is configurable, not hardcoded', () => {
   assert.equal(confidence(member({ timesShown: 15 }), patient), 0.375);
 });
 
+test('invalid matching configuration fails closed', () => {
+  assert.throws(
+    () => resolveConfig({ w_compat: 0.8, w_appeal: 0.3, w_pair: 0.2 }),
+    /sum to 1/
+  );
+  assert.throws(() => resolveConfig({ boost_cap: -0.1 }), /fairness/);
+  assert.throws(() => resolveConfig({ quality_band_width: 0 }), /quality band/);
+  assert.throws(() => resolveConfig({ imbalance_lambda: 2 }), /imbalance/);
+  assert.throws(() => resolveConfig({ allocator: 'unknown' }), /allocator/);
+  assert.throws(() => resolveConfig({ repeat_cooldown_days: -1 }), /Repeat/);
+  assert.throws(() => resolveConfig({ p_min: 0.9, p_max: 0.2 }), /probability bounds/);
+});
+
 test('behaviour displaces compatibility only as evidence accumulates', () => {
   const compat = 0.5;
   const liked = { timesKept: 9, roundsSinceLastMutual: 0, exposuresInWindow: 0 };

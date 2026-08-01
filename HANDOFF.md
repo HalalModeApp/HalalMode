@@ -72,8 +72,7 @@ or production verification.
 
 # Reciprocal matching v1 — handoff (2026-08)
 
-Branch `main`, last commit `788c0e1`. `npm run verify:client` is green:
-typecheck, lint, 113 tests. Read `docs/RECIPROCAL_MATCHING_V1_DESIGN.md` first,
+Branch `main`. Read `docs/RECIPROCAL_MATCHING_V1_DESIGN.md` first,
 especially §10 (three design errors simulation caught), §11 (scale) and §12
 (imbalance).
 
@@ -88,20 +87,22 @@ assumptions as well as its intent. Specifically worth attacking:
   predicts anything. Once real selection data exists, check whether the
   predicted reciprocal score correlates with observed mutual picks at all. If it
   does not, the weights are decoration.
-- **`w_compat + w_appeal + w_pair = 1` is asserted in a comment, not in code.**
-  Nothing rejects a config where they do not sum to 1.
-- **The simulation's pick model is the same shape as the estimator.** Members
-  pick by hidden `trueAppeal` and the estimator predicts appeal, so the
-  simulation may be flattering itself. Try a pick model driven by something the
-  estimator cannot see, and check the gains survive.
-- **`repairPass` is O(E) per sweep inside a `while (progressed)` loop.** On a
-  large edge list with many small gaps this could sweep many times. It is time
-  budgeted, so it degrades rather than hangs, but the budget may be doing more
-  work than intended.
+- **Independent simulation invalidated the original headline claims.** The
+  mixed model shows a smaller synthetic quality gain but worse zero-match and
+  mutual rates; an unobserved choice model is flat. Real shadow selections must
+  validate the estimator before any live rollout.
+- **Waiting is not durable.** The simulator increments an in-memory counter, but
+  production persists no deferred/no-candidate outcome. A rotation guarantee
+  cannot be enforced across Edge Function runs until this is server state.
+- **Candidate truncation is biased.** `matching_candidate_edges` uses an
+  unordered `limit 500000`; a large graph is silently cut at an arbitrary point
+  and the discarded work is absent from overload metrics.
+- **Database fetch latency is omitted from threshold breaches.** The fetch
+  duration is appended after `planRound()` has already classified the run.
 - **Compatibility weights every term equally** (`avg` over the terms array). Age
   and shared languages count the same as religious practice. That is almost
   certainly wrong as product judgement; it was chosen for simplicity.
-- **`0052`–`0054` have never executed.** Assume syntax errors.
+- **`0049`–`0054` have never executed.** Assume syntax and permission errors.
 
 ## What remains to reach done
 

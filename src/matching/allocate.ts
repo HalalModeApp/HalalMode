@@ -21,6 +21,8 @@ export interface ScoredEdge {
   b: string;
   /** Geometric mean of both directional estimates. */
   reciprocal: number;
+  /** Reciprocal score after repeat decay but before any fairness boost. */
+  quality: number;
   /** Reciprocal score after the capped fairness boost and repeat decay. */
   utility: number;
 }
@@ -70,12 +72,26 @@ export function tieBreak(seed: number, a: string, b: string): number {
   return hash >>> 0;
 }
 
-/** Stable global ordering: utility first, then a seeded deterministic hash. */
-export function compareEdges(seed: number) {
+/**
+ * Stable global ordering: raw-quality band, then fairness utility, then seed.
+ *
+ * Banding makes “comparable” explicit and preserves a total order. Fairness can
+ * reorder edges within one narrow band, but can never promote an edge across a
+ * stronger raw-quality band.
+ */
+export function compareEdges(seed: number, qualityBandWidth = 0.025) {
   return (left: ScoredEdge, right: ScoredEdge): number => {
+    const leftBand = qualityBand(left.quality, qualityBandWidth);
+    const rightBand = qualityBand(right.quality, qualityBandWidth);
+    if (rightBand !== leftBand) return rightBand - leftBand;
     if (right.utility !== left.utility) return right.utility - left.utility;
     return tieBreak(seed, left.a, left.b) - tieBreak(seed, right.a, right.b);
   };
+}
+
+export function qualityBand(quality: number, width: number): number {
+  if (!Number.isFinite(width) || width <= 0) throw new Error('Quality band width must be positive');
+  return Math.floor(quality / width + 1e-9);
 }
 
 /**
@@ -108,7 +124,7 @@ export function allocate(input: AllocationInput): AllocationResult {
     return capacities.has(edge.a) && capacities.has(edge.b);
   });
 
-  const ordered = [...eligible].sort(compareEdges(seed));
+  const ordered = [...eligible].sort(compareEdges(seed, config.quality_band_width));
 
   const assigned: ScoredEdge[] = [];
   const takenPairs = new Set<string>();
@@ -166,48 +182,118 @@ interface RepairInput {
 }
 
 /**
- * A second sweep for members whose set came out short.
+ * Bounded augmenting-path repair for members whose set came out short.
  *
- * Greedy leaves gaps: a member can be passed over early and then find every
- * later partner already full. This walks the ordered list again and takes any
- * edge that has since become feasible. It only ever adds edges that already
- * cleared the score floor, so it cannot degrade quality — it can only fill.
+ * An add-only second sweep cannot help after greedy assignment because
+ * capacities only decrease. This repair looks for a length-three path that
+ * replaces one assigned edge with two eligible edges, increasing coverage by
+ * one without reducing combined utility. Every replacement already cleared
+ * the reciprocal-score floor, so fairness still cannot force a weak edge.
  *
- * Stops when nothing useful remains or the time budget runs out, so a
- * pathological pool cannot stall a round.
+ * Candidate fan-out and elapsed time are both bounded so a pathological pool
+ * degrades predictably instead of stalling the round.
  */
 function repairPass(input: RepairInput): { swaps: number; timedOut: boolean } {
   const { ordered, assigned, takenPairs, remaining, deadline, now } = input;
   let swaps = 0;
   let timedOut = false;
-  let progressed = true;
+  const candidatesByMember = new Map<string, ScoredEdge[]>();
+  for (const edge of ordered) {
+    for (const id of [edge.a, edge.b]) {
+      const list = candidatesByMember.get(id) ?? [];
+      list.push(edge);
+      candidatesByMember.set(id, list);
+    }
+  }
+  const assignedByMember = new Map<string, Set<ScoredEdge>>();
+  for (const edge of assigned) {
+    for (const id of [edge.a, edge.b]) {
+      const set = assignedByMember.get(id) ?? new Set<ScoredEdge>();
+      set.add(edge);
+      assignedByMember.set(id, set);
+    }
+  }
 
-  while (progressed) {
-    progressed = false;
+  for (const candidate of ordered) {
+    if (now() > deadline) {
+      timedOut = true;
+      break;
+    }
+    if (takenPairs.has(pairKey(candidate.a, candidate.b))) continue;
 
-    for (const edge of ordered) {
-      if (now() > deadline) {
-        timedOut = true;
-        return { swaps, timedOut };
+    const roomA = remaining.get(candidate.a) ?? 0;
+    const roomB = remaining.get(candidate.b) ?? 0;
+    if ((roomA > 0) === (roomB > 0)) continue;
+
+    const underfilled = roomA > 0 ? candidate.a : candidate.b;
+    const full = roomA > 0 ? candidate.b : candidate.a;
+    const incidentAssigned = [...(assignedByMember.get(full) ?? [])];
+
+    let augmented = false;
+    for (const displaced of incidentAssigned) {
+      const displacedOther = displaced.a === full ? displaced.b : displaced.a;
+      // Lists inherit the global utility order. A bounded prefix makes repair
+      // cost predictable on high-degree graphs; the wall-clock deadline is the
+      // final guard.
+      const replacements = (candidatesByMember.get(displacedOther) ?? []).slice(0, 32);
+      for (const replacement of replacements) {
+        if (now() > deadline) return { swaps, timedOut: true };
+        const replacementKey = pairKey(replacement.a, replacement.b);
+        if (takenPairs.has(replacementKey)) continue;
+        if (replacementKey === pairKey(candidate.a, candidate.b)) continue;
+
+        const replacementOther =
+          replacement.a === displacedOther ? replacement.b : replacement.a;
+        if (replacementOther === underfilled || replacementOther === full) continue;
+        if ((remaining.get(replacementOther) ?? 0) <= 0) continue;
+        if (candidate.quality + replacement.quality < displaced.quality) continue;
+
+        removeAssigned(displaced, assigned, takenPairs, remaining, assignedByMember);
+        addAssigned(candidate, assigned, takenPairs, remaining, assignedByMember);
+        addAssigned(replacement, assigned, takenPairs, remaining, assignedByMember);
+        swaps += 1;
+        augmented = true;
+        break;
       }
-
-      const key = pairKey(edge.a, edge.b);
-      if (takenPairs.has(key)) continue;
-
-      const roomA = remaining.get(edge.a) ?? 0;
-      const roomB = remaining.get(edge.b) ?? 0;
-      if (roomA <= 0 || roomB <= 0) continue;
-
-      remaining.set(edge.a, roomA - 1);
-      remaining.set(edge.b, roomB - 1);
-      takenPairs.add(key);
-      assigned.push(edge);
-      swaps += 1;
-      progressed = true;
+      if (augmented) break;
     }
   }
 
   return { swaps, timedOut };
+}
+
+function addAssigned(
+  edge: ScoredEdge,
+  assigned: ScoredEdge[],
+  takenPairs: Set<string>,
+  remaining: Map<string, number>,
+  assignedByMember: Map<string, Set<ScoredEdge>>
+): void {
+  remaining.set(edge.a, (remaining.get(edge.a) ?? 0) - 1);
+  remaining.set(edge.b, (remaining.get(edge.b) ?? 0) - 1);
+  takenPairs.add(pairKey(edge.a, edge.b));
+  assigned.push(edge);
+  for (const id of [edge.a, edge.b]) {
+    const set = assignedByMember.get(id) ?? new Set<ScoredEdge>();
+    set.add(edge);
+    assignedByMember.set(id, set);
+  }
+}
+
+function removeAssigned(
+  edge: ScoredEdge,
+  assigned: ScoredEdge[],
+  takenPairs: Set<string>,
+  remaining: Map<string, number>,
+  assignedByMember: Map<string, Set<ScoredEdge>>
+): void {
+  const index = assigned.indexOf(edge);
+  if (index >= 0) assigned.splice(index, 1);
+  remaining.set(edge.a, (remaining.get(edge.a) ?? 0) + 1);
+  remaining.set(edge.b, (remaining.get(edge.b) ?? 0) + 1);
+  takenPairs.delete(pairKey(edge.a, edge.b));
+  assignedByMember.get(edge.a)?.delete(edge);
+  assignedByMember.get(edge.b)?.delete(edge);
 }
 
 export function pairKey(a: string, b: string): string {

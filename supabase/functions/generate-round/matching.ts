@@ -138,6 +138,7 @@ export function planRound(
         a: row.user_low,
         b: row.user_high,
         reciprocal,
+        quality: reciprocal * decay,
         utility: adjustedUtility(reciprocal, low, high, config, window) * decay,
       });
     }

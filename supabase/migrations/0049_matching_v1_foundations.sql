@@ -15,13 +15,108 @@
 -- the version it ran under.
 -- ---------------------------------------------------------------------------
 
+create or replace function halal_mode_private.matching_config_params_valid(p jsonb)
+returns boolean
+language plpgsql
+immutable
+set search_path = pg_catalog as $$
+declare
+  weight_sum numeric;
+  key text;
+  numeric_keys text[] := array[
+    'w_compat', 'w_appeal', 'w_pair', 'exposure_full_confidence', 'p_min', 'p_max',
+    'imbalance_lambda', 'min_reciprocal_score', 'exposure_boost_weight',
+    'no_match_boost_weight', 'boost_cap', 'quality_band_width',
+    'exposure_target_multiplier', 'exposure_window_rounds', 'no_match_rounds_full',
+    'repeat_decay', 'repeat_cooldown_days', 'max_pair_appearances',
+    'repeat_abandon_drop', 'rotation_min_set_size', 'repair_time_budget_ms',
+    'warn_round_latency_ms', 'fail_round_latency_ms', 'warn_edges_after_filter',
+    'fail_edges_after_filter', 'warn_peak_memory_bytes', 'fail_peak_memory_bytes',
+    'min_segment_sample'
+  ];
+  string_keys text[] := array['reciprocal_combiner', 'allocator'];
+  boolean_keys text[] := array['rotation_enabled'];
+  expected_keys text[];
+begin
+  if jsonb_typeof(p) is distinct from 'object' then
+    return false;
+  end if;
+
+  foreach key in array numeric_keys loop
+    if jsonb_typeof(p -> key) is distinct from 'number' then return false; end if;
+  end loop;
+  foreach key in array string_keys loop
+    if jsonb_typeof(p -> key) is distinct from 'string' then return false; end if;
+  end loop;
+  foreach key in array boolean_keys loop
+    if jsonb_typeof(p -> key) is distinct from 'boolean' then return false; end if;
+  end loop;
+
+  expected_keys := numeric_keys || string_keys || boolean_keys;
+  if exists (
+    select 1 from jsonb_object_keys(p) as supplied(key_name)
+    where not (supplied.key_name = any(expected_keys))
+  ) then
+    return false;
+  end if;
+
+  weight_sum := (p ->> 'w_compat')::numeric
+    + (p ->> 'w_appeal')::numeric
+    + (p ->> 'w_pair')::numeric;
+  return coalesce((p ->> 'w_compat')::numeric >= 0
+    and (p ->> 'w_appeal')::numeric >= 0
+    and (p ->> 'w_pair')::numeric >= 0
+    and abs(weight_sum - 1) <= 0.000000001
+    and (p ->> 'exposure_full_confidence')::numeric >= 1
+    and (p ->> 'exposure_full_confidence')::numeric = trunc((p ->> 'exposure_full_confidence')::numeric)
+    and (p ->> 'p_min')::numeric >= 0
+    and (p ->> 'p_min')::numeric < (p ->> 'p_max')::numeric
+    and (p ->> 'p_max')::numeric <= 1
+    and (p ->> 'reciprocal_combiner') in ('geometric', 'arithmetic', 'min')
+    and (p ->> 'imbalance_lambda')::numeric between 0 and 1
+    and (p ->> 'min_reciprocal_score')::numeric between 0 and 1
+    and (p ->> 'exposure_boost_weight')::numeric >= 0
+    and (p ->> 'no_match_boost_weight')::numeric >= 0
+    and (p ->> 'boost_cap')::numeric between 0 and 1
+    and (p ->> 'quality_band_width')::numeric > 0
+    and (p ->> 'quality_band_width')::numeric <= 1
+    and (p ->> 'exposure_target_multiplier')::numeric > 0
+    and (p ->> 'exposure_window_rounds')::numeric >= 1
+    and (p ->> 'exposure_window_rounds')::numeric = trunc((p ->> 'exposure_window_rounds')::numeric)
+    and (p ->> 'no_match_rounds_full')::numeric >= 1
+    and (p ->> 'no_match_rounds_full')::numeric = trunc((p ->> 'no_match_rounds_full')::numeric)
+    and (p ->> 'repeat_decay')::numeric > 0
+    and (p ->> 'repeat_decay')::numeric <= 1
+    and (p ->> 'repeat_cooldown_days')::numeric >= 0
+    and (p ->> 'repeat_cooldown_days')::numeric = trunc((p ->> 'repeat_cooldown_days')::numeric)
+    and (p ->> 'max_pair_appearances')::numeric >= 1
+    and (p ->> 'max_pair_appearances')::numeric = trunc((p ->> 'max_pair_appearances')::numeric)
+    and (p ->> 'repeat_abandon_drop')::numeric between 0 and 1
+    and (p ->> 'rotation_min_set_size')::numeric >= 1
+    and (p ->> 'rotation_min_set_size')::numeric = trunc((p ->> 'rotation_min_set_size')::numeric)
+    and (p ->> 'repair_time_budget_ms')::numeric >= 0
+    and (p ->> 'repair_time_budget_ms')::numeric = trunc((p ->> 'repair_time_budget_ms')::numeric)
+    and (p ->> 'allocator') = 'greedy_global_v1'
+    and (p ->> 'warn_round_latency_ms')::numeric >= 0
+    and (p ->> 'fail_round_latency_ms')::numeric >= (p ->> 'warn_round_latency_ms')::numeric
+    and (p ->> 'warn_edges_after_filter')::numeric >= 0
+    and (p ->> 'fail_edges_after_filter')::numeric >= (p ->> 'warn_edges_after_filter')::numeric
+    and (p ->> 'warn_peak_memory_bytes')::numeric >= 0
+    and (p ->> 'fail_peak_memory_bytes')::numeric >= (p ->> 'warn_peak_memory_bytes')::numeric
+    and (p ->> 'min_segment_sample')::numeric >= 1
+    and (p ->> 'min_segment_sample')::numeric = trunc((p ->> 'min_segment_sample')::numeric), false);
+exception when others then
+  return false;
+end;
+$$;
+
 create table if not exists halal_mode_private.matching_config (
   version      integer primary key,
   params       jsonb not null,
   notes        text not null default '',
   created_at   timestamptz not null default now(),
   activated_at timestamptz,
-  check (jsonb_typeof(params) = 'object')
+  check (halal_mode_private.matching_config_params_valid(params))
 );
 
 comment on table halal_mode_private.matching_config is
@@ -62,6 +157,8 @@ values (
     'exposure_boost_weight', 0.30,
     'no_match_boost_weight', 0.20,
     'boost_cap', 0.25,
+    -- Fairness may reorder only inside the same raw-quality band.
+    'quality_band_width', 0.025,
     -- Fair share is a member's own tier entitlement, pro rata through the
     -- window. One flat number cannot serve both tiers: set to the free
     -- allowance it throttles premium below what they pay for; set to the
@@ -79,6 +176,10 @@ values (
     -- Stop resurfacing once the reciprocal estimate has fallen this far from
     -- its first appearance.
     'repeat_abandon_drop', 0.35,
+
+    -- Rotation ----------------------------------------------------------
+    'rotation_enabled', true,
+    'rotation_min_set_size', 3,
 
     -- Allocation ---------------------------------------------------------
     'repair_time_budget_ms', 2000,
@@ -101,6 +202,8 @@ values (
 );
 
 revoke all on table halal_mode_private.matching_config from public, anon, authenticated;
+revoke all on function halal_mode_private.matching_config_params_valid(jsonb)
+  from public, anon, authenticated;
 
 create or replace function halal_mode_private.active_matching_config()
 returns jsonb

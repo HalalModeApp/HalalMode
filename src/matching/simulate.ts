@@ -79,6 +79,8 @@ export interface SimOptions {
    * set it lower or higher to model an imbalanced one in either direction.
    */
   femaleCount?: number;
+  /** Synthetic ground-truth choice process used to grade the estimator. */
+  pickModel?: 'aligned' | 'mixed' | 'unobserved';
 }
 
 export interface SimMetrics {
@@ -178,6 +180,7 @@ export function simulate(options: SimOptions): SimMetrics {
   const byId = new Map(members.map((m) => [m.id, m]));
   const men = members.filter((m) => m.gender === 'male');
   const women = members.filter((m) => m.gender === 'female');
+  const pickModel = options.pickModel ?? 'mixed';
 
   const shownPairs = new Map<string, number>();
   let shownEdges = 0;
@@ -245,7 +248,13 @@ export function simulate(options: SimOptions): SimMetrics {
               // eligible pool, which is what `(band_gap, random())` amounted to.
               random();
 
-        edges.push({ a: m.id, b: w.id, reciprocal, utility });
+        edges.push({
+          a: m.id,
+          b: w.id,
+          reciprocal,
+          quality: strategy === 'v1' ? reciprocal * decay : 0,
+          utility,
+        });
       }
     }
 
@@ -259,11 +268,15 @@ export function simulate(options: SimOptions): SimMetrics {
       });
     }
 
+    let allocationTicks = 0;
     const result = allocate({
       edges,
       capacities,
       config,
       seed: options.seed + round,
+      // A deterministic operation budget keeps simulations reproducible across
+      // fast and slow machines. Production uses a real wall clock.
+      now: () => allocationTicks++,
     });
     const verdict = verifyAllocation(result, capacities);
     if (!verdict.ok) {
@@ -285,7 +298,7 @@ export function simulate(options: SimOptions): SimMetrics {
       const key = edge.a < edge.b ? `${edge.a}|${edge.b}` : `${edge.b}|${edge.a}`;
       shownPairs.set(key, (shownPairs.get(key) ?? 0) + 1);
       shownEdges += 1;
-      qualitySum += edge.reciprocal;
+      qualitySum += trueReciprocalPreference(a, b, options.seed, pickModel);
     }
     for (const member of members) {
       const received = setSizes.get(member.id) ?? 0;
@@ -319,14 +332,17 @@ export function simulate(options: SimOptions): SimMetrics {
 
     for (const member of members) {
       const offered = bySide.get(member.id) ?? [];
-      const ranked = [...offered].sort((left, right) => {
-        const leftOther = byId.get(left.a === member.id ? left.b : left.a)!;
-        const rightOther = byId.get(right.a === member.id ? right.b : right.a)!;
-        // Noise keeps this from being a perfect ordering.
-        return (
-          rightOther.trueAppeal + random() * 0.3 - (leftOther.trueAppeal + random() * 0.3)
-        );
-      });
+      const ranked = offered
+        .map((edge) => {
+          const other = byId.get(edge.a === member.id ? edge.b : edge.a)!;
+          return {
+            edge,
+            score: trueDirectionalPreference(member, other, options.seed, pickModel)
+              + random() * 0.12,
+          };
+        })
+        .sort((left, right) => right.score - left.score)
+        .map(({ edge }) => edge);
       for (const edge of ranked.slice(0, keepsFor(member))) {
         const other = edge.a === member.id ? edge.b : edge.a;
         picks.add(`${member.id}->${other}`);
@@ -376,4 +392,44 @@ export function simulate(options: SimOptions): SimMetrics {
     meanServedSetSize: servedCount > 0 ? servedSetSizeSum / servedCount : 0,
     maxConsecutiveDeferrals,
   };
+}
+
+function trueReciprocalPreference(
+  a: SimMember,
+  b: SimMember,
+  seed: number,
+  model: NonNullable<SimOptions['pickModel']>
+): number {
+  return Math.sqrt(
+    trueDirectionalPreference(a, b, seed, model)
+      * trueDirectionalPreference(b, a, seed, model)
+  );
+}
+
+function trueDirectionalPreference(
+  viewer: SimMember,
+  subject: SimMember,
+  seed: number,
+  model: NonNullable<SimOptions['pickModel']>
+): number {
+  const compatibility = 1 - Math.abs(viewer.trait - subject.trait);
+  const chemistry = unitHash(seed, `${viewer.id}->${subject.id}`);
+  switch (model) {
+    case 'aligned':
+      return 0.65 * subject.trueAppeal + 0.35 * compatibility;
+    case 'unobserved':
+      return chemistry;
+    case 'mixed':
+    default:
+      return 0.35 * subject.trueAppeal + 0.25 * compatibility + 0.4 * chemistry;
+  }
+}
+
+function unitHash(seed: number, text: string): number {
+  let hash = seed >>> 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash / 0x1_0000_0000;
 }

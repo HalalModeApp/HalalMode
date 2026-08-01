@@ -40,7 +40,7 @@ function member(overrides: Partial<MemberSignals> = {}): MemberSignals {
 const window: WindowContext = { roundsElapsed: 4 };
 
 function edge(a: string, b: string, reciprocal: number, utility = reciprocal): ScoredEdge {
-  return { a, b, reciprocal, utility };
+  return { a, b, reciprocal, quality: reciprocal, utility };
 }
 
 function capacities(entries: [string, number][]): Map<string, Capacity> {
@@ -66,6 +66,18 @@ test('fairness reorders comparable edges but cannot cross a real quality gap', (
     unboostedStrong > boostedWeak,
     'no exposure need should let a weak edge outrank a clearly stronger one'
   );
+
+  const ordered = [
+    edge('weak', 'w', 0.64, adjustedUtility(0.64, starved, starved, config, window)),
+    edge('strong', 's', 0.79, adjustedUtility(0.79, satisfied, satisfied, config, window)),
+  ].sort(compareEdges(1, config.quality_band_width));
+  assert.equal(ordered[0]?.a, 'strong', 'fairness cannot cross raw-quality bands');
+
+  const comparable = [
+    edge('need', 'n', 0.701, adjustedUtility(0.701, starved, starved, config, window)),
+    edge('ahead', 'a', 0.724, adjustedUtility(0.724, satisfied, satisfied, config, window)),
+  ].sort(compareEdges(1, config.quality_band_width));
+  assert.equal(comparable[0]?.a, 'need', 'fairness may reorder edges inside one band');
 });
 
 test('exposure need is measured against pace, not an absolute total', () => {
@@ -222,19 +234,26 @@ test('higher utility is preferred when capacity is contested', () => {
 // --- Repair ----------------------------------------------------------------
 
 test('the repair pass fills sets that greedy left short', () => {
-  // 'a' takes x first; without repair, 'b' would be left empty even though y
-  // is free and willing.
-  const edges = [edge('a', 'x', 0.9), edge('a', 'y', 0.85), edge('b', 'y', 0.4)];
+  const edges = [
+    edge('a', 'x', 0.9),
+    edge('b', 'y', 0.85),
+    edge('c', 'x', 0.8),
+    edge('a', 'z', 0.7),
+  ];
   const caps = capacities([
     ['a', 1],
     ['b', 1],
+    ['c', 1],
     ['x', 1],
     ['y', 1],
+    ['z', 1],
   ]);
 
   const result = allocate({ edges, capacities: caps, config, seed: 2 });
+  assert.equal(result.assigned.length, 3);
+  assert.equal(result.stats.repairSwaps, 1, 'the test must exercise a real repair');
   const involved = new Set(result.assigned.flatMap((e) => [e.a, e.b]));
-  assert.ok(involved.has('b'), 'the under-served member should be repaired in');
+  assert.ok(involved.has('c'), 'the under-served member should be repaired in');
   assert.deepEqual(verifyAllocation(result, caps), { ok: true });
 });
 
@@ -341,6 +360,7 @@ test('fairness spreads exposure without collapsing match quality', () => {
         a: m,
         b: w,
         reciprocal,
+        quality: reciprocal,
         utility: adjustedUtility(reciprocal, a, b, config, window),
       });
     }

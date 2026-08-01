@@ -1,7 +1,7 @@
 begin;
 
 set local search_path = public, extensions;
-select plan(13);
+select plan(18);
 
 -- Privacy is the property that matters most here: none of the matching
 -- internals may be reachable by any client role, directly or through a view.
@@ -62,6 +62,38 @@ select is(
   (halal_mode_private.active_matching_config() ->> 'exposure_target_multiplier')::numeric,
   1.0,
   'fair share defaults to a member''s own tier entitlement'
+);
+
+select is(
+  (halal_mode_private.active_matching_config() ->> 'rotation_enabled')::boolean,
+  true,
+  'the active row stores the effective rotation setting'
+);
+
+select ok(
+  halal_mode_private.matching_config_params_valid(halal_mode_private.active_matching_config()),
+  'the complete active configuration passes validation'
+);
+
+select ok(
+  not halal_mode_private.matching_config_params_valid(
+    halal_mode_private.active_matching_config() - 'w_pair'
+  ),
+  'a missing required key is rejected rather than accepted as SQL null'
+);
+
+select ok(
+  not halal_mode_private.matching_config_params_valid(
+    jsonb_set(halal_mode_private.active_matching_config(), '{boost_cap}', '"wide"'::jsonb)
+  ),
+  'a malformed parameter type is rejected'
+);
+
+select ok(
+  not halal_mode_private.matching_config_params_valid(
+    halal_mode_private.active_matching_config() || '{"unknown_parameter": 1}'::jsonb
+  ),
+  'unknown parameters are rejected so a version fully describes runtime behavior'
 );
 
 -- The pair key is stored in one canonical direction, so exposure is a property

@@ -207,7 +207,14 @@ boost(A,B) = clamp( φ·(need(A)+need(B))/2 + ν·(stale(A)+stale(B))/2,
 U(A,B) = R'(A,B) · (1 + boost(A,B)) · decay^times_shown(A,B)
 ```
 
-**Why the cap keeps quality dominant.** With `BOOST_CAP = 0.25`, an edge can gain at most 25% of its own score. An edge at `R = 0.40` reaches at most `0.50`; an edge at `R = 0.80` never falls below `0.80`. Fairness can therefore reorder comparable edges but cannot promote a weak edge past a strong one. A hard floor `R_MIN` [0.15] additionally refuses to allocate an edge no matter how much exposure need exists — the "never force through an incompatible pair" rule, enforced rather than hoped for.
+**How quality remains dominant.** `BOOST_CAP = 0.25` bounds the size of the
+adjustment, but that bound alone does not preserve ordering: a boosted 0.64
+would otherwise outrank an unboosted 0.79. The allocator therefore sorts a raw
+quality band first (`QUALITY_BAND_WIDTH = 0.025`), then adjusted utility inside
+the band. Fairness may reorder genuinely comparable edges, but it cannot cross
+a stronger raw-quality band. A hard floor `R_MIN` [0.15] additionally refuses
+to allocate an edge no matter how much exposure need exists — the “never force
+through an incompatible pair” rule, enforced rather than hoped for.
 
 **Tie-break:** `(U desc, hash(run_seed, user_low, user_high) asc)` — deterministic and reproducible from the run's seed.
 
@@ -382,7 +389,7 @@ brief exists to prevent, and it is only one refactor away at any time. The
 regression test is `the confidence blend prevents a low keep rate becoming a
 death spiral`.
 
-### Measured outcome
+### Original measured outcome (superseded)
 
 | Metric | Baseline | v1 | |
 | --- | ---: | ---: | --- |
@@ -392,15 +399,48 @@ death spiral`.
 | Exposure Gini | 0.1117 | 0.1142 | +0.0025 |
 | Top exposure share | 0.0058 | 0.0058 | unchanged |
 
-The honest reading: **once the pool can supply full sets, exposure is already
+These numbers are retained only as an audit trail. They are **not valid evidence
+of outcome improvement**: the original pick model was driven by the same
+appeal-shaped signal the estimator learned, and “reciprocal quality” was the
+estimator's own score. The simulator was grading the matcher against its own
+assumptions.
+
+The useful reading that survives is: **once the pool can supply full sets, exposure is already
 close to even and there is very little concentration left for fairness to
 remove.** The Gini difference is noise. The real wins are quality and the share
-of members left with nothing.
+of members left with nothing only if independent shadow outcomes later prove
+them; the original simulation did not.
 
 The fairness machinery still earns its place — it is what stops quality ranking
 concentrating exposure as the pool grows and sets stop being fillable, which is
 the regime the 10x numbers in §7 describe. The assertions in the simulation
 suite were rewritten to claim only what the measurements support.
+
+### Independent audit outcome
+
+The simulator now separates estimator inputs from a synthetic ground-truth pick
+model and includes an adversarial model driven entirely by unobserved chemistry.
+For the same 300-member, 12-round, seeded launch scenario, the mixed model
+measured:
+
+| Metric | Baseline | v1 | Reading |
+| --- | ---: | ---: | --- |
+| Mean set size | 5.73 | 5.73 | unchanged |
+| Independent reciprocal quality | 0.4983 | 0.5467 | +9.7% in this synthetic model only |
+| Members never matched | 12.0% | 15.7% | v1 regressed |
+| Exposure Gini | 0.1124 | 0.1129 | effectively unchanged |
+| Mutual rate | 6.42% | 5.54% | v1 regressed |
+
+With an entirely unobserved choice model, reciprocal quality was effectively
+flat (0.4356 baseline, 0.4380 v1), while zero-match share again worsened. This
+proves the estimator is a ranking heuristic, not a calibrated predictor, and
+that v1 must remain shadow-only until real selection outcomes validate it.
+
+The original repair pass was also a no-op: greedy had already scanned every
+edge while capacities could only decrease, so an add-only rescan could never
+make a rejected edge feasible. It is now a bounded length-three augmenting-path
+repair that replaces one assigned edge with two when coverage increases without
+reducing combined utility.
 
 
 ---

@@ -5,8 +5,9 @@
  * Two constraints shape everything here.
  *
  * **A fairness adjustment may reorder comparable edges, but must never promote
- * a weak edge past a strong one.** That is enforced by `boost_cap` below and by
- * the hard `min_reciprocal_score` floor in the allocator, not left to judgement.
+ * a weak edge past a strong one.** `boost_cap` bounds the adjustment, while the
+ * allocator sorts raw-quality bands before adjusted utility. The hard
+ * `min_reciprocal_score` floor independently rejects weak introductions.
  *
  * **Need is measured against pace, not against an absolute total.** An absolute
  * target is inert for most of a window: early on nobody has reached it, so
@@ -90,8 +91,8 @@ export function fairnessBoost(
  * The value the allocator sorts on.
  *
  * With the default cap of 0.25 an edge can gain at most a quarter of its own
- * score: an edge at 0.40 reaches 0.50 at best, while an edge at 0.80 never
- * drops below 0.80. The two orderings can therefore never cross.
+ * score. This bound alone does not prevent crossings, so the allocator applies
+ * the quality-band rule before sorting on this value.
  */
 export function adjustedUtility(
   reciprocal: number,
