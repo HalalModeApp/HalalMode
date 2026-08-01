@@ -28,6 +28,31 @@ export type RelocationPreference =
   | 'strictly_local'
   | 'willing_abroad';
 
+/**
+ * Self-declared. `prefer_not_to_say` is treated as compatible with everything
+ * in matching — declining to state something is not the same as stating a
+ * difference.
+ */
+export type Sect = 'sunni' | 'shia' | 'other' | 'prefer_not_to_say';
+
+/**
+ * Criteria a member may mark absolute. Everything not marked grades instead of
+ * filtering, so a near match still appears, ranked lower.
+ */
+export type MustHaveCriterion =
+  | 'age'
+  | 'height'
+  | 'build'
+  | 'distance'
+  | 'practice'
+  | 'timeline'
+  | 'children'
+  | 'sect';
+
+export const MUST_HAVE_CRITERIA: MustHaveCriterion[] = [
+  'age', 'height', 'build', 'distance', 'practice', 'timeline', 'children', 'sect',
+];
+
 export type FamilyGoals =
   | 'wants_children_soon'
   | 'wants_children_later'
@@ -77,6 +102,7 @@ export interface Profile {
   timeline: MarriageTimeline;
   relocation: RelocationPreference;
   familyGoals: FamilyGoals;
+  sect: Sect;
   languagesSpoken: string[];
   isVerified: boolean;
   /** Present for the owner profile only; matching eligibility stays server-authoritative. */
@@ -100,6 +126,16 @@ export interface PrivatePreferences {
   maxDistanceKm: number;
   preferredPractice: ReligiousPractice[];
   desiredTimeline: MarriageTimeline[];
+  /** Empty means no preference. */
+  desiredFamilyGoals: FamilyGoals[];
+  /** Empty means no sect preference. */
+  preferredSects: Sect[];
+  /**
+   * Criteria this member treats as absolute. Absent or false means the
+   * criterion is weighted rather than filtered — the only hard filters in
+   * matching, chosen by the member who pays their cost.
+   */
+  mustHave: Partial<Record<MustHaveCriterion, boolean>>;
   /** The member's own figures — stored privately, never rendered on a profile. */
   ownHeightCm: number;
   ownWeightKg?: number;

@@ -46,6 +46,13 @@ comment on column public.profiles.sect is
 alter table public.private_preferences
   add column if not exists preferred_sects sect[] not null default '{}';
 
+-- What the member hopes for in children. `family_goals` has existed on profiles
+-- since the beginning and was used nowhere in matching, despite being the kind
+-- of difference that ends a marriage rather than complicates one. This is the
+-- preference side of it.
+alter table public.private_preferences
+  add column if not exists desired_family_goals family_goals[] not null default '{}';
+
 comment on column public.private_preferences.preferred_sects is
   'Empty means no sect preference. Private to its owner, like every column here.';
 

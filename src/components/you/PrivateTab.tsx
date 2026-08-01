@@ -12,6 +12,7 @@ import { RangeSlider } from '@/components/ui/RangeSlider';
 import { Segmented } from '@/components/ui/Segmented';
 import { Slider } from '@/components/ui/Slider';
 import { Text } from '@/components/ui/Text';
+import { MustHaveToggle } from '@/components/you/MustHaveToggle';
 import { CountrySheet } from '@/components/you/CountrySheet';
 import { useI18n, type Translate } from '@/i18n';
 import type { TranslationKey } from '@/i18n/catalog';
@@ -20,6 +21,7 @@ import {
   DISTANCE_RANGE,
   HEIGHT_RANGE,
   AGE_RANGE,
+  FAMILY_GOAL_LABELS,
   PRACTICE_LABELS,
   RADIUS_PRESETS,
   TIMELINE_LABELS,
@@ -27,7 +29,14 @@ import {
 } from '@/data/preferences';
 import { alpha, color, font, radius } from '@/theme/tokens';
 import { queryKeys } from '@/lib/queryClient';
-import type { MarriageTimeline, PrivatePreferences, ReligiousPractice } from '@/types';
+import type {
+  FamilyGoals,
+  MarriageTimeline,
+  MustHaveCriterion,
+  PrivatePreferences,
+  ReligiousPractice,
+  Sect,
+} from '@/types';
 
 type SubTab = 'them' | 'you';
 
@@ -54,6 +63,20 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
     },
   });
 
+  const setMustHave = (criterion: MustHaveCriterion, next: boolean) =>
+    setDraft((current) => ({
+      ...current,
+      mustHave: { ...current.mustHave, [criterion]: next },
+    }));
+
+  const mustHaveFor = (criterion: MustHaveCriterion) => (
+    <MustHaveToggle
+      criterion={criterion}
+      value={draft.mustHave?.[criterion] ?? false}
+      onChange={(next) => setMustHave(criterion, next)}
+    />
+  );
+
   const patch = <K extends keyof PrivatePreferences>(
     key: K,
     value: PrivatePreferences[K]
@@ -69,10 +92,10 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
   };
 
   const toggleListValue = <T extends string>(
-    key: 'preferredPractice' | 'desiredTimeline',
+    key: 'preferredPractice' | 'desiredTimeline' | 'desiredFamilyGoals' | 'preferredSects',
     value: T
   ) => {
-    const current = draft[key] as T[];
+    const current = (draft[key] ?? []) as T[];
     patch(key, (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]) as never);
   };
 
@@ -133,6 +156,7 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
               lowAccessibilityLabel={t('filters.minimumAge')}
               highAccessibilityLabel={t('filters.maximumAge')}
             />
+            {mustHaveFor('age')}
           </View>
 
           <View style={styles.section}>
@@ -156,6 +180,7 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
               lowAccessibilityLabel={t('filters.minimumHeight')}
               highAccessibilityLabel={t('filters.maximumHeight')}
             />
+            {mustHaveFor('height')}
           </View>
 
           <View style={styles.section}>
@@ -176,6 +201,7 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
                 />
               ))}
             </View>
+            {mustHaveFor('build')}
           </View>
 
           <View style={styles.section}>
@@ -214,6 +240,7 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
                   />
                 ))}
               </View>
+              {mustHaveFor('distance')}
             </View>
           </View>
 
@@ -270,6 +297,7 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
                 )
               )}
             </View>
+            {mustHaveFor('timeline')}
           </View>
 
           <View style={styles.section}>
@@ -289,6 +317,45 @@ export function PrivateTab({ preferences }: { preferences: PrivatePreferences })
                 )
               )}
             </View>
+            {mustHaveFor('practice')}
+          </View>
+
+          <View style={styles.section}>
+            <Text variant="micro">{t('filters.children')}</Text>
+            <Text variant="caption" style={styles.filterNote}>
+              {t('filters.childrenBody')}
+            </Text>
+            <View style={styles.checkList}>
+              {(Object.entries(FAMILY_GOAL_LABELS) as [FamilyGoals, string][]).map(
+                ([value]) => (
+                  <FilterCheck
+                    key={value}
+                    label={familyGoalLabel(value, t)}
+                    checked={(draft.desiredFamilyGoals ?? []).includes(value)}
+                    onPress={() => toggleListValue('desiredFamilyGoals', value)}
+                  />
+                )
+              )}
+            </View>
+            {mustHaveFor('children')}
+          </View>
+
+          <View style={styles.section}>
+            <Text variant="micro">{t('filters.sect')}</Text>
+            <Text variant="caption" style={styles.filterNote}>
+              {t('filters.sectBody')}
+            </Text>
+            <View style={styles.checkList}>
+              {SELECTABLE_SECTS.map((value) => (
+                <FilterCheck
+                  key={value}
+                  label={sectLabel(value, t)}
+                  checked={(draft.preferredSects ?? []).includes(value)}
+                  onPress={() => toggleListValue('preferredSects', value)}
+                />
+              ))}
+            </View>
+            {mustHaveFor('sect')}
           </View>
 
           <Button
@@ -446,6 +513,27 @@ const PRACTICE_KEYS: Record<ReligiousPractice, TranslationKey> = {
   learning: 'filters.practice.learning',
 };
 
+const FAMILY_GOAL_KEYS: Record<FamilyGoals, TranslationKey> = {
+  wants_children_soon: 'filters.children.soon',
+  wants_children_later: 'filters.children.later',
+  open_to_children: 'filters.children.open',
+  no_children: 'filters.children.none',
+};
+
+/**
+ * 'prefer_not_to_say' is intentionally absent: it is what someone declares
+ * about themselves, not something anyone can require of a partner. In matching
+ * it is compatible with every preference.
+ */
+const SELECTABLE_SECTS: Sect[] = ['sunni', 'shia', 'other'];
+
+const SECT_KEYS: Record<Sect, TranslationKey> = {
+  sunni: 'filters.sect.sunni',
+  shia: 'filters.sect.shia',
+  other: 'filters.sect.other',
+  prefer_not_to_say: 'filters.sect.unstated',
+};
+
 const TIMELINE_KEYS: Record<MarriageTimeline, TranslationKey> = {
   within_3_months: 'filters.timeline.3m',
   within_6_months: 'filters.timeline.6m',
@@ -459,6 +547,14 @@ function buildLabel(value: (typeof BUILD_OPTIONS)[number], t: Translate): string
 
 function practiceLabel(value: ReligiousPractice, t: Translate): string {
   return t(PRACTICE_KEYS[value]);
+}
+
+function familyGoalLabel(value: FamilyGoals, t: Translate): string {
+  return t(FAMILY_GOAL_KEYS[value]);
+}
+
+function sectLabel(value: Sect, t: Translate): string {
+  return t(SECT_KEYS[value]);
 }
 
 function timelineLabel(value: MarriageTimeline, t: Translate): string {

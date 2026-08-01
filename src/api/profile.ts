@@ -124,6 +124,9 @@ function profileFromRow(row: Record<string, unknown>): Profile {
     timeline: row.timeline as Profile['timeline'],
     relocation: row.relocation as Profile['relocation'],
     familyGoals: row.family_goals as Profile['familyGoals'],
+    // Defaults to unstated rather than a sect, so a row written before this
+    // column existed never reads as a declaration nobody made.
+    sect: (row.sect as Profile['sect'] | null) ?? 'prefer_not_to_say',
     languagesSpoken: (row.languages_spoken as string[] | null) ?? [],
     isVerified: Boolean(row.is_verified),
     isPaused: Boolean(row.is_paused),
@@ -143,6 +146,13 @@ function preferencesFromRow(row: Record<string, unknown>): PrivatePreferences {
     maxDistanceKm: Number(row.max_distance_km),
     preferredPractice: (row.preferred_practice as PrivatePreferences['preferredPractice'] | null) ?? [],
     desiredTimeline: (row.desired_timeline as PrivatePreferences['desiredTimeline'] | null) ?? [],
+    desiredFamilyGoals:
+      (row.desired_family_goals as PrivatePreferences['desiredFamilyGoals'] | null) ?? [],
+    preferredSects: (row.preferred_sects as PrivatePreferences['preferredSects'] | null) ?? [],
+    // Absent means nothing is absolute, which is the safe default: an unreadable
+    // or missing map must never silently narrow somebody's pool.
+    mustHave:
+      (row.must_have as PrivatePreferences['mustHave'] | null) ?? {},
     ownHeightCm: Number(row.own_height_cm ?? 0),
     ownWeightKg: row.own_weight_kg as number | undefined,
     ownBuild: row.own_build as string | undefined,
@@ -163,6 +173,9 @@ function preferencesPatchToRow(
     ['maxDistanceKm', 'max_distance_km'],
     ['preferredPractice', 'preferred_practice'],
     ['desiredTimeline', 'desired_timeline'],
+    ['desiredFamilyGoals', 'desired_family_goals'],
+    ['preferredSects', 'preferred_sects'],
+    ['mustHave', 'must_have'],
     ['ownHeightCm', 'own_height_cm'],
     ['ownWeightKg', 'own_weight_kg'],
     ['ownBuild', 'own_build'],
