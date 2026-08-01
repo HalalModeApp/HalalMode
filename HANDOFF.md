@@ -122,21 +122,21 @@ assumptions as well as its intent. Specifically worth attacking:
 
 In dependency order.
 
-1. **Seed a realistic population and run a shadow round.**
-   `POST /generate-round?mode=shadow`. Verify `matching_runs` receives stage
-   latencies and `edges_after_filter`, that `shadow_round_edges` fills, and that
-   `introductions`, `connections` and `pair_exposure` are all untouched. That
-   last check is the whole basis for trusting shadow mode.
+1. **Run the shadow proof against an approved environment.**
+   `supabase/tests/database/0060_matching_shadow_round_integration.test.sql`
+   now seeds a mixed eight-member population, pages the candidate snapshot,
+   finalizes three shadow pairs, retries exactly, and fingerprints live tables
+   to prove that `introductions`, `connections`, `pair_exposure`, notifications,
+   and live rounds remain untouched. The remaining step is the first passing
+   isolated CI run (and only later an explicitly approved hosted shadow run).
 
 2. **Benchmark `passes_criteria`.** The entire latency model in §7 rests on an
    assumed ~25 µs per call. Measure it, then correct §7 rather than leaving an
    estimate presented as a projection.
 
-3. **Wire the new round states into the app.** `0053` returns `awaiting_turn`
-   and `at_match_capacity`; copy exists in `src/i18n/catalog.ts` in both
-   languages, but `app/(tabs)/daily.tsx` still branches only on
-   `matching_inputs_unavailable`. Deferred members currently see the wrong
-   message until this is done.
+3. **Wire the new round states into the app.** **Complete.** `awaiting_turn`
+   and `at_match_capacity` are accepted by the client normalizer and rendered
+   with their existing English and Arabic copy in `app/(tabs)/daily.tsx`.
 
 4. **`explicit_pass` has no way to be set.** The enum value exists and the
    prefilter honours it, but no UI or RPC ever writes it. Either add a
