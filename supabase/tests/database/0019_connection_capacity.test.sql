@@ -21,7 +21,9 @@ select ok(
 );
 select ok(
   position('pg_advisory_xact_lock' in
-    pg_get_functiondef('public.submit_round_selections(uuid,uuid[])'::regprocedure)) > 0,
+    pg_get_functiondef(
+      'halal_mode_private.submit_round_selections_after_legal_consent(uuid,uuid[])'::regprocedure
+    )) > 0,
   'round submission uses transaction-scoped member locks'
 );
 
@@ -35,6 +37,13 @@ insert into profiles (id, name, first_name, birth_date, gender, tier, onboarding
   ('00000000-0000-0000-0000-000000000192', 'Capacity B', 'B', '1990-01-01', 'female', 'free', true),
   ('00000000-0000-0000-0000-000000000193', 'Capacity C', 'C', '1990-01-01', 'female', 'free', true),
   ('00000000-0000-0000-0000-000000000194', 'Capacity D', 'D', '1990-01-01', 'female', 'free', true);
+
+insert into halal_mode_private.member_legal_consent_history (
+  user_id, document_type, version, acceptance_context
+)
+select '00000000-0000-0000-0000-000000000191', d.document_type, d.version, 'reacceptance'
+from halal_mode_private.legal_document_registry d
+where d.is_current;
 
 create temporary table capacity_fillers (id uuid primary key) on commit drop;
 insert into capacity_fillers select gen_random_uuid() from generate_series(1, 9);

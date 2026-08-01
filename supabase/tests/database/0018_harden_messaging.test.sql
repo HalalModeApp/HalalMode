@@ -44,6 +44,19 @@ insert into profiles (id, name, first_name, birth_date, gender, onboarding_compl
   ('00000000-0000-0000-0000-000000000182', 'Message B', 'B', '1990-01-01', 'male', true),
   ('00000000-0000-0000-0000-000000000183', 'Message C', 'C', '1990-01-01', 'male', true);
 
+insert into halal_mode_private.member_legal_consent_history (
+  user_id, document_type, version, acceptance_context
+)
+select p.id, d.document_type, d.version, 'reacceptance'
+from profiles p
+cross join halal_mode_private.legal_document_registry d
+where p.id in (
+    '00000000-0000-0000-0000-000000000181',
+    '00000000-0000-0000-0000-000000000182',
+    '00000000-0000-0000-0000-000000000183'
+  )
+  and d.is_current;
+
 insert into connections (id, user_a, user_b, stage) values
   ('00000000-0000-0000-0000-000000001810', '00000000-0000-0000-0000-000000000181', '00000000-0000-0000-0000-000000000182', 'open'),
   ('00000000-0000-0000-0000-000000001811', '00000000-0000-0000-0000-000000000181', '00000000-0000-0000-0000-000000000183', 'recap');

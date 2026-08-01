@@ -23,7 +23,7 @@ select ok(
 );
 select ok(
   position('jsonb_array_length' in pg_get_functiondef('public.get_current_round_state()'::regprocedure)) > 0
-  and position("'ready'" in pg_get_functiondef('public.get_current_round_state()'::regprocedure))
+  and position('''ready''' in pg_get_functiondef('public.get_current_round_state()'::regprocedure))
     < position('select * into v_profile' in pg_get_functiondef('public.get_current_round_state()'::regprocedure)),
   'an existing non-empty round is returned before input diagnostics'
 );

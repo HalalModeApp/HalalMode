@@ -16,8 +16,15 @@ select ok(
   'only the safe self-entitlement DTO is member-callable and the provider path is service-only'
 );
 select is(
-  (select count(*)::int from halal_mode_private.release_flags), 6,
-  'all high-risk launch features start as explicit disabled flags'
+  (select count(*)::int
+   from halal_mode_private.release_flags
+   where key in (
+     'in_chat_voice_notes', 'live_calling', 'push_notifications',
+     'identity_verification', 'premium_purchases', 'controlled_beta',
+     'reciprocal_matching_v1'
+   )),
+  7,
+  'all launch-controlled features, including reciprocal matching, have explicit flags'
 );
 select ok(
   (select bool_and(not enabled and rollout_percentage = 0) from halal_mode_private.release_flags),

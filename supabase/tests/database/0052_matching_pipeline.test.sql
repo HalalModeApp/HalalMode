@@ -71,11 +71,9 @@ select ok(
   'a member at the active connection cap is excluded from the pool'
 );
 select ok(
-  exists (
-    select 1 from halal_mode_private.matching_pool
-    where id in ('00000000-0000-0000-0000-000000005201', '00000000-0000-0000-0000-000000005202')
-    group by true having count(*) = 2
-  ),
+  (select count(*)
+   from halal_mode_private.matching_pool
+   where id in ('00000000-0000-0000-0000-000000005201', '00000000-0000-0000-0000-000000005202')) = 2,
   'ready consenting members below capacity enter the pool'
 );
 

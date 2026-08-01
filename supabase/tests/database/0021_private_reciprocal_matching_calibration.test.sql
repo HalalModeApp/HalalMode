@@ -41,15 +41,29 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000213', 'calibration-local@example.test');
 insert into profiles (
   id, name, first_name, birth_date, gender, city, country, relocation,
-  latitude, longitude, onboarding_complete
+  latitude, longitude, bio, photos, onboarding_complete
 ) values
-  ('00000000-0000-0000-0000-000000000211', 'Lebanon Member', 'Lebanon', '1990-01-01', 'male', 'Beirut', 'Lebanon', 'open', 33.8938, 35.5018, true),
-  ('00000000-0000-0000-0000-000000000212', 'Peru Member', 'Peru', '1991-01-01', 'female', 'Lima', 'Peru', 'open', -12.0464, -77.0428, true),
-  ('00000000-0000-0000-0000-000000000213', 'Local Member', 'Local', '1991-01-01', 'female', 'Tripoli', 'Lebanon', 'open', 34.4367, 35.8497, true);
-insert into private_preferences (user_id, preferred_countries, max_distance_km) values
-  ('00000000-0000-0000-0000-000000000211', array['peru'], 10),
-  ('00000000-0000-0000-0000-000000000212', array['LEBANON'], 10),
-  ('00000000-0000-0000-0000-000000000213', array['Lebanon'], 10);
+  ('00000000-0000-0000-0000-000000000211', 'Lebanon Member', 'Lebanon', '1990-01-01', 'male', 'Beirut', 'Lebanon', 'open', 33.8938, 35.5018, repeat('a', 40), array['211/photo.jpg'], true),
+  ('00000000-0000-0000-0000-000000000212', 'Peru Member', 'Peru', '1991-01-01', 'female', 'Lima', 'Peru', 'open', -12.0464, -77.0428, repeat('b', 40), array['212/photo.jpg'], true),
+  ('00000000-0000-0000-0000-000000000213', 'Local Member', 'Local', '1991-01-01', 'female', 'Tripoli', 'Lebanon', 'open', 34.4367, 35.8497, repeat('c', 40), array['213/photo.jpg'], true);
+insert into private_preferences (
+  user_id, preferred_countries, max_distance_km, matching_preferences_completed_at
+) values
+  ('00000000-0000-0000-0000-000000000211', array['peru'], 10, now()),
+  ('00000000-0000-0000-0000-000000000212', array['LEBANON'], 10, now()),
+  ('00000000-0000-0000-0000-000000000213', array['Lebanon'], 10, now());
+insert into halal_mode_private.member_legal_consent_history (
+  user_id, document_type, version, acceptance_context
+)
+select p.id, d.document_type, d.version, 'reacceptance'
+from profiles p
+cross join halal_mode_private.legal_document_registry d
+where p.id in (
+    '00000000-0000-0000-0000-000000000211',
+    '00000000-0000-0000-0000-000000000212',
+    '00000000-0000-0000-0000-000000000213'
+  )
+  and d.is_current;
 insert into selection_scores (user_id, score) values
   ('00000000-0000-0000-0000-000000000211', 0.9000),
   ('00000000-0000-0000-0000-000000000212', 0.9000),

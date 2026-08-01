@@ -8,8 +8,8 @@ select ok(
   'only signed-in members can invoke the location update boundary'
 );
 select ok(
-  position("'city'" in pg_get_functiondef('public.update_my_profile(jsonb)'::regprocedure)) = 0
-  and position("'country'" in pg_get_functiondef('public.update_my_profile(jsonb)'::regprocedure)) = 0,
+  position('''city''' in pg_get_functiondef('public.update_my_profile(jsonb)'::regprocedure)) = 0
+  and position('''country''' in pg_get_functiondef('public.update_my_profile(jsonb)'::regprocedure)) = 0,
   'the general profile patch no longer allows city or country keys'
 );
 select ok(
@@ -34,15 +34,15 @@ select ok(
   'the server validates coordinate bounds'
 );
 select ok(
-  position("current_setting('app.location_rpc'" in pg_get_functiondef('public.guard_profile_client_update()'::regprocedure)) > 0
+  position('current_setting(''app.location_rpc''' in pg_get_functiondef('public.guard_profile_client_update()'::regprocedure)) > 0
   and position('new.latitude is distinct from old.latitude' in pg_get_functiondef('public.guard_profile_client_update()'::regprocedure)) > 0
   and position('new.city is distinct from old.city' in pg_get_functiondef('public.guard_profile_client_update()'::regprocedure)) > 0,
   'the profile trigger permits location changes only through the dedicated boundary'
 );
 select ok(
   not has_table_privilege('authenticated', 'public.profiles', 'UPDATE')
-  and position("'latitude'" in pg_get_functiondef('public.safe_member_profile(public.profiles)'::regprocedure)) = 0
-  and position("'longitude'" in pg_get_functiondef('public.safe_member_profile(public.profiles)'::regprocedure)) = 0,
+  and position('''latitude''' in pg_get_functiondef('public.safe_member_profile(public.profiles)'::regprocedure)) = 0
+  and position('''longitude''' in pg_get_functiondef('public.safe_member_profile(public.profiles)'::regprocedure)) = 0,
   'members cannot write raw profiles and precise coordinates remain outside public DTOs'
 );
 

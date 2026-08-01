@@ -78,9 +78,16 @@ select ok(
   'cross-member DTO does not serialize the stored full name'
 );
 select ok(
-  position('myQuestionPicksSubmitted' in pg_get_functiondef('public.get_connection(uuid)'::regprocedure)) > 0
-    and position('theirQuestionPicksSubmitted' in pg_get_functiondef('public.get_connection(uuid)'::regprocedure)) > 0,
-  'connection DTO reports both question-pick submission states'
+  position('myQuestionPicksSubmitted' in pg_get_functiondef(
+    'halal_mode_private.get_connection_after_legal_consent(uuid)'::regprocedure
+  )) > 0
+    and position('theirQuestionPicksSubmitted' in pg_get_functiondef(
+      'halal_mode_private.get_connection_after_legal_consent(uuid)'::regprocedure
+    )) > 0
+    and position('get_connection_after_legal_consent' in pg_get_functiondef(
+      'public.get_connection(uuid)'::regprocedure
+    )) > 0,
+  'the gated connection DTO reports both question-pick submission states'
 );
 select ok(
   has_function_privilege('service_role', 'public.verify_round_scheduler_secret(text)', 'EXECUTE'),

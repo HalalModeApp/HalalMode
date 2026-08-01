@@ -12,6 +12,8 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000351', 'readiness@example.test');
 insert into profiles (id, name, first_name, birth_date, gender, city, country, bio, photos, onboarding_complete) values
   ('00000000-0000-0000-0000-000000000351', 'Ready Member', 'Ready', '1990-01-01', 'female', 'Madinah', 'Saudi Arabia', repeat('a', 40), array['member/photo.jpg'], true);
+insert into private_preferences (user_id, matching_preferences_completed_at) values
+  ('00000000-0000-0000-0000-000000000351', now());
 do $$ begin
   perform set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000351","role":"authenticated"}', true);
 end $$;

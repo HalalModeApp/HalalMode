@@ -12,11 +12,15 @@ select ok(
   'anonymous callers cannot submit a round'
 );
 select ok(
-  position('for update' in lower(pg_get_functiondef('public.submit_round_selections(uuid,uuid[])'::regprocedure))) > 0,
+  position('for update' in lower(pg_get_functiondef(
+    'halal_mode_private.submit_round_selections_after_legal_consent(uuid,uuid[])'::regprocedure
+  ))) > 0,
   'round submission locks its round row'
 );
 select ok(
-  position('pg_advisory_xact_lock' in pg_get_functiondef('public.submit_round_selections(uuid,uuid[])'::regprocedure)) > 0,
+  position('pg_advisory_xact_lock' in pg_get_functiondef(
+    'halal_mode_private.submit_round_selections_after_legal_consent(uuid,uuid[])'::regprocedure
+  )) > 0,
   'reciprocal pair checks are serialized under concurrent submissions'
 );
 
@@ -33,6 +37,20 @@ insert into profiles (
   ('00000000-0000-0000-0000-0000000000b2', 'Member B', 'B', '1991-01-01', 'female', true),
   ('00000000-0000-0000-0000-0000000000c3', 'Member C', 'C', '1992-01-01', 'female', true),
   ('00000000-0000-0000-0000-0000000000d4', 'Member D', 'D', '1993-01-01', 'male', true);
+
+insert into halal_mode_private.member_legal_consent_history (
+  user_id, document_type, version, acceptance_context
+)
+select p.id, d.document_type, d.version, 'reacceptance'
+from profiles p
+cross join halal_mode_private.legal_document_registry d
+where p.id in (
+    '00000000-0000-0000-0000-0000000000a1',
+    '00000000-0000-0000-0000-0000000000b2',
+    '00000000-0000-0000-0000-0000000000c3',
+    '00000000-0000-0000-0000-0000000000d4'
+  )
+  and d.is_current;
 
 insert into selection_scores (user_id) values
   ('00000000-0000-0000-0000-0000000000a1'),

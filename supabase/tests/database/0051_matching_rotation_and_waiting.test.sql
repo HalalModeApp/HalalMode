@@ -36,8 +36,18 @@ select ok(
 );
 
 select ok(
-  has_column('halal_mode_private', 'match_health', 'rounds_since_last_served')
-  and has_column('halal_mode_private', 'match_health', 'last_served_at'),
+  exists (
+    select 1 from information_schema.columns
+    where table_schema = 'halal_mode_private'
+      and table_name = 'match_health'
+      and column_name = 'rounds_since_last_served'
+  )
+  and exists (
+    select 1 from information_schema.columns
+    where table_schema = 'halal_mode_private'
+      and table_name = 'match_health'
+      and column_name = 'last_served_at'
+  ),
   'the rotation queue inputs are exposed inside the private view'
 );
 
