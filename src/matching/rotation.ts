@@ -23,9 +23,9 @@
  * to "serve everyone" on its own.
  */
 
-import type { MatchingConfig } from './config';
-import type { MemberSignals } from './estimate';
-import { tieBreak } from './allocate';
+import type { MatchingConfig } from './config.ts';
+import type { MemberSignals } from './estimate.ts';
+import { tieBreak } from './allocate.ts';
 
 export interface RotationCandidate {
   member: MemberSignals;

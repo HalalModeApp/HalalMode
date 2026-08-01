@@ -13,7 +13,7 @@
  * See docs/RECIPROCAL_MATCHING_V1_DESIGN.md §5.
  */
 
-import type { MatchingConfig } from './config';
+import type { MatchingConfig } from './config.ts';
 
 /** One mutually eligible pair, already scored. */
 export interface ScoredEdge {

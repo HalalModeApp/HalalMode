@@ -9,26 +9,26 @@
  * real change rather than a bad draw.
  */
 
-import type { MatchingConfig } from './config';
+import type { MatchingConfig } from './config.ts';
 import {
   allocate,
   verifyAllocation,
   type Capacity,
   type ScoredEdge,
-} from './allocate';
+} from './allocate.ts';
 import {
   adjustedUtility,
   appearanceLimit,
   type WindowContext,
-} from './fairness';
+} from './fairness.ts';
 import {
   directionalEstimate,
   reciprocalScore,
   NO_PAIR_HISTORY,
   type MemberSignals,
   type PairHistory,
-} from './estimate';
-import { planRotation, type RotationCandidate } from './rotation';
+} from './estimate.ts';
+import { planRotation, type RotationCandidate } from './rotation.ts';
 
 /** Small deterministic PRNG. Same seed, same population, every time. */
 export function mulberry32(seed: number): () => number {

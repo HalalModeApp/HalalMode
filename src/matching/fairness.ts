@@ -19,8 +19,8 @@
  * See docs/RECIPROCAL_MATCHING_V1_DESIGN.md §4.
  */
 
-import { clamp, type MemberSignals } from './estimate';
-import type { MatchingConfig } from './config';
+import { clamp, type MemberSignals } from './estimate.ts';
+import type { MatchingConfig } from './config.ts';
 
 /** Where the current fairness window has got to. */
 export interface WindowContext {

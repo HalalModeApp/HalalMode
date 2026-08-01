@@ -11,7 +11,7 @@
  * See docs/RECIPROCAL_MATCHING_V1_DESIGN.md §4.
  */
 
-import type { MatchingConfig } from './config';
+import type { MatchingConfig } from './config.ts';
 
 /** The half of a member the estimator needs. All of it is server-side. */
 export interface MemberSignals {
