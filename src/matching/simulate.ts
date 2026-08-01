@@ -259,6 +259,7 @@ export function simulate(options: SimOptions): SimMetrics {
           a: m.id,
           b: w.id,
           reciprocal,
+          fresh: seen === 0,
           quality: strategy === 'v1' ? reciprocal * decay : 0,
           utility,
         });

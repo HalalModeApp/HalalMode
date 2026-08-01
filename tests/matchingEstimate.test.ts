@@ -16,6 +16,7 @@ import {
   mayResurface,
   pairCooldownDays,
   pairPrior,
+  repeatGenerosity,
   NO_PAIR_HISTORY,
   reciprocalScore,
   type MemberSignals,
@@ -404,4 +405,36 @@ test('a pair below the score floor is never resurfaced', () => {
     mayResurface(NO_PAIR_HISTORY, config.min_reciprocal_score - 0.01, null, null, now, config),
     false
   );
+});
+
+test('the short wait belongs to the top, not to everyone above average', () => {
+  const halfway = config.min_reciprocal_score
+    + (config.repeat_generous_score - config.min_reciprocal_score) / 2;
+
+  // Squared: a pair halfway up earns a quarter of the patience, not half. The
+  // point is that a merely decent pair waits much closer to a weak one.
+  // Compared loosely because the midpoint is not exactly representable in
+  // float64; the SQL mirror uses exact numeric and asserts equality outright.
+  assert.ok(Math.abs(repeatGenerosity(halfway, config) - 0.25) < 1e-12);
+  assert.equal(pairCooldownDays(config.repeat_generous_score, config), 2);
+  assert.equal(pairCooldownDays(halfway, config), 16);
+
+  const weak = pairCooldownDays(config.min_reciprocal_score, config);
+  assert.ok(
+    weak - pairCooldownDays(halfway, config) < pairCooldownDays(halfway, config) - 2,
+    'a middling pair should sit nearer the long wait than the short one'
+  );
+});
+
+test('the generosity curve is configurable and fails closed', () => {
+  const flat = resolveConfig({ repeat_generosity_curve: 1 });
+  const halfway = config.min_reciprocal_score
+    + (config.repeat_generous_score - config.min_reciprocal_score) / 2;
+  assert.ok(
+    Math.abs(repeatGenerosity(halfway, flat) - 0.5) < 1e-12,
+    'a curve of 1 is the linear ramp'
+  );
+
+  assert.throws(() => resolveConfig({ repeat_generosity_curve: 0 }), /Repeat/);
+  assert.throws(() => resolveConfig({ repeat_generosity_curve: -1 }), /Repeat/);
 });

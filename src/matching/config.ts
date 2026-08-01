@@ -80,6 +80,13 @@ export interface MatchingConfig {
    * pair look unpromising and collapse the range to its floor.
    */
   repeat_generous_score: number;
+  /**
+   * Shapes the curve between the floor and the anchor. Above 1 the short waits
+   * and full allowances are concentrated at the very top, so a merely decent
+   * pair is treated much more like a weak one than like a strong one — which is
+   * the intent. Repetition should be a reward for the few, not a default.
+   */
+  repeat_generosity_curve: number;
   /** Abandon a pair once its estimate has fallen this far from first sight. */
   repeat_abandon_drop: number;
 
@@ -213,11 +220,12 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
 
   repeat_decay: 0.7,
   repeat_cooldown_days: 14,
-  min_repeat_cooldown_days: 3,
+  min_repeat_cooldown_days: 2,
   max_repeat_cooldown_days: 21,
   min_pair_appearances: 2,
   max_pair_appearances: 5,
   repeat_generous_score: 0.6,
+  repeat_generosity_curve: 2,
   repeat_abandon_drop: 0.35,
 
   reach_gap_threshold: 0.25,
@@ -355,7 +363,8 @@ export function validateConfig(config: MatchingConfig): MatchingConfig {
       // At or below the floor the range would invert — every pair would read
       // as maximally promising, which is the opposite of the intent.
       || config.repeat_generous_score <= config.min_reciprocal_score
-      || config.repeat_generous_score > 1) {
+      || config.repeat_generous_score > 1
+      || !(config.repeat_generosity_curve > 0)) {
     throw new Error('Repeat exposure configuration is invalid');
   }
   if (config.exposure_full_confidence < 1

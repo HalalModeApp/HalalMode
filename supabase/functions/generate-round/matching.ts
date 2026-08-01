@@ -220,6 +220,7 @@ export function planRound(
         a: row.user_low,
         b: row.user_high,
         reciprocal,
+        fresh: row.pair_times_shown <= 0,
         quality: reciprocal * decay,
         utility: adjustedUtility(reciprocal, low, high, config, window) * decay,
       });

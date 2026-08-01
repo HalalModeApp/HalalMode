@@ -40,12 +40,21 @@ function member(overrides: Partial<MemberSignals> = {}): MemberSignals {
 /** Mid-window: a free member should have had 5 x 4 = 20 exposures by now. */
 const window: WindowContext = { roundsElapsed: 4 };
 
-function scored(a: string, b: string, value: number): ScoredEdge {
-  return { a, b, reciprocal: value, quality: value, utility: value };
+// Fresh by default: these exercise ordering and capacity, and a pool of edges
+// nobody has been shown is the ordinary case. The freshness rule has its own
+// tests below.
+function scored(a: string, b: string, value: number, fresh = true): ScoredEdge {
+  return { a, b, reciprocal: value, quality: value, utility: value, fresh };
 }
 
-function edge(a: string, b: string, reciprocal: number, utility = reciprocal): ScoredEdge {
-  return { a, b, reciprocal, quality: reciprocal, utility };
+function edge(
+  a: string,
+  b: string,
+  reciprocal: number,
+  utility = reciprocal,
+  fresh = true
+): ScoredEdge {
+  return { a, b, reciprocal, quality: reciprocal, utility, fresh };
 }
 
 function capacities(entries: [string, number][]): Map<string, Capacity> {
@@ -389,6 +398,7 @@ test('fairness spreads exposure without collapsing match quality', () => {
         a: m,
         b: w,
         reciprocal,
+        fresh: true,
         quality: reciprocal,
         utility: adjustedUtility(reciprocal, a, b, config, window),
       });
@@ -593,7 +603,7 @@ test('exploration is deterministic for a given seed', () => {
 
 function directional(a: string, b: string, forward: number, backward: number): ScoredEdge {
   const reciprocal = Math.sqrt(forward * backward);
-  return { a, b, reciprocal, quality: reciprocal, utility: reciprocal, forward, backward };
+  return { a, b, reciprocal, quality: reciprocal, utility: reciprocal, forward, backward, fresh: true };
 }
 
 test('composition leaves alone a member whose picks are returned', () => {
@@ -730,4 +740,78 @@ test('edges without directional data are never counted as reaches', () => {
     oneSidedRates: new Map([['a', 1]]),
   });
   assert.equal(result.stats.compositionSwaps, 0);
+});
+
+// --- Novelty before repetition ----------------------------------------------
+
+test('a fresh pair outranks a repeat even at a lower score', () => {
+  const config = resolveConfig();
+  const seen = edge('a', 'x', 0.9, 0.9, false);
+  const unseen = edge('a', 'y', 0.4, 0.4, true);
+
+  const result = allocate({
+    edges: [seen, unseen],
+    capacities: capacities([['a', 1], ['x', 1], ['y', 1]]),
+    config,
+    seed: 1,
+  });
+
+  assert.deepEqual(
+    result.assigned.map((e) => e.b),
+    ['y'],
+    'somebody already seen has already given their answer; a new face wins'
+  );
+});
+
+test('repeats fill what novelty leaves over, rather than being shut out', () => {
+  const config = resolveConfig();
+  // One fresh option and one repeat, with room for both.
+  const result = allocate({
+    edges: [edge('a', 'x', 0.9, 0.9, false), edge('a', 'y', 0.4, 0.4, true)],
+    capacities: capacities([['a', 2], ['x', 1], ['y', 1]]),
+    config,
+    seed: 1,
+  });
+
+  assert.equal(result.assigned.length, 2, 'a repeat still takes a slot nobody else wants');
+  assert.equal(result.assigned[0]?.b, 'y', 'but only after the fresh one');
+});
+
+test('the whole fresh pool is exhausted before any repeat is considered', () => {
+  const config = resolveConfig();
+  const edges = [
+    edge('a', 'x', 0.95, 0.95, false),
+    edge('a', 'y', 0.94, 0.94, false),
+    edge('a', 'z', 0.20, 0.20, true),
+  ];
+  const result = allocate({
+    edges,
+    capacities: capacities([['a', 2], ['x', 1], ['y', 1], ['z', 1]]),
+    config,
+    seed: 1,
+  });
+
+  assert.equal(result.assigned[0]?.b, 'z', 'the only fresh pair leads');
+  assert.equal(result.assigned.length, 2, 'a repeat then fills the spare slot');
+});
+
+test('repair never spends a first meeting to buy two reruns', () => {
+  const config = resolveConfig();
+  // b has room, a is full holding a fresh edge. Repair could displace it for
+  // two higher-utility repeats and raise the count; it must decline.
+  const result = allocate({
+    edges: [
+      edge('a', 'x', 0.30, 0.30, true),
+      edge('a', 'y', 0.95, 0.95, false),
+      edge('x', 'z', 0.95, 0.95, false),
+    ],
+    capacities: capacities([['a', 1], ['x', 1], ['y', 1], ['z', 1]]),
+    config,
+    seed: 1,
+  });
+
+  assert.ok(
+    result.assigned.some((e) => e.a === 'a' && e.b === 'x'),
+    'the fresh pair survives repair'
+  );
 });

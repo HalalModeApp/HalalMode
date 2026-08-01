@@ -217,12 +217,17 @@ export function reciprocalScore(
  * Anchored at min_reciprocal_score, below which nobody is shown at all, and at
  * repeat_generous_score, which is what a genuinely promising pair looks like
  * rather than a theoretical 1.0 nobody reaches.
+ *
+ * Curved rather than linear, so the short waits and full allowances belong to
+ * the top of the range rather than to everyone above average. A pair halfway up
+ * earns a quarter of the patience, not half of it.
  */
 export function repeatGenerosity(score: number, config: MatchingConfig): number {
   const low = config.min_reciprocal_score;
   const high = config.repeat_generous_score;
   if (high <= low) return 1;
-  return clamp((score - low) / (high - low), 0, 1);
+  const position = clamp((score - low) / (high - low), 0, 1);
+  return Math.pow(position, config.repeat_generosity_curve);
 }
 
 /** Showings this pair has earned, between the configured floor and ceiling. */
