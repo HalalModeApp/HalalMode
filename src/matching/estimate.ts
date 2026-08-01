@@ -30,6 +30,19 @@ export interface MemberSignals {
    * their place when the window turns over.
    */
   roundsSinceLastServed: number;
+  /**
+   * Share of this member's own picks that were never returned, 0–1.
+   *
+   * Not a judgement about them and never shown to anyone. It is the one signal
+   * that says "the people this member reaches for are consistently not reaching
+   * back", which is the difference between a set that could produce a match and
+   * one that reliably will not.
+   *
+   * Zero for a member with no history, and reset when their profile materially
+   * changes — someone who improves their photos should not be held to what last
+   * month's behaviour implied.
+   */
+  oneSidedPickRate: number;
   /** Qualified exposures inside the current fairness window. */
   exposuresInWindow: number;
   /**

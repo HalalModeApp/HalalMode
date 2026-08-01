@@ -49,6 +49,8 @@ export interface MemberSignalRow {
   times_kept: number;
   rounds_since_last_mutual: number;
   rounds_since_last_served: number;
+  /** Absent from an older signals view; treated as no history. */
+  one_sided_pick_rate?: number;
   exposures_in_window: number;
   introductions_per_round: number;
 }
@@ -101,6 +103,7 @@ function toSignals(row: MemberSignalRow): MemberSignals {
     timesKept: row.times_kept,
     roundsSinceLastMutual: row.rounds_since_last_mutual,
     roundsSinceLastServed: row.rounds_since_last_served,
+    oneSidedPickRate: row.one_sided_pick_rate ?? 0,
     exposuresInWindow: row.exposures_in_window,
     introductionsPerRound: row.introductions_per_round,
   };

@@ -148,6 +148,7 @@ function buildPopulation(options: SimOptions): SimMember[] {
         roundsSinceLastMutual: 0,
         exposuresInWindow: 0,
         roundsSinceLastServed: 0,
+        oneSidedPickRate: 0,
         introductionsPerRound: 0,
         mutualMatches: 0,
         zeroMatchRounds: 0,

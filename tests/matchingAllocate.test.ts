@@ -30,6 +30,7 @@ function member(overrides: Partial<MemberSignals> = {}): MemberSignals {
     timesKept: 0,
     roundsSinceLastMutual: 0,
     roundsSinceLastServed: 0,
+    oneSidedPickRate: 0,
     exposuresInWindow: 0,
     introductionsPerRound: 5,
     ...overrides,
@@ -319,6 +320,7 @@ test('verification rejects a round that breaks capacity', () => {
       rejectedBelowFloor: 0,
       anchoredMembers: 0,
       exploratorySlots: 0,
+      compositionSwaps: 0,
       repairSwaps: 0,
       repairTimedOut: false,
     },
@@ -340,6 +342,7 @@ test('verification rejects a self-pair', () => {
         rejectedBelowFloor: 0,
         anchoredMembers: 0,
         exploratorySlots: 0,
+        compositionSwaps: 0,
         repairSwaps: 0,
         repairTimedOut: false,
       },
@@ -584,4 +587,147 @@ test('exploration is deterministic for a given seed', () => {
     second.assigned.map((e) => pairKey(e.a, e.b)).sort()
   );
   assert.equal(first.stats.exploratorySlots, second.stats.exploratorySlots);
+});
+
+// --- Composition -----------------------------------------------------------
+
+function directional(a: string, b: string, forward: number, backward: number): ScoredEdge {
+  const reciprocal = Math.sqrt(forward * backward);
+  return { a, b, reciprocal, quality: reciprocal, utility: reciprocal, forward, backward };
+}
+
+test('composition leaves alone a member whose picks are returned', () => {
+  const config = resolveConfig();
+  const edges = [
+    directional('a', 'x', 0.9, 0.2),
+    directional('a', 'y', 0.9, 0.2),
+    directional('a', 'z', 0.9, 0.2),
+    directional('a', 'w', 0.5, 0.5),
+  ];
+  const caps = capacities([
+    ['a', 4],
+    ['x', 1],
+    ['y', 1],
+    ['z', 1],
+    ['w', 1],
+  ]);
+
+  // No history of unreturned picks, so nothing is adjusted however lopsided
+  // the set happens to be.
+  const result = allocate({ edges, capacities: caps, config, seed: 6 });
+  assert.equal(result.stats.compositionSwaps, 0);
+});
+
+test('a member who never gets picked back keeps some reaches, not all', () => {
+  const config = resolveConfig();
+  const edges = [
+    directional('a', 'x', 0.9, 0.1),
+    directional('a', 'y', 0.9, 0.1),
+    directional('a', 'z', 0.9, 0.1),
+    directional('a', 'p', 0.5, 0.5),
+    directional('a', 'q', 0.5, 0.5),
+  ];
+  const caps = capacities([
+    ['a', 3],
+    ['x', 1],
+    ['y', 1],
+    ['z', 1],
+    ['p', 1],
+    ['q', 1],
+  ]);
+
+  const result = allocate({
+    edges,
+    capacities: caps,
+    config,
+    seed: 6,
+    oneSidedRates: new Map([['a', 0.95]]),
+  });
+  assert.deepEqual(verifyAllocation(result, caps), { ok: true });
+
+  const set = result.assigned.filter((e) => e.a === 'a' || e.b === 'a');
+  const reaches = set.filter(
+    (e) => (e.forward ?? 0) - (e.backward ?? 0) >= config.reach_gap_threshold
+  );
+  assert.ok(reaches.length <= config.max_reach_edges, 'excess reaches should be traded');
+  assert.ok(reaches.length > 0, 'nobody is stopped from aiming high entirely');
+});
+
+test('composition never trades below the score floor', () => {
+  const config = resolveConfig();
+  const edges = [
+    directional('a', 'x', 0.9, 0.1),
+    directional('a', 'y', 0.9, 0.1),
+    directional('a', 'z', 0.9, 0.1),
+    // The only even alternative is beneath the floor, so no trade is available.
+    directional('a', 'p', 0.05, 0.05),
+  ];
+  const caps = capacities([
+    ['a', 3],
+    ['x', 1],
+    ['y', 1],
+    ['z', 1],
+    ['p', 1],
+  ]);
+
+  const result = allocate({
+    edges,
+    capacities: caps,
+    config,
+    seed: 6,
+    oneSidedRates: new Map([['a', 1]]),
+  });
+  for (const edge of result.assigned) {
+    assert.ok(edge.reciprocal >= config.min_reciprocal_score);
+  }
+});
+
+test('a fresh member is never treated as over-reaching', () => {
+  // No history means no bias. Someone new, or someone who has just changed
+  // their profile, starts clean rather than carrying an old inference.
+  const config = resolveConfig();
+  const edges = [
+    directional('a', 'x', 0.9, 0.1),
+    directional('a', 'y', 0.9, 0.1),
+    directional('a', 'z', 0.9, 0.1),
+    directional('a', 'p', 0.5, 0.5),
+  ];
+  const caps = capacities([
+    ['a', 3],
+    ['x', 1],
+    ['y', 1],
+    ['z', 1],
+    ['p', 1],
+  ]);
+
+  const result = allocate({
+    edges,
+    capacities: caps,
+    config,
+    seed: 6,
+    oneSidedRates: new Map([['a', 0]]),
+  });
+  assert.equal(result.stats.compositionSwaps, 0);
+});
+
+test('edges without directional data are never counted as reaches', () => {
+  // The estimator may not have supplied both directions. Absent evidence must
+  // not be read as evidence of over-reaching.
+  const config = resolveConfig();
+  const edges = [scored('a', 'x', 0.9), scored('a', 'y', 0.9), scored('a', 'z', 0.9)];
+  const caps = capacities([
+    ['a', 3],
+    ['x', 1],
+    ['y', 1],
+    ['z', 1],
+  ]);
+
+  const result = allocate({
+    edges,
+    capacities: caps,
+    config,
+    seed: 6,
+    oneSidedRates: new Map([['a', 1]]),
+  });
+  assert.equal(result.stats.compositionSwaps, 0);
 });

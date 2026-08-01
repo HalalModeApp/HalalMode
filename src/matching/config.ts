@@ -90,6 +90,24 @@ export interface MatchingConfig {
    */
   exploration_min_slot: number;
 
+  // --- Composition --------------------------------------------------------
+  /**
+   * How lopsided an edge must be before it counts as a reach: the gap between
+   * how much one side wants the other and how much is wanted back.
+   */
+  reach_gap_threshold: number;
+  /**
+   * Reaches a member may hold at once when their picks are consistently
+   * unreturned. Never zero — nobody is stopped from aiming high, they are only
+   * stopped from aiming high with every slot they have.
+   */
+  max_reach_edges: number;
+  /**
+   * One-sided pick rate below which composition is left alone entirely. Most
+   * members never touch this.
+   */
+  reach_bias_floor: number;
+
   // --- Allocation ---------------------------------------------------------
   repair_time_budget_ms: number;
   /**
@@ -135,6 +153,10 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
   repeat_cooldown_days: 14,
   max_pair_appearances: 3,
   repeat_abandon_drop: 0.35,
+
+  reach_gap_threshold: 0.25,
+  max_reach_edges: 2,
+  reach_bias_floor: 0.7,
 
   exploration_rate: 0.1,
   exploration_min_slot: 4,

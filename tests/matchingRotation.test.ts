@@ -21,6 +21,7 @@ function candidate(
       timesKept: 0,
       roundsSinceLastMutual: 0,
       roundsSinceLastServed: 0,
+      oneSidedPickRate: 0,
       exposuresInWindow: 0,
       introductionsPerRound: limit,
       ...overrides,

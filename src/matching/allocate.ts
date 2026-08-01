@@ -25,6 +25,15 @@ export interface ScoredEdge {
   quality: number;
   /** Reciprocal score after the capped fairness boost and repeat decay. */
   utility: number;
+  /**
+   * The two directional estimates: P(a picks b) and P(b picks a).
+   *
+   * The reciprocal score deliberately collapses these, but composition needs
+   * them apart — an edge where one side wants the other far more is a reach,
+   * and a set made entirely of reaches produces no matches at all.
+   */
+  forward?: number;
+  backward?: number;
 }
 
 export interface Capacity {
@@ -34,6 +43,11 @@ export interface Capacity {
 
 export interface AllocationInput {
   edges: ScoredEdge[];
+  /**
+   * One-sided pick rate per member, used only for composition. Absent means no
+   * history, which is treated as no bias.
+   */
+  oneSidedRates?: Map<string, number>;
   capacities: Map<string, Capacity>;
   config: MatchingConfig;
   /** Recorded on the run so the result can be reproduced exactly. */
@@ -54,6 +68,8 @@ export interface AllocationResult {
     anchoredMembers: number;
     /** Slots deliberately given to a lower-ranked edge to gather evidence. */
     exploratorySlots: number;
+    /** Reaches swapped for a more even pair, for members whose picks go unreturned. */
+    compositionSwaps: number;
     repairSwaps: number;
     repairTimedOut: boolean;
   };
@@ -173,6 +189,15 @@ export function allocate(input: AllocationInput): AllocationResult {
     now,
   });
 
+  const composed = compositionPass({
+    ordered,
+    assigned,
+    takenPairs,
+    remaining,
+    oneSidedRates: input.oneSidedRates ?? new Map(),
+    config,
+  });
+
   const shortfalls = new Map<string, number>();
   for (const [id, left] of remaining) {
     if (left > 0) shortfalls.set(id, left);
@@ -187,6 +212,7 @@ export function allocate(input: AllocationInput): AllocationResult {
       rejectedBelowFloor,
       anchoredMembers: anchored,
     exploratorySlots: explored,
+    compositionSwaps: composed,
     repairSwaps: repair.swaps,
       repairTimedOut: repair.timedOut,
     },
@@ -265,6 +291,103 @@ function anchorPass(input: AnchorInput): number {
   }
 
   return placed;
+}
+
+interface CompositionInput {
+  ordered: ScoredEdge[];
+  assigned: ScoredEdge[];
+  takenPairs: Set<string>;
+  remaining: Map<string, number>;
+  oneSidedRates: Map<string, number>;
+  config: MatchingConfig;
+}
+
+/** How lopsided this edge is from one member's side. */
+function reachGap(edge: ScoredEdge, id: string): number {
+  if (edge.forward === undefined || edge.backward === undefined) return 0;
+  const wants = edge.a === id ? edge.forward : edge.backward;
+  const wanted = edge.a === id ? edge.backward : edge.forward;
+  return wants - wanted;
+}
+
+/**
+ * Shifts the composition of a set for members whose picks are consistently
+ * unreturned.
+ *
+ * Some members reach almost exclusively for people who will not reach back.
+ * Round after round they choose, nothing comes of it, and nothing about the
+ * experience tells them why — because it must not. A set made entirely of
+ * reaches is one that reliably produces no match.
+ *
+ * So a few of the most lopsided edges are traded for more evenly matched ones.
+ * Deliberately a few: `max_reach_edges` is never zero, so nobody is stopped
+ * from aiming high — only from spending every slot doing it. Most members never
+ * reach the threshold at all.
+ *
+ * This is the one part of the system that could become a ranking if it were
+ * allowed to compound, so it does not: it is bounded per round, driven by a
+ * signal that resets when a member changes their profile, and never surfaced
+ * anywhere. Being shown people who might actually choose you back is a kindness
+ * as long as nobody is told it is happening.
+ */
+function compositionPass(input: CompositionInput): number {
+  const { ordered, assigned, takenPairs, remaining, oneSidedRates, config } = input;
+
+  const setOf = new Map<string, ScoredEdge[]>();
+  for (const edge of assigned) {
+    for (const id of [edge.a, edge.b]) {
+      const list = setOf.get(id);
+      if (list) list.push(edge);
+      else setOf.set(id, [edge]);
+    }
+  }
+
+  let swaps = 0;
+  for (const [id, set] of setOf) {
+    if ((oneSidedRates.get(id) ?? 0) < config.reach_bias_floor) continue;
+
+    const reaches = set
+      .filter((edge) => reachGap(edge, id) >= config.reach_gap_threshold)
+      .sort((left, right) => reachGap(right, id) - reachGap(left, id));
+    if (reaches.length <= config.max_reach_edges) continue;
+
+    // Trade only the excess, worst first, and only for something more even.
+    for (const reach of reaches.slice(config.max_reach_edges)) {
+      const replacement = ordered.find((candidate) => {
+        if (candidate.a !== id && candidate.b !== id) return false;
+        if (takenPairs.has(pairKey(candidate.a, candidate.b))) return false;
+        if (candidate.reciprocal < config.min_reciprocal_score) return false;
+        if (reachGap(candidate, id) >= config.reach_gap_threshold) return false;
+        const other = candidate.a === id ? candidate.b : candidate.a;
+        const freed = other === reach.a || other === reach.b ? 1 : 0;
+        return (remaining.get(other) ?? 0) + freed > 0;
+      });
+      if (!replacement) continue;
+
+      const index = assigned.indexOf(reach);
+      if (index < 0) continue;
+      assigned.splice(index, 1);
+      takenPairs.delete(pairKey(reach.a, reach.b));
+      remaining.set(reach.a, (remaining.get(reach.a) ?? 0) + 1);
+      remaining.set(reach.b, (remaining.get(reach.b) ?? 0) + 1);
+
+      if ((remaining.get(replacement.a) ?? 0) <= 0 || (remaining.get(replacement.b) ?? 0) <= 0) {
+        assigned.push(reach);
+        takenPairs.add(pairKey(reach.a, reach.b));
+        remaining.set(reach.a, (remaining.get(reach.a) ?? 1) - 1);
+        remaining.set(reach.b, (remaining.get(reach.b) ?? 1) - 1);
+        continue;
+      }
+
+      assigned.push(replacement);
+      takenPairs.add(pairKey(replacement.a, replacement.b));
+      remaining.set(replacement.a, (remaining.get(replacement.a) ?? 1) - 1);
+      remaining.set(replacement.b, (remaining.get(replacement.b) ?? 1) - 1);
+      swaps += 1;
+    }
+  }
+
+  return swaps;
 }
 
 interface ExplorationInput {
