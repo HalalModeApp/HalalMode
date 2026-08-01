@@ -26,8 +26,8 @@ or production verification.
 
 ## What is not release-ready
 
-1. The isolated pgTAP CI job is wired but has not yet run remotely because the
-   branch has not been pushed; this machine also has no Docker/Podman runtime.
+1. The isolated pgTAP CI job has now run successfully in GitHub Actions; this
+   machine still has no Docker/Podman runtime for an equivalent local run.
 2. Maestro source contracts and stable test IDs cover key paths, but they have
    not run against a configured native build with controlled test accounts.
 3. The native matrix, Arabic cold-restart behavior, screen reader behavior, and
@@ -78,8 +78,9 @@ especially §10 (three design errors simulation caught), §11 (scale) and §12
 
 ## Verified implementation baseline
 
-- Migrations through `0059` apply from a clean database and all 528 pgTAP
-  contracts pass in GitHub Actions run `30694719406`.
+- Migrations through `0059` apply from a clean database and all 542 pgTAP
+  contracts pass in GitHub Actions run `30695762522` (including the realistic
+  shadow-isolation fixture).
 - Client typecheck, lint, all 131 tests, the Android export, and the
   `generate-round` Deno typecheck pass in the same run.
 - Live completion is one idempotent database transaction: it rechecks current
@@ -122,13 +123,13 @@ assumptions as well as its intent. Specifically worth attacking:
 
 In dependency order.
 
-1. **Run the shadow proof against an approved environment.**
+1. **Run the shadow proof against an approved hosted environment.**
    `supabase/tests/database/0060_matching_shadow_round_integration.test.sql`
    now seeds a mixed eight-member population, pages the candidate snapshot,
    finalizes three shadow pairs, retries exactly, and fingerprints live tables
    to prove that `introductions`, `connections`, `pair_exposure`, notifications,
-   and live rounds remain untouched. The remaining step is the first passing
-   isolated CI run (and only later an explicitly approved hosted shadow run).
+   and live rounds remain untouched. The isolated CI proof is complete; only an
+   explicitly approved hosted shadow run remains.
 
 2. **Benchmark `passes_criteria`.** The entire latency model in §7 rests on an
    assumed ~25 µs per call. Measure it, then correct §7 rather than leaving an
