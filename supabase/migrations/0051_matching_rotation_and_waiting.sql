@@ -92,7 +92,15 @@ select
       and r.submitted_at is not null
       and r.submitted_at > coalesce(lm.last_mutual_at, '-infinity'::timestamptz)
   ) as rounds_since_last_mutual,
-  -- Live matching runs recorded for this member since their last served run.
+  lm.last_mutual_at,
+  p.updated_at as profile_changed_at,
+  least(
+    1.0,
+    coalesce(s.times_shown, 0)::numeric
+      / greatest(1, (halal_mode_private.active_matching_config() ->> 'exposure_full_confidence')::numeric)
+  ) as model_confidence,
+  -- CREATE OR REPLACE VIEW requires every existing column to retain its
+  -- position, name and type. New waiting fields are therefore append-only.
   -- Deferred and no-candidate outcomes both age the queue; shadow runs cannot.
   (
     select count(*)
@@ -100,14 +108,7 @@ select
     where o.user_id = p.id
       and o.run_started_at > coalesce(ls.last_served_at, '-infinity'::timestamptz)
   ) as rounds_since_last_served,
-  lm.last_mutual_at,
-  ls.last_served_at,
-  p.updated_at as profile_changed_at,
-  least(
-    1.0,
-    coalesce(s.times_shown, 0)::numeric
-      / greatest(1, (halal_mode_private.active_matching_config() ->> 'exposure_full_confidence')::numeric)
-  ) as model_confidence
+  ls.last_served_at
 from public.profiles p
 left join public.selection_scores s on s.user_id = p.id
 left join last_mutual lm on lm.user_id = p.id
