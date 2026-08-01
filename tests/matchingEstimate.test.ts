@@ -1,0 +1,160 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { DEFAULT_MATCHING_CONFIG, resolveConfig } from '../src/matching/config';
+import {
+  appeal,
+  confidence,
+  directionalEstimate,
+  mayResurface,
+  NO_PAIR_HISTORY,
+  reciprocalScore,
+  type MemberSignals,
+  type PairHistory,
+} from '../src/matching/estimate';
+
+const config = DEFAULT_MATCHING_CONFIG;
+
+function member(overrides: Partial<MemberSignals> = {}): MemberSignals {
+  return {
+    id: 'm',
+    timesShown: 0,
+    timesKept: 0,
+    roundsSinceLastMutual: 0,
+    exposuresInWindow: 0,
+    ...overrides,
+  };
+}
+
+test('a member with no history is treated as unknown, not unpopular', () => {
+  assert.equal(appeal(member()), 0.5);
+  assert.equal(confidence(member(), config), 0);
+});
+
+test('cold start scores purely on stated compatibility', () => {
+  const newcomer = member({ timesShown: 0 });
+  // With zero confidence the behavioural terms carry no weight at all, so the
+  // estimate must equal the compatibility input.
+  assert.equal(directionalEstimate(0.8, newcomer, NO_PAIR_HISTORY, config), 0.8);
+  assert.equal(directionalEstimate(0.3, newcomer, NO_PAIR_HISTORY, config), 0.3);
+});
+
+test('confidence ramps linearly and saturates at the configured threshold', () => {
+  assert.equal(confidence(member({ timesShown: 0 }), config), 0);
+  assert.equal(confidence(member({ timesShown: 15 }), config), 1);
+  assert.equal(confidence(member({ timesShown: 30 }), config), 1);
+  assert.ok(Math.abs(confidence(member({ timesShown: 5 }), config) - 1 / 3) < 1e-9);
+});
+
+test('the confidence threshold is configurable, not hardcoded', () => {
+  const patient = resolveConfig({ exposure_full_confidence: 40 });
+  assert.equal(confidence(member({ timesShown: 15 }), patient), 0.375);
+});
+
+test('behaviour displaces compatibility only as evidence accumulates', () => {
+  const compat = 0.5;
+  const liked = { timesKept: 9, roundsSinceLastMutual: 0, exposuresInWindow: 0 };
+
+  const early = directionalEstimate(
+    compat,
+    member({ ...liked, timesShown: 10, timesKept: 9 }),
+    NO_PAIR_HISTORY,
+    config
+  );
+  const settled = directionalEstimate(
+    compat,
+    member({ ...liked, timesShown: 40, timesKept: 36 }),
+    NO_PAIR_HISTORY,
+    config
+  );
+
+  // Same 90% keep rate, more evidence — the estimate must move further from
+  // the neutral compatibility baseline, not jump there immediately.
+  assert.ok(settled > early, 'more evidence should weigh behaviour more heavily');
+  assert.ok(early > compat, 'a strong keep rate should still lift the estimate');
+});
+
+test('the geometric mean punishes lopsided pairs', () => {
+  const lopsided = reciprocalScore(0.9, 0.1, config);
+  const balanced = reciprocalScore(0.5, 0.5, config);
+
+  assert.ok(Math.abs(lopsided - 0.3) < 1e-9);
+  assert.equal(balanced, 0.5);
+  assert.ok(
+    lopsided < balanced,
+    'a one-sided pair must not outrank an evenly matched one of the same mean'
+  );
+});
+
+test('the imbalance penalty is available but disabled by default', () => {
+  assert.equal(config.imbalance_lambda, 0);
+
+  const penalised = resolveConfig({ imbalance_lambda: 0.5 });
+  assert.ok(reciprocalScore(0.9, 0.1, penalised) < reciprocalScore(0.9, 0.1, config));
+});
+
+test('estimates stay inside the probability clamp', () => {
+  const strong = member({ timesShown: 100, timesKept: 100 });
+  const weak = member({ timesShown: 100, timesKept: 0 });
+
+  assert.ok(directionalEstimate(1, strong, NO_PAIR_HISTORY, config) <= config.p_max);
+  assert.ok(directionalEstimate(0, weak, NO_PAIR_HISTORY, config) >= config.p_min);
+});
+
+test('not being picked is situational — a pair may return after cooldown', () => {
+  const now = new Date('2026-03-01T00:00:00Z');
+  const history: PairHistory = {
+    timesShown: 1,
+    firstReciprocalScore: 0.6,
+    lastReciprocalScore: 0.58,
+  };
+
+  assert.equal(
+    mayResurface(history, 0.58, new Date('2026-02-01T00:00:00Z'), null, now, config),
+    true,
+    'an expired cooldown should allow the pair back'
+  );
+  assert.equal(
+    mayResurface(history, 0.58, new Date('2026-04-01T00:00:00Z'), null, now, config),
+    false,
+    'an active cooldown should hold the pair back'
+  );
+});
+
+test('a pair stops resurfacing once it hits the repeat limit or is retired', () => {
+  const now = new Date('2026-03-01T00:00:00Z');
+  const exhausted: PairHistory = {
+    timesShown: config.max_pair_appearances,
+    firstReciprocalScore: 0.6,
+    lastReciprocalScore: 0.6,
+  };
+
+  assert.equal(mayResurface(exhausted, 0.6, null, null, now, config), false);
+  assert.equal(
+    mayResurface(NO_PAIR_HISTORY, 0.6, null, new Date('2026-01-01T00:00:00Z'), now, config),
+    false,
+    'an explicitly retired pair never returns'
+  );
+});
+
+test('a pair whose estimate keeps collapsing is abandoned', () => {
+  const now = new Date('2026-03-01T00:00:00Z');
+  const fading: PairHistory = {
+    timesShown: 1,
+    firstReciprocalScore: 0.7,
+    lastReciprocalScore: 0.3,
+  };
+
+  // 0.7 -> 0.3 is a 0.4 drop, past the 0.35 abandon threshold.
+  assert.equal(mayResurface(fading, 0.3, null, null, now, config), false);
+  // A shallower decline is still worth another look.
+  assert.equal(mayResurface(fading, 0.55, null, null, now, config), true);
+});
+
+test('a pair below the score floor is never resurfaced', () => {
+  const now = new Date('2026-03-01T00:00:00Z');
+  assert.equal(
+    mayResurface(NO_PAIR_HISTORY, config.min_reciprocal_score - 0.01, null, null, now, config),
+    false
+  );
+});

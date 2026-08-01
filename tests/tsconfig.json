@@ -14,7 +14,11 @@
     "../src/lib/arcLayout.ts",
     "../src/lib/birthDate.ts",
     "../src/lib/countrySelection.ts",
-    "../src/lib/roundInvariants.ts"
+    "../src/lib/roundInvariants.ts",
+    "../src/matching/config.ts",
+    "../src/matching/estimate.ts",
+    "../src/matching/fairness.ts",
+    "../src/matching/allocate.ts"
   ],
   "exclude": []
 }
