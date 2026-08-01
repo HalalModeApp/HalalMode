@@ -348,7 +348,7 @@ select throws_ok(
     (select run_id from matching_test_runs where mode = 'shadow')
   ),
   '22023',
-  'An unfinished shadow run is required',
+  'An unfinished matching run is required',
   'finished shadow output is immutable'
 );
 

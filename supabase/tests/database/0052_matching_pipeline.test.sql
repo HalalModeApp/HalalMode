@@ -164,8 +164,8 @@ select throws_ok(
       now() + interval '1 day')$$,
     (select id from pipeline_run)
   ),
-  '22023',
-  'Matching edges must be unique, non-self and have bounded scores',
+  '40001',
+  'A matching edge violates eligibility or active score limits',
   'one invalid edge rejects the entire plan'
 );
 select is((select count(*)::integer from rounds where user_id in (
