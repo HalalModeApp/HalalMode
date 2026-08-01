@@ -9,17 +9,29 @@ select plan(27);
 select ok(
   has_function_privilege('service_role', 'public.matching_run_config()', 'EXECUTE')
   and has_function_privilege('service_role', 'public.release_flag_active(text)', 'EXECUTE')
-  and has_function_privilege('service_role', 'public.matching_run_start(text,integer,bigint,text)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.matching_run_start_service(text,integer,bigint,text,date,timestamptz)', 'EXECUTE')
   and has_function_privilege('service_role', 'public.matching_run_finish(uuid,integer,integer,integer,integer,jsonb,bigint,jsonb,text)', 'EXECUTE')
-  and has_function_privilege('service_role', 'public.matching_candidate_edges_service(uuid,uuid,integer)', 'EXECUTE')
-  and has_function_privilege('service_role', 'public.matching_member_signals_service()', 'EXECUTE')
-  and has_function_privilege('service_role', 'public.persist_matching_round_service(uuid,jsonb,jsonb,timestamptz)', 'EXECUTE')
-  and has_function_privilege('service_role', 'public.matching_shadow_round_service(uuid,jsonb)', 'EXECUTE'),
-  'service role can call the complete narrow matching facade'
+  and has_function_privilege('service_role', 'public.matching_candidate_snapshot_prepare_service(uuid,bigint)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.matching_candidate_edges_service(uuid,uuid,uuid,integer)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.matching_member_signals_service(uuid)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.matching_live_finalize_service(uuid,jsonb,jsonb,jsonb,timestamptz,jsonb,bigint,jsonb)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.matching_shadow_finalize_service(uuid,jsonb,jsonb,bigint,jsonb)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.matching_run_start(text,integer,bigint,text)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.matching_candidate_edges_service(uuid,uuid,integer)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.matching_member_signals_service()', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.persist_matching_round_service(uuid,jsonb,jsonb,timestamptz)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.matching_shadow_round_service(uuid,jsonb)', 'EXECUTE'),
+  'service role can read matching inputs but legacy non-atomic writers are revoked'
 );
 
 select ok(
   not has_function_privilege('anon', 'public.matching_run_config()', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.matching_run_start_service(text,integer,bigint,text,date,timestamptz)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.matching_candidate_snapshot_prepare_service(uuid,bigint)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.matching_candidate_edges_service(uuid,uuid,uuid,integer)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.matching_member_signals_service(uuid)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.matching_live_finalize_service(uuid,jsonb,jsonb,jsonb,timestamptz,jsonb,bigint,jsonb)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.matching_shadow_finalize_service(uuid,jsonb,jsonb,bigint,jsonb)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.matching_candidate_edges_service(uuid,uuid,integer)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.matching_member_signals_service()', 'EXECUTE')
   and not has_function_privilege('anon', 'public.persist_matching_round_service(uuid,jsonb,jsonb,timestamptz)', 'EXECUTE')
@@ -29,6 +41,12 @@ select ok(
 
 select ok(
   not has_function_privilege('authenticated', 'public.matching_run_config()', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.matching_run_start_service(text,integer,bigint,text,date,timestamptz)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.matching_candidate_snapshot_prepare_service(uuid,bigint)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.matching_candidate_edges_service(uuid,uuid,uuid,integer)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.matching_member_signals_service(uuid)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.matching_live_finalize_service(uuid,jsonb,jsonb,jsonb,timestamptz,jsonb,bigint,jsonb)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.matching_shadow_finalize_service(uuid,jsonb,jsonb,bigint,jsonb)', 'EXECUTE')
   and not has_function_privilege('authenticated', 'public.matching_run_start(text,integer,bigint,text)', 'EXECUTE')
   and not has_function_privilege('authenticated', 'public.matching_run_finish(uuid,integer,integer,integer,integer,jsonb,bigint,jsonb,text)', 'EXECUTE')
   and not has_function_privilege('authenticated', 'public.matching_candidate_edges_service(uuid,uuid,integer)', 'EXECUTE')
@@ -55,23 +73,26 @@ select ok(
   'service role reaches matching internals only through the public facade'
 );
 
-select is(
+select ok(
   (
-    select count(*)::integer
-    from pg_proc p
-    join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public'
-      and p.proname = any (array[
-        'matching_run_config', 'release_flag_active', 'matching_run_start',
-        'matching_run_finish', 'matching_candidate_edges_service',
-        'matching_member_signals_service', 'persist_matching_round_service',
-        'matching_shadow_round_service'
-      ])
-      and p.prosecdef
-      and position('auth.role()' in pg_get_functiondef(p.oid)) > 0
+    select bool_and(
+      p.prosecdef
+      and pg_get_functiondef(p.oid) ~ 'auth\.(role|jwt)\(\)'
+    )
+    from unnest(array[
+      'public.matching_run_config()'::regprocedure,
+      'public.release_flag_active(text)'::regprocedure,
+      'public.matching_run_start_service(text,integer,bigint,text,date,timestamptz)'::regprocedure,
+      'public.matching_candidate_snapshot_prepare_service(uuid,bigint)'::regprocedure,
+      'public.matching_candidate_edges_service(uuid,uuid,uuid,integer)'::regprocedure,
+      'public.matching_member_signals_service(uuid)'::regprocedure,
+      'public.matching_live_finalize_service(uuid,jsonb,jsonb,jsonb,timestamptz,jsonb,bigint,jsonb)'::regprocedure,
+      'public.matching_shadow_finalize_service(uuid,jsonb,jsonb,bigint,jsonb)'::regprocedure,
+      'public.matching_run_finish(uuid,integer,integer,integer,integer,jsonb,bigint,jsonb,text)'::regprocedure
+    ]) wanted(oid)
+    join pg_proc p on p.oid = wanted.oid
   ),
-  8,
-  'all eight matching facade functions are SECURITY DEFINER and check the JWT role'
+  'every current matching service boundary is SECURITY DEFINER and checks the JWT role explicitly'
 );
 
 select set_config(
@@ -297,11 +318,12 @@ select throws_ok(
 select lives_ok(
   format(
     $$select public.matching_run_finish(
-      %L::uuid, 2, 1, 0, 0, '{"fetch":5}'::jsonb, 1024, '[]'::jsonb, null
+      %L::uuid, null, null, null, null, '{"fetch":5}'::jsonb, 1024,
+      '[]'::jsonb, 'legacy shadow path retired'
     )$$,
     (select run_id from matching_test_runs where mode = 'shadow')
   ),
-  'a shadow run can record successful completion metrics'
+  'the legacy unfinalized shadow path can be closed as a failed run'
 );
 
 select ok(
@@ -310,18 +332,18 @@ select ok(
     from halal_mode_private.matching_runs
     where id = (select run_id from matching_test_runs where mode = 'shadow')
       and finished_at is not null
-      and eligible_members = 2
-      and edges_after_filter = 1
+      and eligible_members = 0
+      and edges_after_filter = 0
       and stage_latencies = '{"fetch":5}'::jsonb
-      and error is null
+      and error = 'legacy shadow path retired'
   ),
-  'run completion stores the supplied metrics on the same private run'
+  'failure completion derives zero snapshot counts instead of trusting supplied metrics'
 );
 
 select lives_ok(
   format(
     $$select public.matching_run_finish(
-      %L::uuid, 2, 0, 0, 0, '{"fetch":9}'::jsonb, 2048,
+      %L::uuid, null, null, null, null, '{"fetch":9}'::jsonb, 2048,
       '["candidate_fetch_failed"]'::jsonb, 'candidate fetch failed'
     )$$,
     (select run_id from matching_test_runs where mode = 'live')

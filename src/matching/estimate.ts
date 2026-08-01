@@ -56,6 +56,17 @@ export const NO_PAIR_HISTORY: PairHistory = {
   lastReciprocalScore: null,
 };
 
+export type PairRetirementReason = 'repeat_limit' | 'score_collapse';
+
+export interface PairResurfaceDecision {
+  eligible: boolean;
+  /**
+   * A durable state change proposed by the pure planner. The caller must only
+   * persist this through the live atomic round RPC; shadow mode discards it.
+   */
+  retirementReason: PairRetirementReason | null;
+}
+
 export function clamp(value: number, low: number, high: number): number {
   if (Number.isNaN(value)) return low;
   return Math.min(high, Math.max(low, value));
@@ -164,6 +175,33 @@ export function reciprocalScore(
  * still under the repeat limit, past its cooldown, not retired, and its
  * estimate has not collapsed since the first showing.
  */
+export function evaluatePairResurface(
+  history: PairHistory,
+  currentScore: number,
+  cooldownUntil: Date | null,
+  retiredAt: Date | null,
+  now: Date,
+  config: MatchingConfig
+): PairResurfaceDecision {
+  if (retiredAt) return { eligible: false, retirementReason: null };
+  if (history.timesShown >= config.max_pair_appearances) {
+    return { eligible: false, retirementReason: 'repeat_limit' };
+  }
+  if (cooldownUntil && cooldownUntil > now) {
+    return { eligible: false, retirementReason: null };
+  }
+
+  const first = history.firstReciprocalScore;
+  if (first !== null && first - currentScore >= config.repeat_abandon_drop) {
+    return { eligible: false, retirementReason: 'score_collapse' };
+  }
+  if (currentScore < config.min_reciprocal_score) {
+    return { eligible: false, retirementReason: null };
+  }
+  return { eligible: true, retirementReason: null };
+}
+
+/** Backward-compatible boolean form for simulations and focused policy tests. */
 export function mayResurface(
   history: PairHistory,
   currentScore: number,
@@ -172,15 +210,12 @@ export function mayResurface(
   now: Date,
   config: MatchingConfig
 ): boolean {
-  if (retiredAt) return false;
-  if (history.timesShown >= config.max_pair_appearances) return false;
-  if (cooldownUntil && cooldownUntil > now) return false;
-  if (currentScore < config.min_reciprocal_score) return false;
-
-  const first = history.firstReciprocalScore;
-  if (first !== null && first - currentScore >= config.repeat_abandon_drop) {
-    // The estimate has kept falling across appearances. Stop trying.
-    return false;
-  }
-  return true;
+  return evaluatePairResurface(
+    history,
+    currentScore,
+    cooldownUntil,
+    retiredAt,
+    now,
+    config
+  ).eligible;
 }

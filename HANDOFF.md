@@ -76,6 +76,21 @@ Branch `main`. Read `docs/RECIPROCAL_MATCHING_V1_DESIGN.md` first,
 especially §10 (three design errors simulation caught), §11 (scale) and §12
 (imbalance).
 
+## Verified implementation baseline
+
+- Migrations through `0059` apply from a clean database and all 528 pgTAP
+  contracts pass in GitHub Actions run `30694719406`.
+- Client typecheck, lint, all 131 tests, the Android export, and the
+  `generate-round` Deno typecheck pass in the same run.
+- Live completion is one idempotent database transaction: it rechecks current
+  safety state, persists reciprocal rounds, stores durable repeat retirements,
+  records derived metrics, and claims the cycle together. A classifiable late
+  veto gets at most one fresh snapshot/replan; an ambiguous response gets one
+  exact retry of the same request.
+- Shadow completion can write only private shadow results and run diagnostics;
+  its database contracts assert that live rounds, introductions, connections,
+  pair exposure, notifications, and repeat retirements remain untouched.
+
 ## Assess this work independently before extending it
 
 Do not treat the previous agent's code as correct because the tests pass. The
@@ -102,49 +117,37 @@ assumptions as well as its intent. Specifically worth attacking:
 - **Compatibility weights every term equally** (`avg` over the terms array). Age
   and shared languages count the same as religious practice. That is almost
   certainly wrong as product judgement; it was chosen for simplicity.
-- **`0049`–`0054` have never executed.** Assume syntax and permission errors.
 
 ## What remains to reach done
 
 In dependency order.
 
-1. **Run the SQL.** Migrations `0049`–`0054` and their pgTAP suites are still
-   unexecuted. The client/Edge static checks are green, but this machine has no
-   Docker or local PostgreSQL and the Supabase plan has no preview branches.
-   Push the current checkpoint so the existing `database-contracts` GitHub
-   Action can run `supabase db reset --local && supabase test db` in an isolated
-   stack. Fix every migration or contract failure before seeding or shadow
-   execution. The new tests cover capacity, deterministic pagination,
-   cooldown/retirement/explicit pass, all-or-nothing reciprocal persistence,
-   service-role boundaries, shadow isolation, durable outcomes, and the
-   established `get_current_round_state` response contract.
-
-2. **Seed a realistic population and run a shadow round.**
+1. **Seed a realistic population and run a shadow round.**
    `POST /generate-round?mode=shadow`. Verify `matching_runs` receives stage
    latencies and `edges_after_filter`, that `shadow_round_edges` fills, and that
    `introductions`, `connections` and `pair_exposure` are all untouched. That
    last check is the whole basis for trusting shadow mode.
 
-3. **Benchmark `passes_criteria`.** The entire latency model in §7 rests on an
+2. **Benchmark `passes_criteria`.** The entire latency model in §7 rests on an
    assumed ~25 µs per call. Measure it, then correct §7 rather than leaving an
    estimate presented as a projection.
 
-4. **Wire the new round states into the app.** `0053` returns `awaiting_turn`
+3. **Wire the new round states into the app.** `0053` returns `awaiting_turn`
    and `at_match_capacity`; copy exists in `src/i18n/catalog.ts` in both
    languages, but `app/(tabs)/daily.tsx` still branches only on
    `matching_inputs_unavailable`. Deferred members currently see the wrong
    message until this is done.
 
-5. **`explicit_pass` has no way to be set.** The enum value exists and the
+4. **`explicit_pass` has no way to be set.** The enum value exists and the
    prefilter honours it, but no UI or RPC ever writes it. Either add a
    deliberate "not for me" action or drop the value — a filter nothing can
    trigger is worse than no filter.
 
-6. **Retire the dead path.** Once v1 is live, `generate_round_for_pairs` and the
+5. **Retire the dead path.** Once v1 is live, `generate_round_for_pairs` and the
    `|band| <= 1` gate are unused. Removing them is the point at which the band
    retirement approved in §2 actually happens.
 
-7. **Metrics.** §Metrics of the brief asks for exposure distribution, zero-match
+6. **Metrics.** §Metrics of the brief asks for exposure distribution, zero-match
    rate, time to first mutual, mutual rate, Gini, and free/premium and
    new/established breakdowns. `matching_runs` records per-run performance only.
    Nothing yet computes outcome metrics over time.
