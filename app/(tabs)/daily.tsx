@@ -179,17 +179,26 @@ export default function DailyScreen() {
     setConfirmOpen(true);
   }, []);
 
-  const moveActiveIntroduction = useCallback(
-    (direction: 'previous' | 'next') => {
-      if (!activeId || live.length < 2) return;
-      const currentIndex = live.findIndex((item) => item.id === activeId);
-      if (currentIndex < 0) return;
-      const offset = direction === 'next' ? 1 : -1;
-      const nextIndex = (currentIndex + offset + live.length) % live.length;
-      const next = live[nextIndex];
-      if (next) setActive(next.id);
+  /**
+   * The card deck reports the exact profile it selected rather than only a
+   * direction. This prevents rapid consecutive swipes from calculating from a
+   * stale activeId and leaving the hero card and circle carousel one step apart.
+   */
+  const selectActiveIntroductionByProfileId = useCallback(
+    (profileId: string) => {
+      const introduction = live.find((item) => item.profile.id === profileId);
+      if (introduction) setActive(introduction.id);
     },
-    [activeId, live, setActive]
+    [live, setActive]
+  );
+
+  /** Opens the exact profile that is physically centred in the hero deck. */
+  const openIntroductionByProfileId = useCallback(
+    (profileId: string) => {
+      const introduction = live.find((item) => item.profile.id === profileId);
+      if (introduction) router.push(`/introduction/${introduction.id}`);
+    },
+    [live]
   );
 
   if (isLoading) {
@@ -317,8 +326,8 @@ export default function DailyScreen() {
             activeId={active.profile.id}
             popMode={popMode}
             chosen={inChosenZone}
-            onPress={() => router.push(`/introduction/${active.id}`)}
-            onSwipe={moveActiveIntroduction}
+            onPress={openIntroductionByProfileId}
+            onSwipe={selectActiveIntroductionByProfileId}
           />
         ) : null}
 
