@@ -43,15 +43,32 @@ test('hiding is offered on every relationship surface and is keyed the same way'
   assert.match(control, /testIds\.safety\.confirmHide/u, 'hiding must be confirmed, never one tap');
 });
 
+test('the mutual half of hiding is told from above the screen it leaves', () => {
+  const control = read('src/components/safety/SafetyControl.tsx');
+  // Hiding closes the profile and returns to the set, so a notice living inside
+  // that screen would unmount before it could be read. The toast is mounted
+  // above the router for exactly this.
+  assert.match(control, /showToast\(t\('safety\.hideToast'\)\)/u);
+  assert.doesNotMatch(
+    control,
+    /setView\('hidden'\)/u,
+    'hiding should not raise a success sheet as well as a toast'
+  );
+
+  const layout = read('app/_layout.tsx');
+  assert.match(layout, /<ToastProvider>[\s\S]*<RoundProvider>/u, 'the toast must outlive the router');
+});
+
 test('hiding is described as mutual and free of blame in both languages', () => {
+  // The toast is the only place the other direction is stated, so it carries
+  // the promise the menu item does not have room for.
   const catalog = read('src/i18n/catalog.ts');
   for (const key of [
     'safety.hide',
     'safety.hideTitle',
     'safety.hideBody',
     'safety.hideConfirm',
-    'safety.hideSuccessTitle',
-    'safety.hideSuccessBody',
+    'safety.hideToast',
   ]) {
     // Two occurrences: the English catalog and the Arabic one. A key present
     // once has been added to English and forgotten in Arabic.

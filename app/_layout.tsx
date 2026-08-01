@@ -22,6 +22,7 @@ import { queryClient } from '@/lib/queryClient';
 import { I18nProvider } from '@/i18n';
 import { AuthGate, AuthProvider } from '@/state/auth';
 import { RoundProvider } from '@/state/round';
+import { ToastProvider } from '@/state/toast';
 import { SessionProvider } from '@/state/session';
 import { FeatureFlagsProvider } from '@/state/featureFlags';
 import { color } from '@/theme/tokens';
@@ -64,6 +65,9 @@ export default function RootLayout() {
                 <FeatureFlagsProvider>
                   <I18nProvider>
                     <AppRecoveryBoundary>
+                      {/* Above the router: the notices worth showing this way
+                          accompany something that also navigates. */}
+                      <ToastProvider>
                       <RoundProvider>
                         <StatusBar style="dark" />
                         <Stack
@@ -92,6 +96,7 @@ export default function RootLayout() {
                           />
                         </Stack>
                       </RoundProvider>
+                      </ToastProvider>
                     </AppRecoveryBoundary>
                   </I18nProvider>
                 </FeatureFlagsProvider>

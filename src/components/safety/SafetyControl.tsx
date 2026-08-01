@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Text } from '@/components/ui/Text';
 import { useI18n } from '@/i18n';
+import { useToast } from '@/state/toast';
 import { queryKeys } from '@/lib/queryClient';
 import { testIds } from '@/lib/testIds';
 import { alpha, color, radius, shadow, space } from '@/theme/tokens';
@@ -28,16 +29,7 @@ type SafetyAction =
   | { kind: 'report'; reason: ReportReason }
   | { kind: 'block' }
   | { kind: 'hide' };
-type SafetyView =
-  | 'closed'
-  | 'menu'
-  | 'report'
-  | 'block'
-  | 'hide'
-  | 'reported'
-  | 'blocked'
-  | 'hidden'
-  | 'error';
+type SafetyView = 'closed' | 'menu' | 'report' | 'block' | 'hide' | 'reported' | 'blocked' | 'error';
 
 const REPORT_REASONS: ReportReason[] = [
   'harassment',
@@ -50,7 +42,6 @@ const DANGER = '#9C2F2F';
 const OUTCOME_COPY = {
   reported: { title: 'safety.reportSuccessTitle', body: 'safety.reportSuccessBody' },
   blocked: { title: 'safety.blockSuccessTitle', body: 'safety.blockSuccessBody' },
-  hidden: { title: 'safety.hideSuccessTitle', body: 'safety.hideSuccessBody' },
 } as const;
 
 export function SafetyControl({
@@ -65,6 +56,7 @@ export function SafetyControl({
   tone?: 'light' | 'dark';
 }) {
   const { isRTL, t } = useI18n();
+  const { show: showToast } = useToast();
   const queryClient = useQueryClient();
   const [view, setView] = useState<SafetyView>('closed');
   const [lastAction, setLastAction] = useState<SafetyAction | null>(null);
@@ -102,7 +94,18 @@ export function SafetyControl({
       }
       await queryClient.invalidateQueries({ queryKey: queryKeys.round });
       onBlocked?.();
-      setView(action.kind === 'hide' ? 'hidden' : 'blocked');
+      if (action.kind === 'hide') {
+        // No success sheet. The confirmation already said what happens to them;
+        // the only thing left to say is that it runs the other way too, and a
+        // toast can say it from above the screen this is about to leave.
+        showToast(t('safety.hideToast'));
+        // Not close(): it refuses while the mutation is pending, which it still
+        // is inside onSuccess, and the sheet would be left open behind us.
+        setView('closed');
+        router.replace(scope.kind === 'connection' ? '/(tabs)/connections' : '/(tabs)/daily');
+        return;
+      }
+      setView('blocked');
     },
     onError: () => setView('error'),
   });
@@ -118,9 +121,7 @@ export function SafetyControl({
     setView('closed');
   };
   const finish = () => {
-    // A hidden person is as gone as a blocked one, so both leave the surface
-    // that was showing them rather than returning to an empty profile.
-    const departed = view === 'blocked' || view === 'hidden';
+    const departed = view === 'blocked';
     close();
     if (!departed) return;
     router.replace(scope.kind === 'connection' ? '/(tabs)/connections' : '/(tabs)/daily');
@@ -171,9 +172,9 @@ export function SafetyControl({
               <>
                 <Text variant="displaySmall">{t('safety.title')}</Text>
                 <Text variant="bodySmall" style={styles.body}>{t('safety.privateBody')}</Text>
-                {/* First, and not marked destructive: recognising a cousin is
-                    the most ordinary reason to open this menu, and it says
-                    nothing against them. */}
+                {/* First, and not marked destructive: recognising somebody from
+                    life is the most ordinary reason to open this menu, and it
+                    says nothing against them. */}
                 <SafetyOption
                   testID={testIds.safety.hide}
                   label={t('safety.hide')}
@@ -246,7 +247,7 @@ export function SafetyControl({
               </>
             ) : null}
 
-            {view === 'reported' || view === 'blocked' || view === 'hidden' ? (
+            {view === 'reported' || view === 'blocked' ? (
               <>
                 <Text variant="displaySmall">{t(OUTCOME_COPY[view].title)}</Text>
                 <Text variant="bodySmall" style={styles.body}>{t(OUTCOME_COPY[view].body)}</Text>

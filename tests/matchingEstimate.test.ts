@@ -251,66 +251,55 @@ test('repeat exhaustion proposes retirement while an already-retired pair propos
   );
 });
 
-test('one pass costs the pair no rank at all', () => {
-  const once: PairHistory = {
-    timesShown: 1,
-    firstReciprocalScore: null,
-    lastReciprocalScore: null,
-    explicitPassCount: 1,
-  };
-  // A single pass has already been answered with months of silence, and it is
-  // one reading of one day. It must not also follow them back.
+const passedPair = (explicitPassCount: number): PairHistory => ({
+  timesShown: 1,
+  firstReciprocalScore: null,
+  lastReciprocalScore: null,
+  explicitPassCount,
+});
+
+test('the first pass already costs the pair rank', () => {
+  // One quick scroll past somebody is worth a nudge, not a disappearance. The
+  // nudge is here; the disappearance does not arrive until the second pass.
   assert.equal(
-    pairPrior(once, config),
-    pairPrior({ ...once, explicitPassCount: 0 }, config)
+    pairPrior(passedPair(1), config),
+    pairPrior(passedPair(0), config) * config.repeat_pass_penalty
   );
 });
 
-test('a second pass costs rank, and does not close the pair', () => {
-  const twice: PairHistory = {
-    timesShown: 1,
-    firstReciprocalScore: null,
-    lastReciprocalScore: null,
-    explicitPassCount: 2,
-  };
-  const once = { ...twice, explicitPassCount: 1 };
-
-  assert.ok(pairPrior(twice, config) < pairPrior(once, config), 'the second no should cost them');
-  assert.equal(pairPrior(twice, config), pairPrior(once, config) * config.repeat_pass_penalty);
-
-  // Lower, never zero. They can still be shown and still be chosen — only a
-  // member closes a pair, by hiding someone.
-  assert.ok(pairPrior(twice, config) > 0);
-  assert.equal(
-    mayResurface(twice, 0.6, null, null, new Date('2026-03-01T00:00:00Z'), config),
-    true,
-    'a twice-passed pair is ranked down, not retired'
-  );
+test('a pass lowers rank without closing the pair', () => {
+  for (const count of [1, 2, 3]) {
+    const history = passedPair(count);
+    assert.ok(pairPrior(history, config) > 0, `a pair passed ${count} times still scores above zero`);
+    assert.equal(
+      mayResurface(history, 0.6, null, null, new Date('2026-03-01T00:00:00Z'), config),
+      true,
+      'a passed pair is ranked down, never retired — only a member closes a pair'
+    );
+  }
 });
 
 test('the pass penalty compounds and stays inside the prior', () => {
-  const history = (explicitPassCount: number): PairHistory => ({
-    timesShown: 1,
-    firstReciprocalScore: null,
-    lastReciprocalScore: null,
-    explicitPassCount,
-  });
   assert.equal(
-    pairPrior(history(3), config),
-    pairPrior(history(2), config) * config.repeat_pass_penalty
+    pairPrior(passedPair(3), config),
+    pairPrior(passedPair(2), config) * config.repeat_pass_penalty
   );
   for (const count of [0, 1, 2, 5, 20]) {
-    const value = pairPrior(history(count), config);
+    const value = pairPrior(passedPair(count), config);
     assert.ok(value > 0 && value <= 1, `prior stayed in range at ${count} passes`);
   }
 });
 
-test('the pass penalty is configurable and fails closed', () => {
+test('the pass settings are configurable and fail closed', () => {
   assert.throws(() => resolveConfig({ repeat_pass_penalty: 0 }), /Explicit pass/);
   assert.throws(() => resolveConfig({ repeat_pass_penalty: 1.2 }), /Explicit pass/);
   assert.throws(() => resolveConfig({ explicit_pass_cooldown_days: 0 }), /Explicit pass/);
-  // 1 is legal and means "a second pass costs nothing", which is a choice
-  // somebody may want to make deliberately.
+  // Banning on the very first pass is the behaviour this replaced, so the
+  // configuration refuses to express it.
+  assert.throws(() => resolveConfig({ explicit_pass_ban_after: 1 }), /Explicit pass/);
+
+  // 1 is legal and means "a pass costs no rank", which somebody may want to
+  // choose deliberately.
   assert.equal(resolveConfig({ repeat_pass_penalty: 1 }).repeat_pass_penalty, 1);
 });
 

@@ -155,11 +155,17 @@ export interface MatchingConfig {
    */
   explicit_pass_cooldown_days: number;
   /**
-   * What each pass beyond the first multiplies the pair prior by. A second no,
-   * months after the first, costs rank rather than closing the pair — only a
-   * member closes a pair, by hiding someone.
+   * What each pass multiplies the pair prior by, from the first onward. A no
+   * costs rank rather than closing the pair — only a member closes a pair, by
+   * hiding someone.
    */
   repeat_pass_penalty: number;
+  /**
+   * Passes at which one also holds the pair apart for the cooldown. At 2, a
+   * first pass is a rank penalty alone: one quick scroll past somebody is worth
+   * a nudge, not a disappearance.
+   */
+  explicit_pass_ban_after: number;
 }
 
 /** Matches the seeded row in migration 0049. */
@@ -238,6 +244,7 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
 
   explicit_pass_cooldown_days: 90,
   repeat_pass_penalty: 0.5,
+  explicit_pass_ban_after: 2,
 };
 
 /**
@@ -383,7 +390,9 @@ export function validateConfig(config: MatchingConfig): MatchingConfig {
   // multiplier's clothes — the thing this deliberately is not.
   if (config.explicit_pass_cooldown_days < 1
       || !Number.isInteger(config.explicit_pass_cooldown_days)
-      || !(config.repeat_pass_penalty > 0 && config.repeat_pass_penalty <= 1)) {
+      || !(config.repeat_pass_penalty > 0 && config.repeat_pass_penalty <= 1)
+      || config.explicit_pass_ban_after < 2
+      || !Number.isInteger(config.explicit_pass_ban_after)) {
     throw new Error('Explicit pass configuration is invalid');
   }
   return config;

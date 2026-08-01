@@ -117,19 +117,18 @@ export function confidence(member: MemberSignals, config: MatchingConfig): numbe
  * mutual pick. Fresh pairs start at 1 and are neither rewarded nor punished.
  *
  * A deliberate pass is stronger evidence than an appearance that simply went
- * nowhere, so from the second one it costs the pair rank on top of the ordinary
- * decay. The first pass costs nothing here — it has already been answered with
- * a few months of silence, and one pass is a single reading of a single day.
- * The second is a member telling us the same thing twice, months apart.
+ * nowhere, so every pass costs the pair rank on top of the ordinary decay,
+ * starting with the first and compounding after it.
  *
- * It is a lower rank, not a removal. They can still be shown, and still be
- * chosen; they simply stop displacing people who were never turned down. Only a
- * member closes a pair for good, by hiding someone.
+ * It is a lower rank, not a removal. They can still be shown and still be
+ * chosen; they simply stop outranking people who were never turned down. A
+ * second pass adds a cooldown on top of this, and only a member closes a pair
+ * for good, by hiding someone.
  */
 export function pairPrior(history: PairHistory, config: MatchingConfig): number {
   const decay = Math.pow(config.repeat_decay, Math.max(0, history.timesShown));
-  const repeatedPasses = Math.max(0, history.explicitPassCount - 1);
-  const passPenalty = Math.pow(config.repeat_pass_penalty, repeatedPasses);
+  const passes = Math.max(0, history.explicitPassCount);
+  const passPenalty = Math.pow(config.repeat_pass_penalty, passes);
   return clamp(decay * passPenalty, 0, 1);
 }
 
