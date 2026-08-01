@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { DEFAULT_MATCHING_CONFIG, resolveConfig } from '../src/matching/config';
+import {
+  DEFAULT_MATCHING_CONFIG,
+  resolveConfig,
+  resolveStoredConfig,
+} from '../src/matching/config';
 import {
   appeal,
   confidence,
@@ -64,6 +68,16 @@ test('invalid matching configuration fails closed', () => {
   assert.throws(() => resolveConfig({ allocator: 'unknown' }), /allocator/);
   assert.throws(() => resolveConfig({ repeat_cooldown_days: -1 }), /Repeat/);
   assert.throws(() => resolveConfig({ p_min: 0.9, p_max: 0.2 }), /probability bounds/);
+});
+
+test('a recorded config cannot silently inherit code defaults', () => {
+  assert.deepEqual(resolveStoredConfig({ ...DEFAULT_MATCHING_CONFIG }), DEFAULT_MATCHING_CONFIG);
+  const { w_pair: _missing, ...partial } = DEFAULT_MATCHING_CONFIG;
+  assert.throws(() => resolveStoredConfig(partial), /exactly every supported key/);
+  assert.throws(
+    () => resolveStoredConfig({ ...DEFAULT_MATCHING_CONFIG, future_key: 1 }),
+    /exactly every supported key/
+  );
 });
 
 test('behaviour displaces compatibility only as evidence accumulates', () => {

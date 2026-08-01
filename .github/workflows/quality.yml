@@ -50,3 +50,17 @@ jobs:
       - name: Stop isolated Supabase services
         if: always()
         run: supabase stop
+
+  edge-functions:
+    name: Edge Function typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Typecheck generate-round
+        run: deno check --node-modules-dir=auto supabase/functions/generate-round/index.ts

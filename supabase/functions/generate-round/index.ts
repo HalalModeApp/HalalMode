@@ -1,7 +1,13 @@
 /** Creates the daily introduction round at the planned Madinah Fajr time. */
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
-import { ALGORITHM_VERSION, planRound } from './matching.ts';
+import { resolveStoredConfig, type MatchingConfig } from '../../../src/matching/config.ts';
+import {
+  ALGORITHM_VERSION,
+  planRound,
+  type CandidateEdgeRow,
+  type MemberSignalRow,
+} from './matching.ts';
 
 const MADINAH_TIME_ZONE = 'Asia/Riyadh';
 
@@ -73,34 +79,36 @@ async function runMatchingV1(
   expiresAt: string
 ) {
   const config = await client.rpc('matching_run_config');
-  const params = (config.data ?? {}) as Record<string, unknown>;
-  const configVersion = Number(params['__version'] ?? 1);
+  if (config.error || !config.data || typeof config.data !== 'object' || Array.isArray(config.data)) {
+    throw new Error(`Matching configuration unavailable: ${config.error?.message ?? 'invalid payload'}`);
+  }
+  const payload = { ...(config.data as Record<string, unknown>) };
+  const configVersion = Number(payload['__version']);
+  delete payload['__version'];
+  if (!Number.isInteger(configVersion) || configVersion < 1) {
+    throw new Error('Matching configuration version is invalid');
+  }
+  const params: MatchingConfig = resolveStoredConfig(payload);
 
   // Seeded from the cycle so a run is reproducible, and so a shadow run and the
   // live run it shadows make identical choices.
   const seed = Math.floor(Date.now() / 86_400_000);
 
-  const run = await client
-    .schema('halal_mode_private')
-    .from('matching_runs')
-    .insert({
-      algorithm_version: ALGORITHM_VERSION,
-      config_version: configVersion,
-      seed,
-      mode,
-    })
-    .select('id')
-    .single();
+  const run = await client.rpc('matching_run_start', {
+    p_algorithm_version: ALGORITHM_VERSION,
+    p_config_version: configVersion,
+    p_seed: seed,
+    p_mode: mode,
+  });
   if (run.error) throw new Error(run.error.message);
-  const runId = run.data.id as string;
+  const runId = run.data as string;
 
   try {
     const started = Date.now();
-    const [edges, members] = await Promise.all([
-      client.rpc('matching_candidate_edges', { p_max_edges: 500000 }),
-      client.rpc('matching_member_signals'),
+    const [edgeRows, members] = await Promise.all([
+      fetchCandidateEdges(client, params.fail_edges_after_filter),
+      client.rpc('matching_member_signals_service'),
     ]);
-    if (edges.error) throw new Error(edges.error.message);
     if (members.error) throw new Error(members.error.message);
     const fetchMs = Date.now() - started;
 
@@ -108,60 +116,92 @@ async function runMatchingV1(
       (seed % Number(params['exposure_window_rounds'] ?? 7)) + 1;
 
     const plan = planRound(
-      edges.data ?? [],
-      members.data ?? [],
+      edgeRows,
+      (members.data ?? []) as MemberSignalRow[],
       params,
       seed,
-      roundsElapsed
+      roundsElapsed,
+      () => Date.now(),
+      { fetch: fetchMs }
     );
-    plan.stageLatencies.fetch = fetchMs;
 
     let pairsCreated = 0;
     if (mode === 'live') {
-      const persisted = await client.rpc('persist_matching_round', {
+      const persisted = await client.rpc('persist_matching_round_service', {
         p_run_id: runId,
         p_edges: plan.edges,
+        p_outcomes: plan.memberOutcomes,
         p_expires_at: expiresAt,
       });
       if (persisted.error) throw new Error(persisted.error.message);
       pairsCreated = persisted.data as number;
     } else {
-      const rows = plan.edges.flatMap((edge) => [
-        { run_id: runId, viewer_id: edge.a, subject_id: edge.b, reciprocal_score: edge.score, adjusted_utility: edge.score },
-        { run_id: runId, viewer_id: edge.b, subject_id: edge.a, reciprocal_score: edge.score, adjusted_utility: edge.score },
-      ]);
-      if (rows.length > 0) {
-        const shadow = await client
-          .schema('halal_mode_private')
-          .from('shadow_round_edges')
-          .insert(rows);
-        if (shadow.error) throw new Error(shadow.error.message);
-      }
-      pairsCreated = plan.edges.length;
+      const shadow = await client.rpc('matching_shadow_round_service', {
+        p_run_id: runId,
+        p_edges: plan.edges,
+      });
+      if (shadow.error) throw new Error(shadow.error.message);
+      pairsCreated = shadow.data as number;
     }
 
-    await client
-      .schema('halal_mode_private')
-      .from('matching_runs')
-      .update({
-        finished_at: new Date().toISOString(),
-        eligible_members: plan.eligibleMembers,
-        edges_after_filter: plan.edgesAfterFilter,
-        pairs_created: pairsCreated,
-        stage_latencies: plan.stageLatencies,
-        peak_memory_bytes: plan.peakMemoryBytes,
-        threshold_breaches: plan.thresholdBreaches,
-      })
-      .eq('id', runId);
+    const finished = await client.rpc('matching_run_finish', {
+      p_run_id: runId,
+      p_eligible_members: plan.eligibleMembers,
+      p_edges_after_filter: plan.edgesAfterFilter,
+      p_pairs_created: pairsCreated,
+      p_rounds_created: plan.memberOutcomes.filter((item) => item.outcome === 'served').length,
+      p_stage_latencies: plan.stageLatencies,
+      p_peak_memory_bytes: plan.peakMemoryBytes,
+      p_threshold_breaches: plan.thresholdBreaches,
+      p_error: null,
+    });
+    if (finished.error) throw new Error(finished.error.message);
 
     return { runId, mode, pairsCreated, deferred: plan.deferredMembers, breaches: plan.thresholdBreaches };
   } catch (error) {
-    await client
-      .schema('halal_mode_private')
-      .from('matching_runs')
-      .update({ finished_at: new Date().toISOString(), error: String(error) })
-      .eq('id', runId);
+    await client.rpc('matching_run_finish', {
+      p_run_id: runId,
+      p_eligible_members: null,
+      p_edges_after_filter: null,
+      p_pairs_created: null,
+      p_rounds_created: null,
+      p_stage_latencies: {},
+      p_peak_memory_bytes: null,
+      p_threshold_breaches: [],
+      p_error: String(error),
+    });
     throw error;
+  }
+}
+
+async function fetchCandidateEdges(
+  client: SupabaseClient,
+  failEdgeCount: number
+): Promise<CandidateEdgeRow[]> {
+  const pageSize = 1000;
+  const rows: CandidateEdgeRow[] = [];
+  let afterLow: string | null = null;
+  let afterHigh: string | null = null;
+
+  while (true) {
+    const page = await client.rpc('matching_candidate_edges_service', {
+      p_after_low: afterLow,
+      p_after_high: afterHigh,
+      p_page_size: pageSize,
+    });
+    if (page.error) throw new Error(page.error.message);
+    const batch = (page.data ?? []) as CandidateEdgeRow[];
+    rows.push(...batch);
+    if (rows.length >= failEdgeCount) {
+      throw new Error(`Candidate graph reached fail limit (${failEdgeCount})`);
+    }
+    if (batch.length < pageSize) return rows;
+    const last = batch[batch.length - 1];
+    if (!last || (last.user_low === afterLow && last.user_high === afterHigh)) {
+      throw new Error('Candidate pagination did not advance');
+    }
+    afterLow = last.user_low;
+    afterHigh = last.user_high;
   }
 }
 

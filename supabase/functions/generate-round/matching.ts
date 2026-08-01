@@ -48,7 +48,8 @@ export interface MemberSignalRow {
 }
 
 export interface RoundPlan {
-  edges: { a: string; b: string; score: number }[];
+  edges: { a: string; b: string; score: number; utility: number }[];
+  memberOutcomes: { user_id: string; outcome: 'served' | 'deferred' | 'no_candidate' }[];
   stageLatencies: Record<string, number>;
   edgesAfterFilter: number;
   eligibleMembers: number;
@@ -81,10 +82,11 @@ export function planRound(
   rawConfig: Partial<MatchingConfig>,
   seed: number,
   roundsElapsedInWindow: number,
-  now: () => number = () => Date.now()
+  now: () => number = () => Date.now(),
+  initialStageLatencies: Record<string, number> = {}
 ): RoundPlan {
   const config = resolveConfig(rawConfig);
-  const stageLatencies: Record<string, number> = {};
+  const stageLatencies: Record<string, number> = { ...initialStageLatencies };
   const mark = <T>(stage: string, fn: () => T): T => {
     const started = now();
     const value = fn();
@@ -186,12 +188,29 @@ export function planRound(
     thresholdBreaches.push('warn_peak_memory_bytes');
   }
 
+  const assignedMembers = new Set<string>();
+  for (const edge of result.assigned) {
+    assignedMembers.add(edge.a);
+    assignedMembers.add(edge.b);
+  }
+  const deferredMembers = new Set(plan.deferred);
+  const memberOutcomes = memberRows.map((row) => ({
+    user_id: row.user_id,
+    outcome: deferredMembers.has(row.user_id)
+      ? 'deferred' as const
+      : assignedMembers.has(row.user_id)
+        ? 'served' as const
+        : 'no_candidate' as const,
+  }));
+
   return {
     edges: result.assigned.map((edge) => ({
       a: edge.a,
       b: edge.b,
       score: Number(edge.reciprocal.toFixed(5)),
+      utility: Number(edge.utility.toFixed(5)),
     })),
+    memberOutcomes,
     stageLatencies,
     edgesAfterFilter: edgeRows.length,
     eligibleMembers: memberRows.length,

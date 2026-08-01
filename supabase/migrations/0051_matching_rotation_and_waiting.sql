@@ -16,12 +16,32 @@
 -- as the real ratio moves, in either direction, without a deploy.
 
 -- ---------------------------------------------------------------------------
--- Rounds since a member last received any introductions.
+-- Durable live-run outcomes and rounds since a member was last served.
 --
 -- Distinct from exposure need, which is windowed and resets. Waiting time only
 -- increases, so it can order a rotation queue without a long-deferred member
--- losing their place when the window turns over. Derived, not stored.
+-- losing their place when the window turns over. The outcome is stored because
+-- a deferred member has no public round from which waiting could be derived;
+-- aggregate health fields remain a view.
 -- ---------------------------------------------------------------------------
+
+create table if not exists halal_mode_private.matching_member_run_outcomes (
+  run_id uuid not null references halal_mode_private.matching_runs(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  outcome text not null check (outcome in ('served', 'deferred', 'no_candidate')),
+  valid_until timestamptz not null,
+  created_at timestamptz not null default now(),
+  primary key (run_id, user_id)
+);
+
+create index if not exists matching_member_outcomes_user_idx
+  on halal_mode_private.matching_member_run_outcomes (user_id, created_at desc);
+
+comment on table halal_mode_private.matching_member_run_outcomes is
+  'Private per-live-run service outcome. Durable queue evidence; never written by shadow runs or exposed to clients.';
+
+revoke all on halal_mode_private.matching_member_run_outcomes
+  from public, anon, authenticated;
 
 create or replace view halal_mode_private.match_health as
 with last_mutual as (
@@ -32,14 +52,17 @@ with last_mutual as (
     on (c.user_a = p.id or c.user_b = p.id)
   group by p.id
 ),
+live_outcomes as (
+  select o.user_id, o.outcome, r.started_at as run_started_at
+  from halal_mode_private.matching_member_run_outcomes o
+  join halal_mode_private.matching_runs r on r.id = o.run_id
+  where r.mode = 'live'
+),
 last_served as (
-  select r.user_id, max(r.opens_at) as last_served_at
-  from public.rounds r
-  where exists (
-    select 1 from public.introductions i
-    where i.round_id = r.id and i.viewer_id = r.user_id
-  )
-  group by r.user_id
+  select user_id, max(run_started_at) as last_served_at
+  from live_outcomes
+  where outcome = 'served'
+  group by user_id
 )
 select
   p.id as user_id,
@@ -69,13 +92,13 @@ select
       and r.submitted_at is not null
       and r.submitted_at > coalesce(lm.last_mutual_at, '-infinity'::timestamptz)
   ) as rounds_since_last_mutual,
-  -- Rounds opened for this member since the last one that actually contained
-  -- introductions. Zero for a member served in their most recent round.
+  -- Live matching runs recorded for this member since their last served run.
+  -- Deferred and no-candidate outcomes both age the queue; shadow runs cannot.
   (
     select count(*)
-    from public.rounds r
-    where r.user_id = p.id
-      and r.opens_at > coalesce(ls.last_served_at, '-infinity'::timestamptz)
+    from live_outcomes o
+    where o.user_id = p.id
+      and o.run_started_at > coalesce(ls.last_served_at, '-infinity'::timestamptz)
   ) as rounds_since_last_served,
   lm.last_mutual_at,
   ls.last_served_at,
@@ -94,32 +117,3 @@ comment on view halal_mode_private.match_health is
   'Private per-member matching signals, derived rather than duplicated. Never exposed to any client role.';
 
 revoke all on halal_mode_private.match_health from public, anon, authenticated;
-
--- ---------------------------------------------------------------------------
--- Configuration version 2 — adds the rotation parameters.
---
--- Uses the versioning mechanism rather than editing version 1 in place, so the
--- change is auditable and every run records which version produced it.
--- ---------------------------------------------------------------------------
-
-insert into halal_mode_private.matching_config (version, params, notes, activated_at)
-select
-  2,
-  params
-    || jsonb_build_object(
-      -- Whether an imbalanced pool serves a rotating cohort instead of
-      -- spreading thin. Gender-agnostic: the constrained side is whichever has
-      -- surplus capacity that round, so the same code serves a pool with more
-      -- men today and more women later.
-      'rotation_enabled', true,
-      -- Smallest set worth showing. Above this, mild imbalance is absorbed by
-      -- everyone getting a slightly smaller set; below it members are deferred
-      -- so those served still have a real choice. Three measured best on both
-      -- set size and match outcomes; two produced more matches but sets too
-      -- thin to choose from.
-      'rotation_min_set_size', 3
-    ),
-  'Adds serving rotation for imbalanced pools.',
-  now()
-from halal_mode_private.matching_config
-where version = 1;

@@ -145,6 +145,26 @@ export function resolveConfig(params: Partial<MatchingConfig> = {}): MatchingCon
   return validateConfig(merged);
 }
 
+/**
+ * Validates a versioned database payload without filling missing keys.
+ *
+ * Defaults are useful for simulations and forward-compatible tests; they are
+ * unsafe for a recorded production run because the config version would no
+ * longer describe the behavior that actually executed.
+ */
+export function resolveStoredConfig(params: unknown): MatchingConfig {
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    throw new Error('Stored matching configuration must be an object');
+  }
+  const supplied = params as Record<string, unknown>;
+  const expected = Object.keys(DEFAULT_MATCHING_CONFIG);
+  if (Object.keys(supplied).length !== expected.length
+      || expected.some((key) => !Object.prototype.hasOwnProperty.call(supplied, key))) {
+    throw new Error('Stored matching configuration must contain exactly every supported key');
+  }
+  return validateConfig(supplied as unknown as MatchingConfig);
+}
+
 /** Reject malformed server configuration before it can influence a round. */
 export function validateConfig(config: MatchingConfig): MatchingConfig {
   const numericKeys = (Object.keys(DEFAULT_MATCHING_CONFIG) as (keyof MatchingConfig)[])

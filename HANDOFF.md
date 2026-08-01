@@ -108,13 +108,16 @@ assumptions as well as its intent. Specifically worth attacking:
 
 In dependency order.
 
-1. **Run the SQL.** `supabase db reset`. Migrations `0049`–`0054` are unverified.
-   `0049` has a pgTAP test; `0052`, `0053` and `0054` have none — write them
-   following `supabase/tests/database/0035_*.test.sql`. Cover at minimum: the
-   capacity gate excludes members at their cap, `matching_candidate_edges`
-   excludes cooled/retired/explicitly-passed pairs, `persist_matching_round`
-   writes both twins or neither, and `get_daily_round_state` returns
-   `awaiting_turn` rather than `no_suitable_introductions`.
+1. **Run the SQL.** Migrations `0049`–`0054` and their pgTAP suites are still
+   unexecuted. The client/Edge static checks are green, but this machine has no
+   Docker or local PostgreSQL and the Supabase plan has no preview branches.
+   Push the current checkpoint so the existing `database-contracts` GitHub
+   Action can run `supabase db reset --local && supabase test db` in an isolated
+   stack. Fix every migration or contract failure before seeding or shadow
+   execution. The new tests cover capacity, deterministic pagination,
+   cooldown/retirement/explicit pass, all-or-nothing reciprocal persistence,
+   service-role boundaries, shadow isolation, durable outcomes, and the
+   established `get_current_round_state` response contract.
 
 2. **Seed a realistic population and run a shadow round.**
    `POST /generate-round?mode=shadow`. Verify `matching_runs` receives stage

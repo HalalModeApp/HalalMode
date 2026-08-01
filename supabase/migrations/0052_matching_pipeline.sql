@@ -130,8 +130,14 @@ join halal_mode_private.match_health h on h.user_id = p.id
 where p.onboarding_complete
   and not p.is_paused
   and public.profile_is_ready_for_matching(p.id)
+  and halal_mode_private.member_has_current_legal_consents(p.id)
   -- Rounds pause at the cap and resume automatically underneath it.
-  and h.active_match_count < l.open_connections;
+  and h.active_match_count < l.open_connections
+  -- Never append a generated plan to a round the member is already reviewing.
+  and not exists (
+    select 1 from public.rounds r
+    where r.user_id = p.id and r.submitted_at is null
+  );
 
 revoke all on halal_mode_private.matching_pool from public, anon, authenticated;
 
@@ -145,7 +151,9 @@ revoke all on halal_mode_private.matching_pool from public, anon, authenticated;
 -- ---------------------------------------------------------------------------
 
 create or replace function halal_mode_private.matching_candidate_edges(
-  p_max_edges integer default 500000
+  p_after_low uuid default null,
+  p_after_high uuid default null,
+  p_page_size integer default 1000
 ) returns table (
   user_low uuid,
   user_high uuid,
@@ -197,6 +205,17 @@ set search_path = public, halal_mode_private as $$
             or (pe.cooldown_until is not null and pe.cooldown_until > now())
           )
       )
+      and (
+        p_after_low is null
+        or least(m.id, f.id) > p_after_low
+        or (
+          least(m.id, f.id) = p_after_low
+          and greatest(m.id, f.id) > coalesce(
+            p_after_high,
+            '00000000-0000-0000-0000-000000000000'::uuid
+          )
+        )
+      )
   )
   select
     c.user_low,
@@ -211,7 +230,8 @@ set search_path = public, halal_mode_private as $$
   -- The authority on eligibility, now asked about far fewer pairs.
   where passes_criteria(c.male_id, c.female_id)
     and passes_criteria(c.female_id, c.male_id)
-  limit p_max_edges;
+  order by c.user_low, c.user_high
+  limit least(greatest(coalesce(p_page_size, 1000), 1), 1000);
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -266,6 +286,8 @@ $$;
 -- `p_edges` is [{"a": uuid, "b": uuid, "score": numeric}, ...].
 -- ---------------------------------------------------------------------------
 
+/* Obsolete first draft retained in the design history only. It is commented
+   out so PostgreSQL never compiles or grants the unsafe partial writer.
 create or replace function halal_mode_private.persist_matching_round(
   p_run_id uuid,
   p_edges jsonb,
@@ -370,10 +392,256 @@ end;
 $$;
 
 revoke all on function halal_mode_private.compatibility(uuid, uuid) from public, anon, authenticated;
-revoke all on function halal_mode_private.matching_candidate_edges(integer) from public, anon, authenticated;
+revoke all on function halal_mode_private.matching_candidate_edges(uuid, uuid, integer) from public, anon, authenticated;
 revoke all on function halal_mode_private.matching_member_signals() from public, anon, authenticated;
 revoke all on function halal_mode_private.persist_matching_round(uuid, jsonb, timestamptz) from public, anon, authenticated;
 
-grant execute on function halal_mode_private.matching_candidate_edges(integer) to service_role;
+grant execute on function halal_mode_private.matching_candidate_edges(uuid, uuid, integer) to service_role;
 grant execute on function halal_mode_private.matching_member_signals() to service_role;
 grant execute on function halal_mode_private.persist_matching_round(uuid, jsonb, timestamptz) to service_role;
+*/
+
+-- ---------------------------------------------------------------------------
+-- Audited all-or-nothing plan persistence.
+--
+-- The first draft above accepted arbitrary JSON, silently skipped failed
+-- edges, and could append introductions to a member's existing open round.
+-- Remove that unsafe signature entirely. The replacement validates the whole
+-- plan, takes the same per-member advisory locks used by connection capacity,
+-- bulk writes both reciprocal halves, and records live outcomes atomically.
+-- ---------------------------------------------------------------------------
+
+create or replace function halal_mode_private.persist_matching_round(
+  p_run_id uuid,
+  p_edges jsonb,
+  p_outcomes jsonb,
+  p_expires_at timestamptz
+) returns integer
+language plpgsql
+security definer
+set search_path = public, halal_mode_private as $$
+declare
+  v_run halal_mode_private.matching_runs%rowtype;
+  v_user uuid;
+  v_edge_count integer;
+  v_round_count integer;
+  v_cooldown_days integer;
+  v_max_appearances integer;
+begin
+  if auth.role() <> 'service_role' then
+    raise exception 'Round persistence requires service role' using errcode = '42501';
+  end if;
+  if jsonb_typeof(p_edges) is distinct from 'array'
+     or jsonb_typeof(p_outcomes) is distinct from 'array'
+     or p_expires_at is null or p_expires_at <= now() then
+    raise exception 'A valid edge array, outcome array and future expiry are required'
+      using errcode = '22023';
+  end if;
+
+  select * into v_run
+  from halal_mode_private.matching_runs
+  where id = p_run_id
+  for update;
+  if v_run.id is null or v_run.mode <> 'live' or v_run.finished_at is not null then
+    raise exception 'An unfinished live run is required' using errcode = '22023';
+  end if;
+
+  drop table if exists pg_temp.hm_v1_edges;
+  drop table if exists pg_temp.hm_v1_outcomes;
+  drop table if exists pg_temp.hm_v1_rounds;
+  create temporary table hm_v1_edges (
+    a uuid not null,
+    b uuid not null,
+    score numeric not null,
+    utility numeric not null,
+    intro_a uuid not null,
+    intro_b uuid not null
+  ) on commit drop;
+  create temporary table hm_v1_outcomes (
+    user_id uuid not null,
+    outcome text not null
+  ) on commit drop;
+  create temporary table hm_v1_rounds (
+    user_id uuid primary key,
+    round_id uuid not null,
+    tier membership_tier not null
+  ) on commit drop;
+
+  begin
+    insert into hm_v1_edges (a, b, score, utility, intro_a, intro_b)
+    select e.a, e.b, e.score, e.utility, gen_random_uuid(), gen_random_uuid()
+    from jsonb_to_recordset(p_edges)
+      as e(a uuid, b uuid, score numeric, utility numeric);
+    insert into hm_v1_outcomes (user_id, outcome)
+    select o.user_id, o.outcome
+    from jsonb_to_recordset(p_outcomes) as o(user_id uuid, outcome text);
+  exception when others then
+    raise exception 'Malformed matching plan JSON' using errcode = '22023';
+  end;
+
+  if exists (
+    select 1 from hm_v1_edges
+    where a is null or b is null or a = b
+      or score < 0 or score > 1 or utility < 0 or utility > 2
+  ) or exists (
+    select 1 from hm_v1_edges
+    group by least(a, b), greatest(a, b)
+    having count(*) > 1
+  ) then
+    raise exception 'Matching edges must be unique, non-self and have bounded scores'
+      using errcode = '22023';
+  end if;
+  if exists (
+    select 1 from hm_v1_outcomes
+    where user_id is null or outcome not in ('served', 'deferred', 'no_candidate')
+  ) or exists (
+    select 1 from hm_v1_outcomes group by user_id having count(*) > 1
+  ) then
+    raise exception 'Matching outcomes must be unique and valid' using errcode = '22023';
+  end if;
+
+  -- A served outcome is exactly a member present in at least one decided edge.
+  if exists (
+    select 1 from hm_v1_outcomes o
+    where (o.outcome = 'served') is distinct from exists (
+      select 1 from hm_v1_edges e where e.a = o.user_id or e.b = o.user_id
+    )
+  ) or exists (
+    select 1
+    from hm_v1_edges e
+    cross join lateral (values (e.a), (e.b)) member(user_id)
+    where not exists (
+      select 1 from hm_v1_outcomes o
+      where o.user_id = member.user_id and o.outcome = 'served'
+    )
+  ) then
+    raise exception 'Every edge member, and only an edge member, must be served'
+      using errcode = '22023';
+  end if;
+
+  -- Serialise with connection promotion, which uses the same namespace.
+  for v_user in select user_id from hm_v1_outcomes order by user_id loop
+    perform pg_advisory_xact_lock(hashtextextended(v_user::text, 1919));
+  end loop;
+
+  -- Eligibility and capacity are rechecked after locks so a stale fetched plan
+  -- cannot create a round for a member who has since paused, withdrawn legal
+  -- consent, opened a round, or reached connection capacity.
+  if exists (
+    select 1 from hm_v1_outcomes o
+    left join halal_mode_private.matching_pool p on p.id = o.user_id
+    where p.id is null
+  ) then
+    raise exception 'A planned member is no longer eligible' using errcode = '40001';
+  end if;
+  if exists (
+    select 1
+    from (
+      select member.user_id, count(*)::integer as edge_count
+      from hm_v1_edges e
+      cross join lateral (values (e.a), (e.b)) member(user_id)
+      group by member.user_id
+    ) counts
+    join halal_mode_private.matching_pool p on p.id = counts.user_id
+    where counts.edge_count > p.introductions_per_round
+  ) then
+    raise exception 'A matching plan exceeds member capacity' using errcode = '22023';
+  end if;
+
+  v_max_appearances := (halal_mode_private.active_matching_config() ->> 'max_pair_appearances')::integer;
+  v_cooldown_days := (halal_mode_private.active_matching_config() ->> 'repeat_cooldown_days')::integer;
+  if exists (
+    select 1
+    from hm_v1_edges e
+    join halal_mode_private.matching_pool a on a.id = e.a
+    join halal_mode_private.matching_pool b on b.id = e.b
+    where a.gender = b.gender
+       or not public.passes_criteria(e.a, e.b)
+       or not public.passes_criteria(e.b, e.a)
+       or exists (
+         select 1 from public.blocks bl
+         where (bl.blocker_id = e.a and bl.blocked_id = e.b)
+            or (bl.blocker_id = e.b and bl.blocked_id = e.a)
+       )
+       or exists (
+         select 1 from public.introduction_selections sel
+         where sel.decision = 'explicit_pass'
+           and ((sel.viewer_id = e.a and sel.subject_id = e.b)
+             or (sel.viewer_id = e.b and sel.subject_id = e.a))
+       )
+       or exists (
+         select 1 from halal_mode_private.pair_exposure pe
+         where pe.user_low = least(e.a, e.b)
+           and pe.user_high = greatest(e.a, e.b)
+           and (pe.retired_at is not null
+             or pe.times_shown >= v_max_appearances
+             or pe.cooldown_until > now())
+       )
+  ) then
+    raise exception 'A matching edge is no longer mutually eligible' using errcode = '40001';
+  end if;
+
+  insert into hm_v1_rounds (user_id, round_id, tier)
+  select o.user_id, gen_random_uuid(), p.tier
+  from hm_v1_outcomes o
+  join halal_mode_private.matching_pool p on p.id = o.user_id
+  where o.outcome = 'served';
+
+  insert into public.rounds (id, user_id, tier, expires_at)
+  select round_id, user_id, tier, p_expires_at from hm_v1_rounds;
+  get diagnostics v_round_count = row_count;
+
+  insert into public.introductions (
+    id, round_id, viewer_id, subject_id, reciprocal_id, agreements
+  )
+  select e.intro_a, ra.round_id, e.a, e.b, e.intro_b,
+         public.agreement_summary(e.a, e.b)
+  from hm_v1_edges e join hm_v1_rounds ra on ra.user_id = e.a
+  union all
+  select e.intro_b, rb.round_id, e.b, e.a, e.intro_a,
+         public.agreement_summary(e.b, e.a)
+  from hm_v1_edges e join hm_v1_rounds rb on rb.user_id = e.b;
+
+  insert into halal_mode_private.pair_exposure as pe (
+    user_low, user_high, times_shown, first_reciprocal_score,
+    last_reciprocal_score, last_shown_at, last_round_id, cooldown_until
+  )
+  select least(e.a, e.b), greatest(e.a, e.b), 1, e.score, e.score, now(),
+         r.round_id, now() + make_interval(days => v_cooldown_days)
+  from hm_v1_edges e
+  join hm_v1_rounds r on r.user_id = least(e.a, e.b)
+  on conflict (user_low, user_high) do update set
+    times_shown = pe.times_shown + 1,
+    last_reciprocal_score = excluded.last_reciprocal_score,
+    last_shown_at = excluded.last_shown_at,
+    last_round_id = excluded.last_round_id,
+    cooldown_until = excluded.cooldown_until;
+
+  insert into halal_mode_private.matching_member_run_outcomes (
+    run_id, user_id, outcome, valid_until
+  )
+  select p_run_id, user_id, outcome, p_expires_at from hm_v1_outcomes;
+
+  select count(*)::integer into v_edge_count from hm_v1_edges;
+  update halal_mode_private.matching_runs
+  set pairs_created = v_edge_count, rounds_created = v_round_count
+  where id = p_run_id;
+  return v_edge_count;
+end;
+$$;
+
+revoke all on function halal_mode_private.persist_matching_round(uuid, jsonb, jsonb, timestamptz)
+  from public, anon, authenticated;
+revoke all on function halal_mode_private.compatibility(uuid, uuid)
+  from public, anon, authenticated;
+revoke all on function halal_mode_private.matching_candidate_edges(uuid, uuid, integer)
+  from public, anon, authenticated;
+revoke all on function halal_mode_private.matching_member_signals()
+  from public, anon, authenticated;
+
+grant execute on function halal_mode_private.matching_candidate_edges(uuid, uuid, integer)
+  to service_role;
+grant execute on function halal_mode_private.matching_member_signals()
+  to service_role;
+grant execute on function halal_mode_private.persist_matching_round(uuid, jsonb, jsonb, timestamptz)
+  to service_role;
