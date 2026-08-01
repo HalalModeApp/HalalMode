@@ -426,13 +426,14 @@ measured:
 | Metric | Baseline | v1 | Reading |
 | --- | ---: | ---: | --- |
 | Mean set size | 5.73 | 5.73 | unchanged |
-| Independent reciprocal quality | 0.4983 | 0.5467 | +9.7% in this synthetic model only |
-| Members never matched | 12.0% | 15.7% | v1 regressed |
+| Independent reciprocal quality | 0.4983 | 0.5471 | +9.8% in this synthetic model only |
+| Members never matched | 12.0% | 16.3% | v1 regressed |
 | Exposure Gini | 0.1124 | 0.1129 | effectively unchanged |
-| Mutual rate | 6.42% | 5.54% | v1 regressed |
+| Mutual rate | 6.42% | 5.64% | v1 regressed |
 
 With an entirely unobserved choice model, reciprocal quality was effectively
-flat (0.4356 baseline, 0.4380 v1), while zero-match share again worsened. This
+flat (0.4356 baseline, 0.4377 v1), while zero-match share again worsened (2.0%
+to 4.0%). This
 proves the estimator is a ranking heuristic, not a calibrated predictor, and
 that v1 must remain shadow-only until real selection outcomes validate it.
 

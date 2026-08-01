@@ -19,10 +19,10 @@ or production verification.
 - Profile voice introductions use `expo-audio` and private storage. Chat voice
   sending and actual calling remain unavailable by design until a provider,
   consent model, abuse controls, and retention policy are approved.
-- Migrations through `0035`, matching pgTAP contracts, and an isolated
-  Docker-backed GitHub Actions contract job are committed locally. They still
-  need their first successful remote CI run, deployment, and hosted-project
-  verification before their server-side changes can be called live.
+- Migrations through `0059` and the matching pgTAP contracts are committed and
+  pass in the isolated Docker-backed GitHub Actions job (run `30695903597`).
+  They still need deployment and hosted-project verification before their
+  server-side changes can be called live.
 
 ## What is not release-ready
 
@@ -51,11 +51,10 @@ or production verification.
 
 ## Safe next steps
 
-1. Push the branch and record the first passing isolated database CI result.
-2. Run the release checklist for the pending migrations and current client work.
-3. Validate native builds on the four-size matrix rather than trusting stale
+1. Run the release checklist for the pending migrations and current client work.
+2. Validate native builds on the four-size matrix rather than trusting stale
    emulator content or browser previews.
-4. Keep **Halal Mode Premium** consistent in member-facing copy and server-side
+3. Keep **Halal Mode Premium** consistent in member-facing copy and server-side
    tier values; the local session migration accepts the retired `plus` value
    only to upgrade older installed clients safely.
 
