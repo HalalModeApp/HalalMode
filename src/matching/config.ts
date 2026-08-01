@@ -126,6 +126,36 @@ export interface MatchingConfig {
   warn_peak_memory_bytes: number;
   fail_peak_memory_bytes: number;
   min_segment_sample: number;
+
+  // --- Compatibility scoring and tuning ------------------------------------
+  //
+  // Read by the SQL scorer and the weight tuner rather than by this module.
+  // They are declared here because `matching_config.params` is meant to be one
+  // versioned record of how a round behaved, and a mirror holding half of it
+  // cannot serve that purpose: resolveStoredConfig() rejects any payload whose
+  // keys are not exactly these, so omitting them makes the real configuration
+  // unreadable.
+  /** Criterion weights, together summing to 1. Moved over time by the tuner. */
+  weights: Record<string, number>;
+  /** Per-step proximity along each ordered scale, strictly inside (0, 1]. */
+  falloff: Record<string, number>;
+  distance_free_km: number;
+  sect_mismatch_score: number;
+  tuning_enabled: boolean;
+  tuning_min_samples: number;
+  tuning_gain: number;
+  max_weight_step: number;
+  min_criterion_weight: number;
+  max_criterion_weight: number;
+
+  // --- Saying no -----------------------------------------------------------
+  /**
+   * Days an explicit pass holds before the pair may be considered again. A pass
+   * is a real no, but not a permanent one — people change, and so do reasons.
+   */
+  explicit_pass_cooldown_days: number;
+  /** Passes, months apart, that settle a pair for good. */
+  explicit_pass_retire_after: number;
 }
 
 /** Matches the seeded row in migration 0049. */
@@ -174,6 +204,36 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
   warn_peak_memory_bytes: 268_435_456,
   fail_peak_memory_bytes: 536_870_912,
   min_segment_sample: 30,
+
+  weights: {
+    practice: 0.2,
+    age: 0.15,
+    children: 0.14,
+    build: 0.11,
+    timeline: 0.11,
+    distance: 0.1,
+    height: 0.09,
+    relocation: 0.08,
+    languages: 0.02,
+  },
+  falloff: {
+    practice: 0.7,
+    children: 0.65,
+    relocation: 0.8,
+    timeline: 0.85,
+    build: 0.88,
+  },
+  distance_free_km: 25,
+  sect_mismatch_score: 0.15,
+  tuning_enabled: false,
+  tuning_min_samples: 200,
+  tuning_gain: 0.5,
+  max_weight_step: 0.02,
+  min_criterion_weight: 0.01,
+  max_criterion_weight: 0.35,
+
+  explicit_pass_cooldown_days: 90,
+  explicit_pass_retire_after: 2,
 };
 
 /**
@@ -283,6 +343,44 @@ export function validateConfig(config: MatchingConfig): MatchingConfig {
       || config.fail_edges_after_filter < config.warn_edges_after_filter
       || config.fail_peak_memory_bytes < config.warn_peak_memory_bytes) {
     throw new Error('Matching runtime guard configuration is invalid');
+  }
+
+  // The scoring and tuning parameters are validated here even though this
+  // module never reads them. They travel in the same versioned payload, and a
+  // half-checked record is worth less than none: the SQL validator would reject
+  // them, so silently accepting them here would let the two mirrors disagree
+  // about what is a legal configuration.
+  const shares = Object.values(config.weights);
+  if (!shares.length || shares.some((v) => typeof v !== 'number' || !Number.isFinite(v) || v < 0)
+      || Math.abs(shares.reduce((sum, v) => sum + v, 0) - 1) > 0.001) {
+    throw new Error('Criterion weights must be non-negative numbers summing to 1');
+  }
+  // Strictly inside (0, 1]: zero would make a neighbour a stranger, and above
+  // one would reward distance along the scale.
+  if (Object.values(config.falloff).some(
+    (v) => typeof v !== 'number' || !Number.isFinite(v) || v <= 0 || v > 1
+  )) {
+    throw new Error('Criterion falloff must be greater than 0 and at most 1');
+  }
+  if (config.tuning_enabled !== true && config.tuning_enabled !== false) {
+    throw new Error('Matching tuning flag must be boolean');
+  }
+  if (config.distance_free_km < 0
+      || config.sect_mismatch_score < 0 || config.sect_mismatch_score > 1
+      || config.max_weight_step <= 0
+      || config.min_criterion_weight < 0
+      || config.max_criterion_weight <= config.min_criterion_weight
+      || config.tuning_gain < 0
+      || config.tuning_min_samples < 1 || !Number.isInteger(config.tuning_min_samples)) {
+    throw new Error('Matching scoring and tuning configuration is invalid');
+  }
+  // A zero cooldown would make a pass meaningless; a single pass settling the
+  // pair for good would make it permanent, which is what the cooldown replaces.
+  if (config.explicit_pass_cooldown_days < 1
+      || !Number.isInteger(config.explicit_pass_cooldown_days)
+      || config.explicit_pass_retire_after < 2
+      || !Number.isInteger(config.explicit_pass_retire_after)) {
+    throw new Error('Explicit pass configuration is invalid');
   }
   return config;
 }

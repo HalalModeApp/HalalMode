@@ -29,3 +29,33 @@ test('safety actions use only server-authorized relation identifiers', () => {
   assert.match(api, /p_introduction_id: introductionId/u);
   assert.doesNotMatch(api, /p_(blocked|subject|member)_id/u);
 });
+
+test('hiding is offered on every relationship surface and is keyed the same way', () => {
+  const api = read('src/api/safety.ts');
+  // Hiding removes a person permanently and in both directions, so it needs the
+  // same protection as blocking: the server derives who is hidden from a
+  // relationship the caller is in, never from an id the client supplies.
+  assert.match(api, /hide_connection_member[\s\S]*?p_connection_id: connectionId/u);
+  assert.match(api, /hide_introduction_member[\s\S]*?p_introduction_id: introductionId/u);
+
+  const control = read('src/components/safety/SafetyControl.tsx');
+  assert.match(control, /testIds\.safety\.hide/u, 'the menu must offer hiding');
+  assert.match(control, /testIds\.safety\.confirmHide/u, 'hiding must be confirmed, never one tap');
+});
+
+test('hiding is described as mutual and free of blame in both languages', () => {
+  const catalog = read('src/i18n/catalog.ts');
+  for (const key of [
+    'safety.hide',
+    'safety.hideTitle',
+    'safety.hideBody',
+    'safety.hideConfirm',
+    'safety.hideSuccessTitle',
+    'safety.hideSuccessBody',
+  ]) {
+    // Two occurrences: the English catalog and the Arabic one. A key present
+    // once has been added to English and forgotten in Arabic.
+    const hits = catalog.split(`'${key}':`).length - 1;
+    assert.equal(hits, 2, `${key} must be translated in both catalogs, found ${hits}`);
+  }
+});

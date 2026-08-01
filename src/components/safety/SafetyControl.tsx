@@ -7,6 +7,8 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import {
   blockConnectionMember,
   blockIntroductionMember,
+  hideConnectionMember,
+  hideIntroductionMember,
   reportConnectionMember,
   reportIntroductionMember,
   type ReportReason,
@@ -24,8 +26,18 @@ export type SafetyScope =
 
 type SafetyAction =
   | { kind: 'report'; reason: ReportReason }
-  | { kind: 'block' };
-type SafetyView = 'closed' | 'menu' | 'report' | 'block' | 'reported' | 'blocked' | 'error';
+  | { kind: 'block' }
+  | { kind: 'hide' };
+type SafetyView =
+  | 'closed'
+  | 'menu'
+  | 'report'
+  | 'block'
+  | 'hide'
+  | 'reported'
+  | 'blocked'
+  | 'hidden'
+  | 'error';
 
 const REPORT_REASONS: ReportReason[] = [
   'harassment',
@@ -34,6 +46,12 @@ const REPORT_REASONS: ReportReason[] = [
   'other',
 ];
 const DANGER = '#9C2F2F';
+
+const OUTCOME_COPY = {
+  reported: { title: 'safety.reportSuccessTitle', body: 'safety.reportSuccessBody' },
+  blocked: { title: 'safety.blockSuccessTitle', body: 'safety.blockSuccessBody' },
+  hidden: { title: 'safety.hideSuccessTitle', body: 'safety.hideSuccessBody' },
+} as const;
 
 export function SafetyControl({
   scope,
@@ -58,6 +76,11 @@ export function SafetyControl({
         else await blockIntroductionMember(scope.id);
         return action;
       }
+      if (action.kind === 'hide') {
+        if (scope.kind === 'connection') await hideConnectionMember(scope.id);
+        else await hideIntroductionMember(scope.id);
+        return action;
+      }
       if (scope.kind === 'connection') {
         await reportConnectionMember(scope.id, action.reason);
       } else {
@@ -70,6 +93,8 @@ export function SafetyControl({
         setView('reported');
         return;
       }
+      // Blocking and hiding differ in meaning but not in effect on what is on
+      // screen: either way this person is gone from here, so the same caches go.
       if (scope.kind === 'connection') {
         queryClient.removeQueries({ queryKey: queryKeys.messages(scope.id) });
         queryClient.removeQueries({ queryKey: queryKeys.connection(scope.id) });
@@ -77,7 +102,7 @@ export function SafetyControl({
       }
       await queryClient.invalidateQueries({ queryKey: queryKeys.round });
       onBlocked?.();
-      setView('blocked');
+      setView(action.kind === 'hide' ? 'hidden' : 'blocked');
     },
     onError: () => setView('error'),
   });
@@ -93,9 +118,11 @@ export function SafetyControl({
     setView('closed');
   };
   const finish = () => {
-    const wasBlocked = view === 'blocked';
+    // A hidden person is as gone as a blocked one, so both leave the surface
+    // that was showing them rather than returning to an empty profile.
+    const departed = view === 'blocked' || view === 'hidden';
     close();
-    if (!wasBlocked) return;
+    if (!departed) return;
     router.replace(scope.kind === 'connection' ? '/(tabs)/connections' : '/(tabs)/daily');
   };
 
@@ -144,6 +171,14 @@ export function SafetyControl({
               <>
                 <Text variant="displaySmall">{t('safety.title')}</Text>
                 <Text variant="bodySmall" style={styles.body}>{t('safety.privateBody')}</Text>
+                {/* First, and not marked destructive: recognising a cousin is
+                    the most ordinary reason to open this menu, and it says
+                    nothing against them. */}
+                <SafetyOption
+                  testID={testIds.safety.hide}
+                  label={t('safety.hide')}
+                  onPress={() => setView('hide')}
+                />
                 <SafetyOption
                   testID={testIds.safety.report}
                   label={t('safety.report')}
@@ -176,6 +211,22 @@ export function SafetyControl({
               </>
             ) : null}
 
+            {view === 'hide' ? (
+              <>
+                <Text variant="displaySmall">{t('safety.hideTitle')}</Text>
+                <Text variant="bodySmall" style={styles.body}>
+                  {t('safety.hideBody', { name: memberName ?? t('safety.thisPerson') })}
+                </Text>
+                <Button
+                  testID={testIds.safety.confirmHide}
+                  label={t('safety.hideConfirm')}
+                  loading={mutation.isPending}
+                  onPress={() => run({ kind: 'hide' })}
+                />
+                <Button label={t('safety.cancel')} variant="quiet" onPress={() => setView('menu')} />
+              </>
+            ) : null}
+
             {view === 'block' ? (
               <>
                 <Text variant="displaySmall">{t('safety.blockTitle')}</Text>
@@ -195,14 +246,10 @@ export function SafetyControl({
               </>
             ) : null}
 
-            {view === 'reported' || view === 'blocked' ? (
+            {view === 'reported' || view === 'blocked' || view === 'hidden' ? (
               <>
-                <Text variant="displaySmall">
-                  {t(view === 'reported' ? 'safety.reportSuccessTitle' : 'safety.blockSuccessTitle')}
-                </Text>
-                <Text variant="bodySmall" style={styles.body}>
-                  {t(view === 'reported' ? 'safety.reportSuccessBody' : 'safety.blockSuccessBody')}
-                </Text>
+                <Text variant="displaySmall">{t(OUTCOME_COPY[view].title)}</Text>
+                <Text variant="bodySmall" style={styles.body}>{t(OUTCOME_COPY[view].body)}</Text>
                 <Button testID={testIds.safety.done} label={t('safety.done')} onPress={finish} />
               </>
             ) : null}

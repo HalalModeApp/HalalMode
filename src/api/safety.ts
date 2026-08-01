@@ -71,3 +71,27 @@ export async function blockIntroductionMember(introductionId: string): Promise<v
   });
   if (error) throw error;
 }
+
+/**
+ * Hiding is mutual, permanent and silent, and carries no moderation meaning —
+ * it is for recognising someone from life rather than for anything they did.
+ * Keyed on the relationship like every other action here, so the server derives
+ * who is being hidden instead of trusting an id from the client.
+ */
+export async function hideConnectionMember(connectionId: string): Promise<void> {
+  if (USE_MOCKS) return;
+  const client = requireSupabase();
+  const { error } = await client.rpc('hide_connection_member', {
+    p_connection_id: connectionId,
+  });
+  if (error) throw error;
+}
+
+export async function hideIntroductionMember(introductionId: string): Promise<void> {
+  if (USE_MOCKS) return;
+  const client = requireSupabase();
+  const { error } = await client.rpc('hide_introduction_member', {
+    p_introduction_id: introductionId,
+  });
+  if (error) throw error;
+}
