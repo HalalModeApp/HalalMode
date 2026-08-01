@@ -368,7 +368,7 @@ select throws_ok(
     where m.run_id = (select run_id from atomic_runs where name = 'blocked'))
   ),
   '40001',
-  'Current safety state vetoes a frozen matching edge',
+  'MATCHING_LATE_VETO: current safety state vetoes a frozen matching edge',
   'a late block vetoes live finalization even though the pair was snapshotted'
 );
 delete from blocks

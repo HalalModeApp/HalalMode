@@ -35,6 +35,11 @@ begin
     on config.version = run.config_version
   where run.id = p_run_id;
 
+  if not found then
+    raise exception 'A snapshot-capable matching run is required'
+      using errcode = '22023';
+  end if;
+
   if v_config_limit is null or v_config_limit < 1 then
     raise exception 'The matching run has no valid configured candidate ceiling'
       using errcode = '22023';

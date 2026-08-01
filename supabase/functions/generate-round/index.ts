@@ -45,7 +45,7 @@ class MatchingFinalizationRpcError extends Error {
 }
 
 async function finalizeWithExactRetry<T>(
-  request: () => Promise<{ data: T; error: unknown }>
+  request: () => PromiseLike<{ data: T; error: unknown }>
 ): Promise<T> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {

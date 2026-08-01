@@ -77,7 +77,7 @@ select ok(
   (
     select bool_and(
       p.prosecdef
-      and pg_get_functiondef(p.oid) ~ 'auth\\.(role|jwt)\\(\\)'
+      and pg_get_functiondef(p.oid) ~ 'auth\.(role|jwt)\(\)'
     )
     from unnest(array[
       'public.matching_run_config()'::regprocedure,
