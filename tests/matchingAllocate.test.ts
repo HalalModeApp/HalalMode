@@ -233,27 +233,45 @@ test('higher utility is preferred when capacity is contested', () => {
 
 // --- Repair ----------------------------------------------------------------
 
-test('the repair pass fills sets that greedy left short', () => {
+test('the repair pass augments with edges in the displaced edge quality band', () => {
   const edges = [
-    edge('a', 'x', 0.9),
-    edge('b', 'y', 0.85),
-    edge('c', 'x', 0.8),
-    edge('a', 'z', 0.7),
+    edge('a', 'x', 0.824),
+    edge('c', 'x', 0.816),
+    edge('a', 'z', 0.808),
   ];
   const caps = capacities([
     ['a', 1],
-    ['b', 1],
     ['c', 1],
     ['x', 1],
-    ['y', 1],
     ['z', 1],
   ]);
 
   const result = allocate({ edges, capacities: caps, config, seed: 2 });
-  assert.equal(result.assigned.length, 3);
+  assert.equal(result.assigned.length, 2);
   assert.equal(result.stats.repairSwaps, 1, 'the test must exercise a real repair');
   const involved = new Set(result.assigned.flatMap((e) => [e.a, e.b]));
   assert.ok(involved.has('c'), 'the under-served member should be repaired in');
+  assert.deepEqual(verifyAllocation(result, caps), { ok: true });
+});
+
+test('repair cannot trade one strong edge for two weak lower-band edges', () => {
+  const cappedWeakUtility = 0.4 * (1 + config.boost_cap);
+  const edges = [
+    edge('a', 'x', 0.8),
+    edge('c', 'x', 0.4, cappedWeakUtility),
+    edge('a', 'z', 0.4, cappedWeakUtility),
+  ];
+  const caps = capacities([
+    ['a', 1],
+    ['c', 1],
+    ['x', 1],
+    ['z', 1],
+  ]);
+
+  const result = allocate({ edges, capacities: caps, config, seed: 2 });
+
+  assert.equal(result.stats.repairSwaps, 0);
+  assert.deepEqual(result.assigned.map((assigned) => pairKey(assigned.a, assigned.b)), ['a|x']);
   assert.deepEqual(verifyAllocation(result, caps), { ok: true });
 });
 

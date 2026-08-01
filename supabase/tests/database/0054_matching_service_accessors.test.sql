@@ -138,10 +138,29 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000005402', 'shadow-b@example.test');
 
 insert into profiles (
-  id, name, first_name, birth_date, gender, onboarding_complete
+  id, name, first_name, birth_date, gender, city, country, latitude, longitude,
+  bio, photos, onboarding_complete
 ) values
-  ('00000000-0000-0000-0000-000000005401', 'Shadow A', 'Shadow', '1990-01-01', 'male', true),
-  ('00000000-0000-0000-0000-000000005402', 'Shadow B', 'Shadow', '1991-01-01', 'female', true);
+  ('00000000-0000-0000-0000-000000005401', 'Shadow A', 'Shadow', '1990-01-01', 'male', 'Madinah', 'Saudi Arabia', 24.4672, 39.6024, repeat('a', 50), array['a.jpg'], true),
+  ('00000000-0000-0000-0000-000000005402', 'Shadow B', 'Shadow', '1991-01-01', 'female', 'Madinah', 'Saudi Arabia', 24.4680, 39.6030, repeat('b', 50), array['b.jpg'], true);
+
+insert into private_preferences (
+  user_id, min_age, max_age, preferred_countries, max_distance_km,
+  matching_preferences_completed_at
+) values
+  ('00000000-0000-0000-0000-000000005401', 18, 50, array['Saudi Arabia'], 100, now()),
+  ('00000000-0000-0000-0000-000000005402', 18, 50, array['Saudi Arabia'], 100, now());
+
+insert into halal_mode_private.member_legal_consent_history (
+  user_id, document_type, version, acceptance_context
+)
+select member.id, document.document_type, document.version, 'onboarding'
+from (values
+  ('00000000-0000-0000-0000-000000005401'::uuid),
+  ('00000000-0000-0000-0000-000000005402'::uuid)
+) member(id)
+cross join halal_mode_private.legal_document_registry document
+where document.is_current;
 
 create temporary table matching_test_runs (
   mode text primary key,

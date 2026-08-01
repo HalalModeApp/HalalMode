@@ -148,7 +148,7 @@ export function allocate(input: AllocationInput): AllocationResult {
     assigned,
     takenPairs,
     remaining,
-    seed,
+    qualityBandWidth: config.quality_band_width,
     deadline: now() + config.repair_time_budget_ms,
     now,
   });
@@ -176,7 +176,7 @@ interface RepairInput {
   assigned: ScoredEdge[];
   takenPairs: Set<string>;
   remaining: Map<string, number>;
-  seed: number;
+  qualityBandWidth: number;
   deadline: number;
   now: () => number;
 }
@@ -186,15 +186,24 @@ interface RepairInput {
  *
  * An add-only second sweep cannot help after greedy assignment because
  * capacities only decrease. This repair looks for a length-three path that
- * replaces one assigned edge with two eligible edges, increasing coverage by
- * one without reducing combined utility. Every replacement already cleared
- * the reciprocal-score floor, so fairness still cannot force a weak edge.
+ * replaces one assigned edge with two eligible, comparable-quality edges,
+ * increasing coverage by one without allowing two weak edges to displace one
+ * strong edge. Every replacement already cleared the reciprocal-score floor,
+ * and the raw-quality band check preserves the fairness ordering invariant.
  *
  * Candidate fan-out and elapsed time are both bounded so a pathological pool
  * degrades predictably instead of stalling the round.
  */
 function repairPass(input: RepairInput): { swaps: number; timedOut: boolean } {
-  const { ordered, assigned, takenPairs, remaining, deadline, now } = input;
+  const {
+    ordered,
+    assigned,
+    takenPairs,
+    remaining,
+    qualityBandWidth,
+    deadline,
+    now,
+  } = input;
   let swaps = 0;
   let timedOut = false;
   const candidatesByMember = new Map<string, ScoredEdge[]>();
@@ -231,6 +240,9 @@ function repairPass(input: RepairInput): { swaps: number; timedOut: boolean } {
 
     let augmented = false;
     for (const displaced of incidentAssigned) {
+      const displacedBand = qualityBand(displaced.quality, qualityBandWidth);
+      if (qualityBand(candidate.quality, qualityBandWidth) !== displacedBand) continue;
+
       const displacedOther = displaced.a === full ? displaced.b : displaced.a;
       // Lists inherit the global utility order. A bounded prefix makes repair
       // cost predictable on high-degree graphs; the wall-clock deadline is the
@@ -246,7 +258,9 @@ function repairPass(input: RepairInput): { swaps: number; timedOut: boolean } {
           replacement.a === displacedOther ? replacement.b : replacement.a;
         if (replacementOther === underfilled || replacementOther === full) continue;
         if ((remaining.get(replacementOther) ?? 0) <= 0) continue;
+        if (qualityBand(replacement.quality, qualityBandWidth) !== displacedBand) continue;
         if (candidate.quality + replacement.quality < displaced.quality) continue;
+        if (candidate.utility + replacement.utility < displaced.utility) continue;
 
         removeAssigned(displaced, assigned, takenPairs, remaining, assignedByMember);
         addAssigned(candidate, assigned, takenPairs, remaining, assignedByMember);
