@@ -19,6 +19,7 @@
     "../src/matching/estimate.ts",
     "../src/matching/fairness.ts",
     "../src/matching/allocate.ts",
+    "../src/matching/rotation.ts",
     "../src/matching/simulate.ts"
   ],
   "exclude": []

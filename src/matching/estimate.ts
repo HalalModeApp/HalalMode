@@ -22,6 +22,14 @@ export interface MemberSignals {
   timesKept: number;
   /** From the `match_health` view. */
   roundsSinceLastMutual: number;
+  /**
+   * Rounds since this member last received any introductions at all.
+   *
+   * Distinct from exposure need, which is windowed and resets. Waiting time
+   * only increases, so it can order a rotation queue without a member losing
+   * their place when the window turns over.
+   */
+  roundsSinceLastServed: number;
   /** Qualified exposures inside the current fairness window. */
   exposuresInWindow: number;
   /**

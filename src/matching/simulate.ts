@@ -28,6 +28,7 @@ import {
   type MemberSignals,
   type PairHistory,
 } from './estimate';
+import { planRotation, type RotationCandidate } from './rotation';
 
 /** Small deterministic PRNG. Same seed, same population, every time. */
 export function mulberry32(seed: number): () => number {
@@ -73,6 +74,11 @@ export interface SimOptions {
   strategy: 'baseline' | 'v1';
   /** Share of members on the premium tier. */
   premiumShare?: number;
+  /**
+   * Members on the second side. Defaults to `perGender` for a balanced pool;
+   * set it lower or higher to model an imbalanced one in either direction.
+   */
+  femaleCount?: number;
 }
 
 export interface SimMetrics {
@@ -90,6 +96,10 @@ export interface SimMetrics {
   mutualRate: number;
   /** Largest share of all exposure taken by any single member. */
   topExposureShare: number;
+  /** Mean set size among members who were served at all that round. */
+  meanServedSetSize: number;
+  /** Longest run of consecutive rounds any member spent deferred. */
+  maxConsecutiveDeferrals: number;
 }
 
 /**
@@ -118,7 +128,9 @@ function buildPopulation(options: SimOptions): SimMember[] {
   const members: SimMember[] = [];
 
   for (const gender of ['male', 'female'] as const) {
-    for (let i = 0; i < options.perGender; i += 1) {
+    const count =
+      gender === 'female' ? options.femaleCount ?? options.perGender : options.perGender;
+    for (let i = 0; i < count; i += 1) {
       // Squaring pushes most members low and a few high — the concentrated
       // distribution that makes exposure fairness hard.
       const trueAppeal = 0.1 + 0.85 * Math.pow(random(), 2);
@@ -133,6 +145,7 @@ function buildPopulation(options: SimOptions): SimMember[] {
         timesKept: 0,
         roundsSinceLastMutual: 0,
         exposuresInWindow: 0,
+        roundsSinceLastServed: 0,
         introductionsPerRound: 0,
         mutualMatches: 0,
         zeroMatchRounds: 0,
@@ -172,6 +185,9 @@ export function simulate(options: SimOptions): SimMetrics {
   let qualitySum = 0;
   let setSizeSum = 0;
   let setSizeCount = 0;
+  let servedSetSizeSum = 0;
+  let servedCount = 0;
+  let maxConsecutiveDeferrals = 0;
 
   for (let round = 0; round < rounds; round += 1) {
     const random = mulberry32(options.seed + round * 7919);
@@ -179,9 +195,26 @@ export function simulate(options: SimOptions): SimMetrics {
       roundsElapsed: (round % config.exposure_window_rounds) + 1,
     };
 
+    const toCandidate = (member: SimMember): RotationCandidate => ({
+      member,
+      limit: appearanceLimit(member, introductionsFor(member), config, window),
+    });
+    const plan =
+      strategy === 'v1'
+        ? planRotation(
+            men.map(toCandidate),
+            women.map(toCandidate),
+            config,
+            options.seed + round
+          )
+        : null;
+    const isServed = (id: string) => (plan ? plan.serving.has(id) : true);
+
     const edges: ScoredEdge[] = [];
     for (const m of men) {
+      if (!isServed(m.id)) continue;
       for (const w of women) {
+        if (!isServed(w.id)) continue;
         const key = m.id < w.id ? `${m.id}|${w.id}` : `${w.id}|${m.id}`;
         const seen = shownPairs.get(key) ?? 0;
         if (seen >= config.max_pair_appearances) continue;
@@ -219,11 +252,10 @@ export function simulate(options: SimOptions): SimMetrics {
     const capacities = new Map<string, Capacity>();
     for (const member of members) {
       const base = introductionsFor(member);
+      const paced =
+        strategy === 'v1' ? appearanceLimit(member, base, config, window) : base;
       capacities.set(member.id, {
-        limit:
-          strategy === 'v1'
-            ? appearanceLimit(member, base, config, window)
-            : base,
+        limit: plan ? plan.servedLimits.get(member.id) ?? paced : paced,
       });
     }
 
@@ -256,8 +288,20 @@ export function simulate(options: SimOptions): SimMetrics {
       qualitySum += edge.reciprocal;
     }
     for (const member of members) {
-      setSizeSum += setSizes.get(member.id) ?? 0;
+      const received = setSizes.get(member.id) ?? 0;
+      setSizeSum += received;
       setSizeCount += 1;
+      if (received > 0) {
+        servedSetSizeSum += received;
+        servedCount += 1;
+        member.roundsSinceLastServed = 0;
+      } else {
+        member.roundsSinceLastServed += 1;
+        maxConsecutiveDeferrals = Math.max(
+          maxConsecutiveDeferrals,
+          member.roundsSinceLastServed
+        );
+      }
     }
 
     // --- Simulate picks --------------------------------------------------
@@ -329,5 +373,7 @@ export function simulate(options: SimOptions): SimMetrics {
     meanSetSize: setSizeCount > 0 ? setSizeSum / setSizeCount : 0,
     mutualRate: shownEdges > 0 ? mutualEdges / shownEdges : 0,
     topExposureShare: Math.max(...exposures) / totalExposure,
+    meanServedSetSize: servedCount > 0 ? servedSetSizeSum / servedCount : 0,
+    maxConsecutiveDeferrals,
   };
 }

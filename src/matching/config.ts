@@ -57,6 +57,20 @@ export interface MatchingConfig {
   /** Abandon a pair once its estimate has fallen this far from first sight. */
   repeat_abandon_drop: number;
 
+  // --- Rotation -----------------------------------------------------------
+  /**
+   * Whether an imbalanced pool serves a rotating cohort with full sets rather
+   * than spreading thin. Gender-agnostic: the constrained side is whichever
+   * has surplus capacity that round.
+   */
+  rotation_enabled: boolean;
+  /**
+   * Smallest set worth showing. Above this, mild imbalance is absorbed by
+   * everyone getting a slightly smaller set; below it, members are deferred so
+   * those who are served still have a real choice to make.
+   */
+  rotation_min_set_size: number;
+
   // --- Allocation ---------------------------------------------------------
   repair_time_budget_ms: number;
   allocator: string;
@@ -95,6 +109,9 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
   repeat_cooldown_days: 14,
   max_pair_appearances: 3,
   repeat_abandon_drop: 0.35,
+
+  rotation_enabled: true,
+  rotation_min_set_size: 3,
 
   repair_time_budget_ms: 2000,
   allocator: ALGORITHM_VERSION,

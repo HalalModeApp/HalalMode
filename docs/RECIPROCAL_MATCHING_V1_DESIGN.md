@@ -401,3 +401,114 @@ The fairness machinery still earns its place — it is what stops quality rankin
 concentrating exposure as the pool grows and sets stop being fillable, which is
 the regime the 10x numbers in §7 describe. The assertions in the simulation
 suite were rewritten to claim only what the measurements support.
+
+
+---
+
+## 11. Growth to millions
+
+The **architecture** scales; the **implementation** does not, and the difference
+matters because no redesign is needed to close the gap.
+
+`allocate(edges, capacities, config)` takes an edge list it does not have to
+produce. Estimation, allocation and fairness are already separate. What does not
+scale is materialising every pair: one million members is 500k x 500k = **250
+billion pairs**, which no amount of tuning survives.
+
+Two properties rescue it, both already true of the product:
+
+**Matching is inherently local.** Distance caps mean a member in Madinah never
+competes with one in Manchester, so at scale this becomes thousands of
+independent regional matchers, each over tens of thousands of members —
+embarrassingly parallel, and each shard is exactly the input `allocate()`
+already expects. Cross-border pairs, which require both sides to be `open` or
+`willing_abroad`, form a separate and much smaller graph.
+
+**Candidate retrieval can replace pair construction.** Fetching a top-K
+candidate list per member and scoring only those is the standard
+retrieval-then-ranking split, and turns O(N²) into O(N·K).
+
+| Pool | What is required |
+| --- | --- |
+| < 5k | Today's SQL is adequate |
+| 5k – 50k | Set-based prefilter, allocation in the Edge Function (§6) |
+| 50k – 500k | Geographic sharding, top-K retrieval instead of full pair construction |
+| > 500k | The above, plus `pair_exposure` partitioning and TTL — at 1M x 200 that is 200M rows |
+
+None of this is benchmarked. The breakpoints are estimates from §7's model.
+
+---
+
+## 12. Imbalanced pools
+
+### The constraint
+
+Reciprocity forces an accounting identity:
+
+```
+sum(side A set sizes) = sum(side B set sizes) = edge count
+```
+
+With 500 men and 100 women capped at five, the ceiling is 500 edges and the men
+can average at most **one** each. No algorithm avoids this; it is arithmetic.
+
+Left to a greedy allocator the result is concentration, not scarcity shared
+evenly. Measured on 500 men and 100 women:
+
+```
+women avg/min/max      : 5.00 / 5 / 5
+men   avg/min/max      : 1.00 / 0 / 5
+men receiving nothing  : 328 of 500
+men receiving a full set:  40
+```
+
+Forty members get everything, 328 get nothing, and because winners are chosen by
+score rather than by waiting time, broadly the same members win every round.
+
+### What simulation changed about the fix
+
+The obvious fix — serve a rotating cohort with **full** sets — is worse than it
+looks. A free member keeps one person per round however many they are shown, so
+selection opportunities scale with **rounds served**, not with set size.
+Full-set rotation halved rounds served (7.7 to 4.0 of 12) and pushed the share of
+members who never matched from 42% to 54%.
+
+Capping served sets at `rotation_min_set_size` instead serves far more members
+per round. Measured at 150:30 over 12 rounds:
+
+| Served set cap | Set size (served) | Never matched |
+| ---: | ---: | ---: |
+| No rotation | 3.13 | 41.7% |
+| 2 | 2.93 | 29.4% |
+| **3 (default)** | **3.87** | **35.0%** |
+| 4 | 4.59 | 45.6% |
+| 5 (full sets) | 5.21 | 54.4% |
+
+Three is the default because it beats no rotation on **both** axes at once —
+larger sets *and* fewer members left unmatched. Two produces more matches still,
+but a set of two is barely a choice; that trade is available as a config change
+if the outcome data later justifies it.
+
+### Flexibility as the ratio moves
+
+Nothing in `src/matching/rotation.ts` knows which gender is which. The
+constrained side is recomputed each round as whichever has surplus **capacity**
+— capacity, not headcount, so tier mix is handled automatically.
+
+- **1:1** — rotation is inert. Verified: identical results with it on and off.
+- **Mild imbalance** — absorbed by slightly smaller sets for everyone, deferring
+  nobody, while the thin set size stays at or above `rotation_min_set_size`.
+- **Severe imbalance in either direction** — a mirrored 150:750 pool defers the
+  same number of members as 750:150, and the improvement holds.
+
+Waiting is bounded because the queue is ordered by rounds since last served,
+which only increases. A 10:1 pool over 20 rounds never leaves anyone permanently
+deferred.
+
+Members who are deferred should be told plainly that today is not their round.
+`0044_explainable_daily_round_state` already provides that surface.
+
+### Consequence for metrics
+
+The **ratio itself becomes a per-region metric**, since it sets the achievable
+round cadence. It belongs alongside eligible-pool size in the breakdowns.

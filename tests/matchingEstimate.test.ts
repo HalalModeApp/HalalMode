@@ -21,6 +21,7 @@ function member(overrides: Partial<MemberSignals> = {}): MemberSignals {
     timesShown: 0,
     timesKept: 0,
     roundsSinceLastMutual: 0,
+    roundsSinceLastServed: 0,
     exposuresInWindow: 0,
     introductionsPerRound: 5,
     ...overrides,
