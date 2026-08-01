@@ -195,3 +195,62 @@ test('records are idempotent — reading them twice does not double-count', () =
     'the open profile was already closed by the first read'
   );
 });
+
+// --- Leaving the app --------------------------------------------------------
+
+test('time stops while the app is away', () => {
+  let clock = 0;
+  const ledger = new DwellLedger(() => clock);
+
+  ledger.opened('a');
+  clock += 3_000;
+  ledger.pause();
+  clock += 1_800_000;   // half an hour on a phone call
+  ledger.resume();
+  clock += 2_000;
+  ledger.closed('a');
+
+  assert.deepEqual(
+    ledger.records(),
+    [{ introductionId: 'a', totalMs: 5_000, opens: 1 }],
+    'the call must not be banked against whoever was on screen'
+  );
+});
+
+test('an interrupted reading is one reading, not two', () => {
+  let clock = 0;
+  const ledger = new DwellLedger(() => clock);
+  ledger.opened('a');
+  clock += 1_000;
+  ledger.pause();
+  ledger.resume();
+  clock += 1_000;
+  ledger.closed('a');
+
+  assert.equal(ledger.records()[0]?.opens, 1);
+});
+
+test('pausing with nothing open, and resuming without pausing, are both no-ops', () => {
+  let clock = 0;
+  const ledger = new DwellLedger(() => clock);
+  ledger.pause();
+  ledger.resume();
+  assert.deepEqual(ledger.records(), []);
+
+  ledger.opened('a');
+  clock += 1_000;
+  ledger.resume();           // never paused
+  clock += 1_000;
+  assert.deepEqual(ledger.records(), [{ introductionId: 'a', totalMs: 2_000, opens: 1 }]);
+});
+
+test('a profile left open when the app is backgrounded is still counted', () => {
+  let clock = 0;
+  const ledger = new DwellLedger(() => clock);
+  ledger.opened('a');
+  clock += 4_000;
+  ledger.pause();
+  clock += 600_000;
+  // Submitted from a notification, or the round expired while away.
+  assert.deepEqual(ledger.records(), [{ introductionId: 'a', totalMs: 4_000, opens: 1 }]);
+});

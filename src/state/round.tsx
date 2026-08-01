@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { AppState } from 'react-native';
 
 import {
   fetchCurrentRoundState,
@@ -197,6 +198,18 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   // A ref, not state: reading a profile must never re-render the round, and the
   // timings are consulted once, at submission.
   const ledger = useRef(new DwellLedger()).current;
+
+  // Backgrounding is not navigation, so nothing else stops the clock on an open
+  // profile. Without this a member who takes a call mid-profile banks the whole
+  // call against whoever was on screen, which moves somebody else to the bottom
+  // of the set and asks about the wrong person.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') ledger.resume();
+      else ledger.pause();
+    });
+    return () => subscription.remove();
+  }, [ledger]);
   const profileOpened = useCallback((id: string) => ledger.opened(id), [ledger]);
   const profileClosed = useCallback((id: string) => ledger.closed(id), [ledger]);
   // The whole set, not just the survivors: the rule is about how the member
