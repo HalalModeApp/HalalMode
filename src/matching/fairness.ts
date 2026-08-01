@@ -2,10 +2,18 @@
  * Fairness — stage three of three, applied inside allocation rather than
  * reported afterwards.
  *
- * The whole design turns on one constraint: a fairness adjustment may reorder
- * comparable edges, but must never promote a weak edge past a strong one. That
- * is enforced by `boost_cap` here and by the hard `min_reciprocal_score` floor
- * in the allocator, not left to judgement.
+ * Two constraints shape everything here.
+ *
+ * **A fairness adjustment may reorder comparable edges, but must never promote
+ * a weak edge past a strong one.** That is enforced by `boost_cap` below and by
+ * the hard `min_reciprocal_score` floor in the allocator, not left to judgement.
+ *
+ * **Need is measured against pace, not against an absolute total.** An absolute
+ * target is inert for most of a window: early on nobody has reached it, so
+ * every member reports maximum need and the term stops discriminating between
+ * them — which lets quality ranking concentrate exposure on popular members
+ * unopposed. Comparing against the exposure a member *should* have by this
+ * point in the window keeps the signal live from the first round.
  *
  * See docs/RECIPROCAL_MATCHING_V1_DESIGN.md §4.
  */
@@ -13,21 +21,45 @@
 import { clamp, type MemberSignals } from './estimate';
 import type { MatchingConfig } from './config';
 
+/** Where the current fairness window has got to. */
+export interface WindowContext {
+  /** Rounds completed in this window, including the one being built. */
+  roundsElapsed: number;
+}
+
 /**
- * How much qualified exposure this member is still owed, as a fraction of the
- * per-window target. Zero once they have had their share.
+ * The exposure a member should have accumulated by this point in the window,
+ * pro rata against their own tier's entitlement.
  */
-export function exposureNeed(member: MemberSignals, config: MatchingConfig): number {
-  const target = Math.max(1, config.target_exposures_per_window);
-  return clamp((target - member.exposuresInWindow) / target, 0, 1);
+export function expectedExposure(
+  member: MemberSignals,
+  config: MatchingConfig,
+  window: WindowContext
+): number {
+  const elapsed = clamp(window.roundsElapsed, 1, config.exposure_window_rounds);
+  return member.introductionsPerRound * elapsed * config.exposure_target_multiplier;
+}
+
+/**
+ * How far behind their own pace this member is, as a fraction of it. Zero once
+ * they are level or ahead.
+ */
+export function exposureNeed(
+  member: MemberSignals,
+  config: MatchingConfig,
+  window: WindowContext
+): number {
+  const expected = expectedExposure(member, config, window);
+  if (expected <= 0) return 1;
+  return clamp((expected - member.exposuresInWindow) / expected, 0, 1);
 }
 
 /**
  * How overdue a mutual match is, ramping to 1 at `no_match_rounds_full`.
  *
- * This is the term that shortens long empty stretches. It is bounded like the
- * others: waiting a long time improves a member's ordering, it does not buy
- * them an incompatible pair.
+ * This is the term that shortens long empty stretches. Bounded like the others:
+ * waiting a long time improves a member's ordering, it does not buy them an
+ * incompatible pair.
  */
 export function noMatchNeed(member: MemberSignals, config: MatchingConfig): number {
   const full = Math.max(1, config.no_match_rounds_full);
@@ -41,9 +73,11 @@ export function noMatchNeed(member: MemberSignals, config: MatchingConfig): numb
 export function fairnessBoost(
   a: MemberSignals,
   b: MemberSignals,
-  config: MatchingConfig
+  config: MatchingConfig,
+  window: WindowContext
 ): number {
-  const exposure = (exposureNeed(a, config) + exposureNeed(b, config)) / 2;
+  const exposure =
+    (exposureNeed(a, config, window) + exposureNeed(b, config, window)) / 2;
   const stale = (noMatchNeed(a, config) + noMatchNeed(b, config)) / 2;
 
   const raw =
@@ -57,35 +91,38 @@ export function fairnessBoost(
  *
  * With the default cap of 0.25 an edge can gain at most a quarter of its own
  * score: an edge at 0.40 reaches 0.50 at best, while an edge at 0.80 never
- * drops below 0.80. The orderings can therefore never cross.
+ * drops below 0.80. The two orderings can therefore never cross.
  */
 export function adjustedUtility(
   reciprocal: number,
   a: MemberSignals,
   b: MemberSignals,
-  config: MatchingConfig
+  config: MatchingConfig,
+  window: WindowContext
 ): number {
-  return reciprocal * (1 + fairnessBoost(a, b, config));
+  return reciprocal * (1 + fairnessBoost(a, b, config, window));
 }
 
 /**
- * A rolling ceiling on how often one member may appear.
+ * A rolling ceiling on how often one member may appear this round.
  *
- * Members who have had well beyond their share are tightened toward the base
- * set size so attention does not concentrate; members at or under their share
- * keep the full allowance. Never returns less than one — nobody is frozen out
- * of a round entirely.
+ * Members running ahead of their own pace are tightened so attention does not
+ * concentrate; members at or behind pace keep their full allowance. Never
+ * returns less than one — nobody is frozen out of a round entirely.
  */
 export function appearanceLimit(
   member: MemberSignals,
   baseLimit: number,
-  config: MatchingConfig
+  config: MatchingConfig,
+  window: WindowContext
 ): number {
-  const target = Math.max(1, config.target_exposures_per_window);
-  const overshoot = member.exposuresInWindow / target;
-  if (overshoot <= 1) return baseLimit;
+  const expected = expectedExposure(member, config, window);
+  if (expected <= 0) return baseLimit;
 
-  // 1.5x their share halves the allowance; 2x or beyond floors it.
-  const scale = clamp(1 - (overshoot - 1), 0.25, 1);
+  const pace = member.exposuresInWindow / expected;
+  if (pace <= 1) return baseLimit;
+
+  // 1.5x their pace halves the allowance; 2x or beyond floors it.
+  const scale = clamp(1 - (pace - 1), 0.25, 1);
   return Math.max(1, Math.round(baseLimit * scale));
 }

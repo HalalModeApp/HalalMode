@@ -62,7 +62,11 @@ values (
     'exposure_boost_weight', 0.30,
     'no_match_boost_weight', 0.20,
     'boost_cap', 0.25,
-    'target_exposures_per_window', 10,
+    -- Fair share is a member's own tier entitlement, pro rata through the
+    -- window. One flat number cannot serve both tiers: set to the free
+    -- allowance it throttles premium below what they pay for; set to the
+    -- premium allowance it throttles nobody.
+    'exposure_target_multiplier', 1.0,
     'exposure_window_rounds', 7,
     'no_match_rounds_full', 8,
 

@@ -1,6 +1,6 @@
 # Reciprocal matching v1 — design note (Phase 1)
 
-**Status:** awaiting review. No migrations or allocator work should start until this is approved.
+**Status:** reviewed and approved. Section 10 records what the simulations then changed.
 
 This note reviews the matcher as it stands today, proposes the smallest set of changes that meet the v1 goals, and gives expected performance at current and 10x scale.
 
@@ -332,3 +332,72 @@ Two consequences worth flagging now:
 5. `pair_exposure`, cooldowns, decay, `explicit_pass`.
 6. Fairness terms in the utility function.
 7. Simulations across the scenarios in the brief; then canary, with approval.
+
+
+---
+
+## 10. What simulation changed (post-approval)
+
+Three things the design note got wrong, found by measuring rather than arguing.
+All numbers are from `tests/matchingSimulation.test.ts`: 300 members, 12 rounds,
+seeded, reproducible via `simulate()`.
+
+### A flat exposure target cannot work
+
+`target_exposures_per_window` was a single number. It cannot be: a free member
+is owed 5 introductions per round and a premium member 10. Set it to the free
+allowance and premium members are throttled below what they pay for; set it to
+the premium allowance and nobody is throttled at all. At the flat default of 10,
+members received **1.81** introductions per round instead of 5 — the fairness
+throttle was quietly eating the product promise.
+
+Replaced by `exposure_target_multiplier`, applied to each member's own tier
+entitlement.
+
+### Need must be measured against pace, not a total
+
+With an absolute target, every member reports maximum need for most of a window
+because nobody has reached it yet. The signal is then uniform, so it stops
+discriminating — and quality ranking, which does favour frequently-kept members,
+concentrates exposure unopposed. Raising `boost_cap` from 0.25 to 1.2 changed
+the outcome by nothing at all, which is what exposed it.
+
+`exposureNeed` now compares against the exposure a member *should* have by this
+point in the window, so the term is live from the first round.
+
+### Scoring on raw keep rates is a death spiral
+
+This is the important one. An earlier version of the simulation scored edges
+directly from observed keep rates rather than through `directionalEstimate`.
+Members with a weak keep rate fell under `min_reciprocal_score`, were filtered
+out of every round, and therefore never gathered the data that might have lifted
+them back out. Mean set size sat at 2.5 of a possible 5.7, and exposure Gini was
+0.50.
+
+Routing through the confidence blend — where a thin record pulls the estimate
+back toward stated compatibility instead of toward zero — fixed it completely.
+
+This is precisely the "users the system currently serves poorly" failure the
+brief exists to prevent, and it is only one refactor away at any time. The
+regression test is `the confidence blend prevents a low keep rate becoming a
+death spiral`.
+
+### Measured outcome
+
+| Metric | Baseline | v1 | |
+| --- | ---: | ---: | --- |
+| Mean set size | 5.73 | 5.73 | unchanged |
+| Mean reciprocal quality | 0.5953 | 0.7187 | **+21%** |
+| Members never matched | 41.0% | 27.3% | **−33%** |
+| Exposure Gini | 0.1117 | 0.1142 | +0.0025 |
+| Top exposure share | 0.0058 | 0.0058 | unchanged |
+
+The honest reading: **once the pool can supply full sets, exposure is already
+close to even and there is very little concentration left for fairness to
+remove.** The Gini difference is noise. The real wins are quality and the share
+of members left with nothing.
+
+The fairness machinery still earns its place — it is what stops quality ranking
+concentrating exposure as the pool grows and sets stop being fillable, which is
+the regime the 10x numbers in §7 describe. The assertions in the simulation
+suite were rewritten to claim only what the measurements support.

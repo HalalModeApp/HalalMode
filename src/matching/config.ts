@@ -41,7 +41,11 @@ export interface MatchingConfig {
   no_match_boost_weight: number;
   /** Ceiling on the total fairness boost, as a fraction of the edge's score. */
   boost_cap: number;
-  target_exposures_per_window: number;
+  /**
+   * Scales a member's own entitlement to set their fair share. 1.0 means "your
+   * tier's allowance, pro rata through the window"; below 1.0 throttles sooner.
+   */
+  exposure_target_multiplier: number;
   exposure_window_rounds: number;
   /** Rounds without a mutual match at which the no-match boost is maximal. */
   no_match_rounds_full: number;
@@ -83,7 +87,7 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
   exposure_boost_weight: 0.3,
   no_match_boost_weight: 0.2,
   boost_cap: 0.25,
-  target_exposures_per_window: 10,
+  exposure_target_multiplier: 1.0,
   exposure_window_rounds: 7,
   no_match_rounds_full: 8,
 

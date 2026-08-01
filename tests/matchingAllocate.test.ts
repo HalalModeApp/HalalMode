@@ -17,6 +17,7 @@ import {
   exposureNeed,
   fairnessBoost,
   noMatchNeed,
+  type WindowContext,
 } from '../src/matching/fairness';
 import type { MemberSignals } from '../src/matching/estimate';
 
@@ -29,9 +30,13 @@ function member(overrides: Partial<MemberSignals> = {}): MemberSignals {
     timesKept: 0,
     roundsSinceLastMutual: 0,
     exposuresInWindow: 0,
+    introductionsPerRound: 5,
     ...overrides,
   };
 }
+
+/** Mid-window: a free member should have had 5 x 4 = 20 exposures by now. */
+const window: WindowContext = { roundsElapsed: 4 };
 
 function edge(a: string, b: string, reciprocal: number, utility = reciprocal): ScoredEdge {
   return { a, b, reciprocal, utility };
@@ -45,15 +50,15 @@ function capacities(entries: [string, number][]): Map<string, Capacity> {
 
 test('the fairness boost can never exceed its cap', () => {
   const starved = member({ exposuresInWindow: 0, roundsSinceLastMutual: 999 });
-  assert.equal(fairnessBoost(starved, starved, config), config.boost_cap);
+  assert.equal(fairnessBoost(starved, starved, config, window), config.boost_cap);
 });
 
 test('fairness reorders comparable edges but cannot cross a real quality gap', () => {
   const starved = member({ exposuresInWindow: 0, roundsSinceLastMutual: 999 });
   const satisfied = member({ exposuresInWindow: 99, roundsSinceLastMutual: 0 });
 
-  const boostedWeak = adjustedUtility(0.4, starved, starved, config);
-  const unboostedStrong = adjustedUtility(0.8, satisfied, satisfied, config);
+  const boostedWeak = adjustedUtility(0.4, starved, starved, config, window);
+  const unboostedStrong = adjustedUtility(0.8, satisfied, satisfied, config, window);
 
   assert.ok(boostedWeak <= 0.5 + 1e-9, 'a 0.40 edge cannot exceed 0.50 when boosted');
   assert.ok(
@@ -62,13 +67,22 @@ test('fairness reorders comparable edges but cannot cross a real quality gap', (
   );
 });
 
-test('exposure need falls to zero once a member has had their share', () => {
-  assert.equal(exposureNeed(member({ exposuresInWindow: 0 }), config), 1);
-  assert.equal(
-    exposureNeed(member({ exposuresInWindow: config.target_exposures_per_window }), config),
-    0
-  );
-  assert.equal(exposureNeed(member({ exposuresInWindow: 999 }), config), 0);
+test('exposure need is measured against pace, not an absolute total', () => {
+  // A free member four rounds into the window is owed 20 exposures.
+  assert.equal(exposureNeed(member({ exposuresInWindow: 0 }), config, window), 1);
+  assert.equal(exposureNeed(member({ exposuresInWindow: 20 }), config, window), 0);
+  assert.equal(exposureNeed(member({ exposuresInWindow: 999 }), config, window), 0);
+  assert.equal(exposureNeed(member({ exposuresInWindow: 10 }), config, window), 0.5);
+});
+
+test('fair share follows each tier entitlement rather than one flat number', () => {
+  const free = member({ introductionsPerRound: 5, exposuresInWindow: 20 });
+  const premium = member({ introductionsPerRound: 10, exposuresInWindow: 20 });
+
+  // Both have had 20 exposures, but the premium member is owed twice as many,
+  // so only they are still behind.
+  assert.equal(exposureNeed(free, config, window), 0);
+  assert.equal(exposureNeed(premium, config, window), 0.5);
 });
 
 test('the no-match term saturates rather than growing without bound', () => {
@@ -77,12 +91,12 @@ test('the no-match term saturates rather than growing without bound', () => {
   assert.equal(noMatchNeed(member({ roundsSinceLastMutual: 500 }), config), 1);
 });
 
-test('overexposed members get a tighter appearance allowance, never zero', () => {
-  const fair = member({ exposuresInWindow: config.target_exposures_per_window });
-  const heavy = member({ exposuresInWindow: config.target_exposures_per_window * 3 });
+test('members ahead of pace get a tighter allowance, never zero', () => {
+  const fair = member({ exposuresInWindow: 20 });
+  const heavy = member({ exposuresInWindow: 60 });
 
-  assert.equal(appearanceLimit(fair, 5, config), 5);
-  const tightened = appearanceLimit(heavy, 5, config);
+  assert.equal(appearanceLimit(fair, 5, config, window), 5);
+  const tightened = appearanceLimit(heavy, 5, config, window);
   assert.ok(tightened < 5, 'a heavily exposed member should be throttled');
   assert.ok(tightened >= 1, 'nobody is frozen out of a round entirely');
 });
@@ -309,6 +323,7 @@ test('fairness spreads exposure without collapsing match quality', () => {
         timesKept: popular ? 34 : 8,
         exposuresInWindow: popular ? 40 : 2,
         roundsSinceLastMutual: popular ? 0 : 9,
+        introductionsPerRound: 5,
       })
     );
   }
@@ -325,7 +340,7 @@ test('fairness spreads exposure without collapsing match quality', () => {
         a: m,
         b: w,
         reciprocal,
-        utility: adjustedUtility(reciprocal, a, b, config),
+        utility: adjustedUtility(reciprocal, a, b, config, window),
       });
     }
   }

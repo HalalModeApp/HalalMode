@@ -1,7 +1,7 @@
 begin;
 
 set local search_path = public, extensions;
-select plan(12);
+select plan(13);
 
 -- Privacy is the property that matters most here: none of the matching
 -- internals may be reachable by any client role, directly or through a view.
@@ -56,6 +56,12 @@ select is(
   (halal_mode_private.active_matching_config() ->> 'imbalance_lambda')::numeric,
   0.00,
   'the imbalance penalty ships disabled'
+);
+
+select is(
+  (halal_mode_private.active_matching_config() ->> 'exposure_target_multiplier')::numeric,
+  1.0,
+  'fair share defaults to a member''s own tier entitlement'
 );
 
 -- The pair key is stored in one canonical direction, so exposure is a property

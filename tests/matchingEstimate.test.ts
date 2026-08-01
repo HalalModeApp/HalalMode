@@ -22,6 +22,7 @@ function member(overrides: Partial<MemberSignals> = {}): MemberSignals {
     timesKept: 0,
     roundsSinceLastMutual: 0,
     exposuresInWindow: 0,
+    introductionsPerRound: 5,
     ...overrides,
   };
 }

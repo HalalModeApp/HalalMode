@@ -24,6 +24,15 @@ export interface MemberSignals {
   roundsSinceLastMutual: number;
   /** Qualified exposures inside the current fairness window. */
   exposuresInWindow: number;
+  /**
+   * Introductions this member is entitled to each round — 5 free, 10 premium.
+   *
+   * Fairness is measured against a member's own entitlement rather than one
+   * flat number. A single target cannot serve both tiers: set it to the free
+   * allowance and premium members are throttled below what they pay for; set it
+   * to the premium allowance and nobody is throttled at all.
+   */
+  introductionsPerRound: number;
 }
 
 /** Pair state from `halal_mode_private.pair_exposure`. */
