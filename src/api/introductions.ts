@@ -127,3 +127,21 @@ export async function releaseIntroduction(
   });
   if (error) throw error;
 }
+
+/**
+ * Upgrades a release to a deliberate pass, after the member has confirmed it in
+ * their own words. Held for a few months and then forgotten; a second pass much
+ * later is what retires the pair.
+ *
+ * The subject is told nothing, here or ever. The only thing that reaches the
+ * server is the decision — how long anyone read anything stays on the device.
+ */
+export async function passIntroduction(introductionId: string): Promise<void> {
+  if (USE_MOCKS) return;
+
+  const client = requireSupabase();
+  const { error } = await client.rpc('pass_introduction', {
+    p_introduction_id: introductionId,
+  });
+  if (error) throw error;
+}

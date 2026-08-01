@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AudioGreeting } from '@/components/introductions/AudioGreeting';
@@ -20,8 +20,20 @@ import { alpha, color, radius, space } from '@/theme/tokens';
 export default function IntroductionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { localeTag, isRTL, t } = useI18n();
-  const { round, live, release, refresh, keepLimit, submit } = useRound();
+  const { round, live, release, refresh, keepLimit, submit, profileOpened, profileClosed } =
+    useRound();
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Before the early return below, because hooks cannot be conditional. Reading
+  // a profile is timed on the device so that at most one question can be asked
+  // at submission; the timings themselves are never sent anywhere.
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      profileOpened(id);
+      return () => profileClosed(id);
+    }, [id, profileClosed, profileOpened])
+  );
 
   const introduction =
     round?.introductions.find((item) => item.id === id) ?? null;

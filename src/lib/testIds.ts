@@ -16,7 +16,13 @@ export const testIds = {
     ageConfirm: 'onboarding-age-confirm',
     legalConsent: 'onboarding-legal-consent',
   },
-  daily: { reset: 'daily-reset', deck: 'daily-hero-deck', pop: 'daily-pop-mode', primary: 'daily-primary-action' },
+  daily: {
+    reset: 'daily-reset',
+    deck: 'daily-hero-deck',
+    pop: 'daily-pop-mode',
+    primary: 'daily-primary-action',
+    confirmPass: 'daily-confirm-pass',
+  },
   you: {
     profile: 'you-tab-profile',
     matching: 'you-tab-private',

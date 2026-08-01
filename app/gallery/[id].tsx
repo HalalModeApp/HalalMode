@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
@@ -30,7 +30,7 @@ export default function GalleryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { localeTag, isRTL, t } = useI18n();
   const insets = useSafeAreaInsets();
-  const { round, refresh } = useRound();
+  const { round, refresh, profileOpened, profileClosed } = useRound();
   const listRef = useRef<FlatList<string>>(null);
   const [index, setIndex] = useState(0);
   const { width } = useWindowDimensions();
@@ -39,6 +39,17 @@ export default function GalleryScreen() {
   const galleryState = getGalleryState(!!introduction, photos.length);
   const safeIndex = safeGalleryIndex(index, photos.length);
   const number = (value: number) => new Intl.NumberFormat(localeTag).format(value);
+
+  // Looking through someone's photos is time spent on them, so it counts under
+  // the same introduction. The ledger closes the profile screen's own segment
+  // when this opens, and reopens it on the way back, so nothing double-counts.
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      profileOpened(id);
+      return () => profileClosed(id);
+    }, [id, profileClosed, profileOpened])
+  );
 
   useEffect(() => {
     if (safeIndex !== index) setIndex(safeIndex);

@@ -90,6 +90,8 @@ export default function DailyScreen() {
     waitingForConnection,
     submitError,
     reset,
+    passCandidate,
+    confirmPass,
   } = useRound();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -100,6 +102,10 @@ export default function DailyScreen() {
   const [firstChoiceOpen, setFirstChoiceOpen] = useState(false);
   const [firstChoiceId, setFirstChoiceId] = useState<string | null>(null);
   const [conductVisible, setConductVisible] = useState(false);
+  // Which introduction to ask about before submitting, and whether the single
+  // question this round allows has already been put.
+  const [passAskId, setPassAskId] = useState<string | null>(null);
+  const [passAsked, setPassAsked] = useState(false);
   const { shake, style: shakeStyle } = useCameraShake();
   const reducedMotion = useReducedMotion();
   const popPulse = useSharedValue(0);
@@ -127,6 +133,12 @@ export default function DailyScreen() {
     if (!roundId || introductionCount === undefined) return;
     trackProductEvent('daily_round_viewed', { introduction_count: introductionCount });
   }, [roundId, introductionCount]);
+
+  // One question per round, so a new round earns a fresh one.
+  useEffect(() => {
+    setPassAsked(false);
+    setPassAskId(null);
+  }, [roundId]);
 
   useEffect(() => {
     if (!popMode || reducedMotion) {
@@ -185,9 +197,7 @@ export default function DailyScreen() {
     }
   }, [submit]);
 
-  const handleSubmit = useCallback(async () => {
-    setConfirmOpen(false);
-    setFirstChoiceOpen(false);
+  const performSubmit = useCallback(async () => {
     try {
       // The array order is the rank, so the named first choice leads.
       const ordered = interestTargetId
@@ -203,6 +213,39 @@ export default function DailyScreen() {
       // The provider keeps the round open and exposes an actionable error.
     }
   }, [firstChoiceId, interestTargetId, live, submit]);
+
+  const handleSubmit = useCallback(async () => {
+    setConfirmOpen(false);
+    setFirstChoiceOpen(false);
+    // Asked at most once per round, and only when one profile was read markedly
+    // less than the rest. Most rounds never reach the dialog at all.
+    if (!passAsked) {
+      setPassAsked(true);
+      const candidate = passCandidate();
+      if (candidate) {
+        setPassAskId(candidate);
+        return;
+      }
+    }
+    await performSubmit();
+  }, [passAsked, passCandidate, performSubmit]);
+
+  const passAskName =
+    round?.introductions.find((item) => item.id === passAskId)?.profile.firstName
+    ?? t('safety.thisPerson');
+
+  // Either answer submits the round. Saying no is a real answer, not a dismissal
+  // — it says the quick look was not a judgement, and that is worth recording as
+  // much as the other way.
+  const answerPass = useCallback(
+    async (deliberate: boolean) => {
+      const id = passAskId;
+      setPassAskId(null);
+      if (deliberate && id) await confirmPass(id);
+      await performSubmit();
+    },
+    [confirmPass, passAskId, performSubmit]
+  );
 
   const openInterestConfirmation = useCallback((id?: string) => {
     setInterestTargetId(id ?? null);
@@ -536,6 +579,19 @@ export default function DailyScreen() {
         onConfirm={() => void handleLetGoFinal()}
         onCancel={() => setConfirmLetGo(false)}
       />
+      {/* Asked about someone already let go, so the name comes from the whole
+          round rather than from the survivors. */}
+      <ConfirmDialog
+        visible={passAskId !== null}
+        title={t('daily.passTitle', { name: passAskName })}
+        body={t('daily.passBody', { name: passAskName })}
+        confirmLabel={t('daily.passConfirm')}
+        cancelLabel={t('daily.passCancel')}
+        testID={testIds.daily.confirmPass}
+        onConfirm={() => void answerPass(true)}
+        onCancel={() => void answerPass(false)}
+      />
+
       <ConductAcknowledgement visible={conductVisible} onAccept={acknowledgeConduct} />
     </Screen>
   );

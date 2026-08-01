@@ -5,11 +5,18 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 
-import { fetchCurrentRoundState, releaseIntroduction, submitKeeps } from '@/api/introductions';
+import {
+  fetchCurrentRoundState,
+  passIntroduction,
+  releaseIntroduction,
+  submitKeeps,
+} from '@/api/introductions';
+import { DwellLedger, inferPassCandidate } from '@/lib/dwell';
 import type { DailyRoundEmptyReason, NarrowingCriterion } from '@/lib/dailyRoundState';
 import { queryKeys } from '@/lib/queryClient';
 import { getRoundInteractionState, resolveActiveId } from '@/lib/roundInvariants';
@@ -52,6 +59,21 @@ interface RoundValue {
   releaseError: string | null;
   retryRelease: () => void;
   clearReleaseError: () => void;
+
+  /**
+   * How long each profile was read. Kept on the device and never sent — it
+   * exists only to decide whether a single question is worth asking before the
+   * round is submitted.
+   */
+  profileOpened: (introductionId: string) => void;
+  profileClosed: (introductionId: string) => void;
+  /**
+   * At most one introduction worth asking about, and null far more often than
+   * not. Nothing acts on this without the member saying so.
+   */
+  passCandidate: () => string | null;
+  /** Turns a release into a deliberate pass, once the member has confirmed. */
+  confirmPass: (introductionId: string) => Promise<void>;
 
   submitting: boolean;
   /** Commits the surviving introductions. Resolves with the mutual matches. */
@@ -172,6 +194,31 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     if (releaseFailure) release(releaseFailure.id);
   }, [release, releaseFailure]);
 
+  // A ref, not state: reading a profile must never re-render the round, and the
+  // timings are consulted once, at submission.
+  const ledger = useRef(new DwellLedger()).current;
+  const profileOpened = useCallback((id: string) => ledger.opened(id), [ledger]);
+  const profileClosed = useCallback((id: string) => ledger.closed(id), [ledger]);
+  const passCandidate = useCallback(
+    () => inferPassCandidate(ledger.records(), Object.keys(released)),
+    [ledger, released]
+  );
+
+  const passMutation = useMutation({ mutationFn: passIntroduction });
+  const confirmPass = useCallback(
+    async (id: string) => {
+      // Deliberately not fatal. The member has answered a question they were
+      // asked as a courtesy; failing their submission over it would be a poor
+      // trade, and the release is already recorded either way.
+      try {
+        await passMutation.mutateAsync(id);
+      } catch {
+        // Left as a plain release.
+      }
+    },
+    [passMutation]
+  );
+
   const submitMutation = useMutation({
     mutationFn: async (keptIntroductionIds: string[]) => {
       if (!round) return { mutualProfileIds: [] };
@@ -193,6 +240,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   );
 
   const reset = useCallback(() => {
+    ledger.clear();
     setReleased({});
     setReleasing({});
     setReleaseFailure(null);
@@ -201,11 +249,12 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     setSubmitted(false);
     setWaitingForConnection(false);
     void queryClient.invalidateQueries({ queryKey: queryKeys.round });
-  }, [queryClient]);
+  }, [ledger, queryClient]);
 
   useEffect(() => {
     // Query data is cleared at the auth boundary. These are interaction-local
     // values, so reset them separately before a different member sees a round.
+    ledger.clear();
     setReleased({});
     setReleasing({});
     setReleaseFailure(null);
@@ -213,7 +262,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     setPopMode(false);
     setSubmitted(false);
     setWaitingForConnection(false);
-  }, [memberId]);
+  }, [ledger, memberId]);
 
   const value = useMemo<RoundValue>(
     () => ({
@@ -242,6 +291,10 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       releaseError: releaseFailure?.message ?? null,
       retryRelease,
       clearReleaseError: () => setReleaseFailure(null),
+      profileOpened,
+      profileClosed,
+      passCandidate,
+      confirmPass,
       submitting: submitMutation.isPending,
       submit,
       submitted,
@@ -267,6 +320,10 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       release,
       releaseFailure,
       retryRelease,
+      profileOpened,
+      profileClosed,
+      passCandidate,
+      confirmPass,
       submitMutation.isPending,
       submit,
       submitted,
