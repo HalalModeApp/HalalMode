@@ -1223,7 +1223,7 @@ function DeckCard({
         <Image
           pointerEvents="none"
           source={require(
-            './film-grain-animated.webp'
+            '../../../assets/textures/film-grain-animated.webp'
           )}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
