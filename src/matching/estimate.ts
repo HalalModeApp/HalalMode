@@ -206,6 +206,41 @@ export function reciprocalScore(
  * still under the repeat limit, past its cooldown, not retired, and its
  * estimate has not collapsed since the first showing.
  */
+/**
+ * How much patience a pair has earned, 0 to 1, from its reciprocal estimate.
+ *
+ * Repetition is a limited resource: every second showing of one pair is a first
+ * showing somebody else does not get. Spending it where the estimate says a
+ * mutual pick is plausible is simply where it buys the most, and a pair the
+ * model rates barely above the floor has already had its best chance.
+ *
+ * Anchored at min_reciprocal_score, below which nobody is shown at all, and at
+ * repeat_generous_score, which is what a genuinely promising pair looks like
+ * rather than a theoretical 1.0 nobody reaches.
+ */
+export function repeatGenerosity(score: number, config: MatchingConfig): number {
+  const low = config.min_reciprocal_score;
+  const high = config.repeat_generous_score;
+  if (high <= low) return 1;
+  return clamp((score - low) / (high - low), 0, 1);
+}
+
+/** Showings this pair has earned, between the configured floor and ceiling. */
+export function allowedAppearances(score: number, config: MatchingConfig): number {
+  const span = config.max_pair_appearances - config.min_pair_appearances;
+  return Math.round(config.min_pair_appearances + repeatGenerosity(score, config) * span);
+}
+
+/**
+ * Days before this pair may be shown again. Inverted: a promising pair comes
+ * back within days, an unlikely one waits weeks. The gap between them is the
+ * point — a long wait on a weak pair frees the slot for somebody new.
+ */
+export function pairCooldownDays(score: number, config: MatchingConfig): number {
+  const span = config.max_repeat_cooldown_days - config.min_repeat_cooldown_days;
+  return Math.round(config.max_repeat_cooldown_days - repeatGenerosity(score, config) * span);
+}
+
 export function evaluatePairResurface(
   history: PairHistory,
   currentScore: number,
@@ -215,8 +250,17 @@ export function evaluatePairResurface(
   config: MatchingConfig
 ): PairResurfaceDecision {
   if (retiredAt) return { eligible: false, retirementReason: null };
+  // The hard ceiling. Reached it and the pair is done, whatever the score says
+  // — at some point the answer has been asked for often enough.
   if (history.timesShown >= config.max_pair_appearances) {
     return { eligible: false, retirementReason: 'repeat_limit' };
+  }
+  // The soft one, and deliberately not a retirement: the allowance moves with
+  // the score, so a pair held back today because it looked unlikely can be
+  // shown again if it later looks better. Writing that down as retired would
+  // make a passing estimate permanent.
+  if (history.timesShown >= allowedAppearances(currentScore, config)) {
+    return { eligible: false, retirementReason: null };
   }
   if (cooldownUntil && cooldownUntil > now) {
     return { eligible: false, retirementReason: null };

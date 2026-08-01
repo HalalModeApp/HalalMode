@@ -12,7 +12,9 @@ import {
   confidence,
   directionalEstimate,
   evaluatePairResurface,
+  allowedAppearances,
   mayResurface,
+  pairCooldownDays,
   pairPrior,
   NO_PAIR_HISTORY,
   reciprocalScore,
@@ -301,6 +303,99 @@ test('the pass settings are configurable and fail closed', () => {
   // 1 is legal and means "a pass costs no rank", which somebody may want to
   // choose deliberately.
   assert.equal(resolveConfig({ repeat_pass_penalty: 1 }).repeat_pass_penalty, 1);
+});
+
+// --- Repetition scaled to likelihood ----------------------------------------
+
+test('a promising pair earns more showings than an unlikely one', () => {
+  const strong = allowedAppearances(config.repeat_generous_score, config);
+  const weak = allowedAppearances(config.min_reciprocal_score, config);
+
+  assert.equal(strong, config.max_pair_appearances, 'a promising pair earns the ceiling');
+  assert.equal(weak, config.min_pair_appearances, 'a pair at the floor earns the fewest');
+  assert.ok(strong > weak);
+
+  // Above the anchor nothing more is earned: the range is deliberately bounded
+  // at both ends so one exceptional pair cannot monopolise the repetition.
+  assert.equal(allowedAppearances(1, config), config.max_pair_appearances);
+  assert.equal(allowedAppearances(0, config), config.min_pair_appearances);
+});
+
+test('a promising pair comes back sooner', () => {
+  const strong = pairCooldownDays(config.repeat_generous_score, config);
+  const weak = pairCooldownDays(config.min_reciprocal_score, config);
+
+  assert.equal(strong, config.min_repeat_cooldown_days);
+  assert.equal(weak, config.max_repeat_cooldown_days);
+  assert.ok(strong < weak, 'the wait is inverted against the estimate');
+});
+
+test('both scales move together and stay monotonic', () => {
+  let previousAppearances = -1;
+  let previousWait = Number.POSITIVE_INFINITY;
+  for (let score = 0; score <= 1.0001; score += 0.05) {
+    const appearances = allowedAppearances(score, config);
+    const wait = pairCooldownDays(score, config);
+    assert.ok(appearances >= previousAppearances, `allowance dipped at ${score.toFixed(2)}`);
+    assert.ok(wait <= previousWait, `wait rose at ${score.toFixed(2)}`);
+    assert.ok(appearances >= config.min_pair_appearances
+      && appearances <= config.max_pair_appearances);
+    assert.ok(wait >= config.min_repeat_cooldown_days
+      && wait <= config.max_repeat_cooldown_days);
+    previousAppearances = appearances;
+    previousWait = wait;
+  }
+});
+
+test('the soft allowance holds a pair back without retiring it', () => {
+  const now = new Date('2026-03-01T00:00:00Z');
+  const weakScore = config.min_reciprocal_score + 0.001;
+  const history: PairHistory = {
+    timesShown: config.min_pair_appearances,
+    firstReciprocalScore: weakScore,
+    lastReciprocalScore: weakScore,
+    explicitPassCount: 0,
+  };
+
+  assert.deepEqual(
+    evaluatePairResurface(history, weakScore, null, null, now, config),
+    { eligible: false, retirementReason: null },
+    'spent its allowance, but nothing is written down'
+  );
+
+  // The same pair, later, looking better: the allowance moves with the score,
+  // so holding it back today must not have closed it.
+  assert.deepEqual(
+    evaluatePairResurface(history, config.repeat_generous_score, null, null, now, config),
+    { eligible: true, retirementReason: null },
+    'a pair held back for looking unlikely returns if it later looks better'
+  );
+});
+
+test('the hard ceiling still retires, whatever the score says', () => {
+  const now = new Date('2026-03-01T00:00:00Z');
+  const exhausted: PairHistory = {
+    timesShown: config.max_pair_appearances,
+    firstReciprocalScore: 0.9,
+    lastReciprocalScore: 0.9,
+    explicitPassCount: 0,
+  };
+  assert.deepEqual(
+    evaluatePairResurface(exhausted, 0.9, null, null, now, config),
+    { eligible: false, retirementReason: 'repeat_limit' },
+    'at some point the answer has been asked for often enough'
+  );
+});
+
+test('the repeat range fails closed', () => {
+  assert.throws(() => resolveConfig({ min_pair_appearances: 9 }), /Repeat/);
+  assert.throws(() => resolveConfig({ max_repeat_cooldown_days: 1 }), /Repeat/);
+  assert.throws(() => resolveConfig({ min_repeat_cooldown_days: 0 }), /Repeat/);
+  // At or below the floor the range inverts and everyone reads as promising.
+  assert.throws(
+    () => resolveConfig({ repeat_generous_score: config.min_reciprocal_score }),
+    /Repeat/
+  );
 });
 
 test('a pair below the score floor is never resurfaced', () => {

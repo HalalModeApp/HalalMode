@@ -55,9 +55,31 @@ export interface MatchingConfig {
   no_match_rounds_full: number;
 
   // --- Repeat exposure ----------------------------------------------------
+  //
+  // Repetition is a limited resource: every second showing of one pair is a
+  // first showing somebody else does not get. How much of it a pair earns, and
+  // how soon, both scale with how plausible a mutual pick looks.
   repeat_decay: number;
+  /**
+   * Flat cooldown for writers with no score to go on — the historical backfill,
+   * and the pre-v1 generator. Anything that knows the pair's estimate uses the
+   * range below instead.
+   */
   repeat_cooldown_days: number;
+  /** Shortest wait, earned by a pair at or above repeat_generous_score. */
+  min_repeat_cooldown_days: number;
+  /** Longest wait, for a pair barely above the floor. */
+  max_repeat_cooldown_days: number;
+  /** Showings a pair gets at the floor. */
+  min_pair_appearances: number;
+  /** Hard ceiling. Reaching it retires the pair whatever the score says. */
   max_pair_appearances: number;
+  /**
+   * The estimate at which a pair earns full patience. Deliberately well under
+   * 1.0, which no real pair reaches — anchoring there would make almost every
+   * pair look unpromising and collapse the range to its floor.
+   */
+  repeat_generous_score: number;
   /** Abandon a pair once its estimate has fallen this far from first sight. */
   repeat_abandon_drop: number;
 
@@ -191,7 +213,11 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
 
   repeat_decay: 0.7,
   repeat_cooldown_days: 14,
-  max_pair_appearances: 3,
+  min_repeat_cooldown_days: 3,
+  max_repeat_cooldown_days: 21,
+  min_pair_appearances: 2,
+  max_pair_appearances: 5,
+  repeat_generous_score: 0.6,
   repeat_abandon_drop: 0.35,
 
   reach_gap_threshold: 0.25,
@@ -319,7 +345,17 @@ export function validateConfig(config: MatchingConfig): MatchingConfig {
   if (!(config.repeat_decay > 0 && config.repeat_decay <= 1)
       || config.repeat_cooldown_days < 0 || !Number.isInteger(config.repeat_cooldown_days)
       || config.repeat_abandon_drop < 0 || config.repeat_abandon_drop > 1
-      || config.max_pair_appearances < 1 || !Number.isInteger(config.max_pair_appearances)) {
+      || config.max_pair_appearances < 1 || !Number.isInteger(config.max_pair_appearances)
+      || config.min_pair_appearances < 1 || !Number.isInteger(config.min_pair_appearances)
+      || config.min_pair_appearances > config.max_pair_appearances
+      || config.min_repeat_cooldown_days < 1
+      || !Number.isInteger(config.min_repeat_cooldown_days)
+      || !Number.isInteger(config.max_repeat_cooldown_days)
+      || config.max_repeat_cooldown_days < config.min_repeat_cooldown_days
+      // At or below the floor the range would invert — every pair would read
+      // as maximally promising, which is the opposite of the intent.
+      || config.repeat_generous_score <= config.min_reciprocal_score
+      || config.repeat_generous_score > 1) {
     throw new Error('Repeat exposure configuration is invalid');
   }
   if (config.exposure_full_confidence < 1
