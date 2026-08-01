@@ -213,7 +213,7 @@ select throws_ok(
   'a retry cannot silently change the preparation contract'
 );
 select ok(
-  (select jsonb_object_length(to_jsonb(edge)) = 9
+  (select (select count(*) from jsonb_each(to_jsonb(edge))) = 9
     and to_jsonb(edge) ?& array[
     'user_low', 'user_high', 'compat_low_to_high', 'compat_high_to_low',
     'pair_times_shown', 'pair_first_score', 'pair_last_score',
