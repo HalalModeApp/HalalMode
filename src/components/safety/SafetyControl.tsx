@@ -214,7 +214,9 @@ export function SafetyControl({
 
             {view === 'hide' ? (
               <>
-                <Text variant="displaySmall">{t('safety.hideTitle')}</Text>
+                <Text variant="displaySmall">
+                  {t('safety.hideTitle', { name: memberName ?? t('safety.thisPerson') })}
+                </Text>
                 <Text variant="bodySmall" style={styles.body}>
                   {t('safety.hideBody', { name: memberName ?? t('safety.thisPerson') })}
                 </Text>

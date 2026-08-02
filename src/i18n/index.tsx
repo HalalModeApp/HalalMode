@@ -25,13 +25,18 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const nativeRestartRequired = I18nManager.isRTL !== desiredRTL;
 
   useEffect(() => {
-    I18nManager.allowRTL(true);
-    I18nManager.swapLeftAndRightInRTL(true);
+    // Guarded because these are native-only. react-native-web ships an
+    // I18nManager with `isRTL` and nothing else, so calling the rest throws at
+    // startup and takes the whole tree with it — the app rendered nothing at
+    // all in a browser until this check existed. On a device every one of them
+    // is present and this costs a typeof.
+    I18nManager.allowRTL?.(true);
+    I18nManager.swapLeftAndRightInRTL?.(true);
     if (!nativeRestartRequired) return;
     // React Native applies forceRTL on the next cold start. Deliberately do not
     // reload here: automatic reloads can loop while persisted language state is
     // still hydrating. The settings UI asks for one restart only on a change.
-    I18nManager.forceRTL(desiredRTL);
+    I18nManager.forceRTL?.(desiredRTL);
   }, [desiredRTL, nativeRestartRequired]);
 
   const value = useMemo<I18nValue>(() => {
@@ -40,6 +45,15 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       let message: string = catalog[key];
       for (const [name, replacement] of Object.entries(params ?? {})) {
         message = message.replaceAll(`{{${name}}}`, String(replacement));
+      }
+      if (__DEV__ && message.includes('{{')) {
+        // Shipped once: copy gained a {{name}} and the call site was never given
+        // the parameter, so a confirmation dialog asked "Stop seeing {{name}}?".
+        // Nothing failed — every test checked that keys exist, not that they
+        // were filled in. Loud in development, silent for members either way.
+        console.error(
+          `i18n: "${key}" still contains a placeholder after substitution: ${message}`
+        );
       }
       return message;
     };
