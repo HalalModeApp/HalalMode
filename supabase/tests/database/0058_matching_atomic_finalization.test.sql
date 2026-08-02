@@ -63,7 +63,9 @@ insert into halal_mode_private.pair_exposure (
   user_low, user_high, times_shown, first_reciprocal_score,
   last_reciprocal_score, cooldown_until
 ) values
-  ('00000000-0000-0000-0000-000000005801', '00000000-0000-0000-0000-000000005802', 2, 0.75, 0.70, null),
+  ('00000000-0000-0000-0000-000000005801', '00000000-0000-0000-0000-000000005802',
+   (halal_mode_private.active_matching_config() ->> 'max_pair_appearances')::int - 1,
+   0.75, 0.70, null),
   ('00000000-0000-0000-0000-000000005803', '00000000-0000-0000-0000-000000005804', 1, 0.90, 0.60, null);
 
 select set_config('request.jwt.claims', '{"role":"service_role"}', true);
