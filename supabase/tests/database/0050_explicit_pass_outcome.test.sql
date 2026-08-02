@@ -9,7 +9,7 @@ select plan(5);
 -- the submission RPC starts accepting the new outcome.
 select is(
   enum_range(null::selection_decision)::text[],
-  array['kept', 'released', 'expired', 'explicit_pass']::text[],
+  array['kept', 'released', 'expired', 'explicit_pass', 'soft_select']::text[],
   'selection decisions retain the legacy outcomes and add explicit_pass and soft_select'
 );
 

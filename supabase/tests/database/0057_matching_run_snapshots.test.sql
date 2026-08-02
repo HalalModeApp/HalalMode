@@ -217,13 +217,14 @@ select ok(
     and to_jsonb(edge) ?& array[
     'user_low', 'user_high', 'compat_low_to_high', 'compat_high_to_low',
     'pair_times_shown', 'pair_first_score', 'pair_last_score',
-    'pair_cooldown_until', 'pair_retired_at'
+    'pair_cooldown_until', 'pair_retired_at',
+    'pair_explicit_pass_count', 'pair_soft_select_count'
   ]
    from public.matching_candidate_edges_service(
      (select (context ->> 'run_id')::uuid from snapshot_test_runs where label = 'live'),
      null, null, 1
    ) edge),
-  'candidate pages expose exactly the documented nine server-only fields'
+  'candidate pages expose exactly the documented eleven server-only fields'
 );
 
 create temporary table snapshot_pages as

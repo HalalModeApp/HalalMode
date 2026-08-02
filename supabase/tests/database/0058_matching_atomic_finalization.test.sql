@@ -180,7 +180,9 @@ select ok(
     select 1 from halal_mode_private.pair_exposure
     where user_low = '00000000-0000-0000-0000-000000005801'
       and user_high = '00000000-0000-0000-0000-000000005802'
-      and times_shown = 3 and retired_at is not null
+      and times_shown = (halal_mode_private.active_matching_config()
+                         ->> 'max_pair_appearances')::int
+      and retired_at is not null
       and retired_reason = 'repeat_limit'
   ),
   'the appearance that reaches the repeat limit retires atomically'
