@@ -422,6 +422,15 @@ Deno.serve(async (request: Request) => {
     return Response.json({ error: expired.error.message }, { status: 500 });
   }
 
+  // Before the config is read, so a version the tuner inserts cannot appear
+  // between that read and the run start — which the run start would reject for
+  // not using the active version. Deliberately not fatal: adjusting weights is
+  // an improvement to tomorrow, and failing it must not cost anyone their round.
+  const tuned = await client.rpc('tune_matching_weights_service');
+  if (tuned.error) {
+    console.error('weight tuning skipped:', tuned.error.message);
+  }
+
   // A pass holds for a few months and then stops holding. Without this the
   // cooldown would be a number in a config table that nothing ever read, and
   // every pass would be permanent — which is the behaviour it replaced.

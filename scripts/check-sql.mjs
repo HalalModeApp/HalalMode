@@ -77,6 +77,7 @@ const CREATORS = [
   /create\s+(?:or\s+replace\s+)?view\s+(?:[a-z0-9_]+\.)?([a-z0-9_]+)/gi,
   /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:[a-z0-9_]+\.)?([a-z0-9_]+)/gi,
   /create\s+type\s+(?:[a-z0-9_]+\.)?([a-z0-9_]+)/gi,
+  /create\s+sequence\s+(?:if\s+not\s+exists\s+)?(?:[a-z0-9_]+\.)?([a-z0-9_]+)/gi,
   // A rename creates a name as surely as a create does.
   /rename\s+to\s+([a-z0-9_]+)/gi,
 ];

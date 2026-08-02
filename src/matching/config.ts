@@ -281,7 +281,7 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
   },
   distance_free_km: 25,
   sect_mismatch_score: 0.15,
-  tuning_enabled: false,
+  tuning_enabled: true,
   tuning_min_samples: 200,
   tuning_gain: 0.5,
   max_weight_step: 0.02,
