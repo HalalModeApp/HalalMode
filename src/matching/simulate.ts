@@ -241,6 +241,7 @@ export function simulate(options: SimOptions): SimMetrics {
                 lastReciprocalScore: null,
                 // The simulation has no pass gesture, so no pair ever carries one.
                 explicitPassCount: 0,
+                softSelectCount: 0,
               };
 
         const forward = directionalEstimate(compat, w, history, config);

@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { DwellLedger, inferPassCandidate, type DwellRecord } from '../src/lib/dwell';
+import {
+  DwellLedger,
+  inferPassCandidate,
+  inferSoftSelect,
+  type DwellRecord,
+} from '../src/lib/dwell';
 
 const record = (introductionId: string, totalMs: number, opens = 1): DwellRecord => ({
   introductionId,
@@ -253,4 +258,53 @@ test('a profile left open when the app is backgrounded is still counted', () => 
   clock += 600_000;
   // Submitted from a notification, or the round expired while away.
   assert.deepEqual(ledger.records(), [{ introductionId: 'a', totalMs: 4_000, opens: 1 }]);
+});
+
+// --- Soft select ------------------------------------------------------------
+
+test('the most-read profile among those let go is soft selected', () => {
+  const records = [
+    record('a', 40_000),
+    record('b', 30_000),
+    record('c', 8_000),
+  ];
+  // 'a' was kept, so the longest read among the rest is 'b'.
+  assert.equal(inferSoftSelect(records, ['b', 'c']), 'b');
+});
+
+test('someone kept is not soft selected — they were actually chosen', () => {
+  const records = [record('a', 40_000), record('b', 30_000)];
+  assert.equal(inferSoftSelect(records, ['b']), 'b', 'the kept one is skipped');
+});
+
+test('a tie for longest singles nobody out', () => {
+  const records = [record('a', 40_000), record('b', 20_000), record('c', 20_000)];
+  assert.equal(inferSoftSelect(records, ['b', 'c']), null);
+});
+
+test('one profile read is not enough for "most" to mean anything', () => {
+  assert.equal(inferSoftSelect([record('a', 40_000)], ['a']), null);
+});
+
+test('a bounce is not a reading, so it cannot be the most read', () => {
+  const records = [record('a', 40_000), record('b', 30_000), record('c', 200)];
+  assert.equal(inferSoftSelect(records, ['c']), null, 'the only released profile was never read');
+});
+
+test('the two inferences never name the same person', () => {
+  const records = [
+    record('a', 40_000),
+    record('b', 30_000),
+    record('c', 25_000),
+    record('d', 20_000),
+    record('e', 3_000),
+  ];
+  const five = ['a', 'b', 'c', 'd', 'e'];
+  const released = ['b', 'c', 'd', 'e'];
+
+  const pass = inferPassCandidate(records, five, released);
+  const soft = inferSoftSelect(records, released);
+  assert.equal(pass, 'e');
+  assert.equal(soft, 'b');
+  assert.notEqual(pass, soft, 'the least read and the most read cannot be one person');
 });

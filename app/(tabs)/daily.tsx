@@ -92,6 +92,7 @@ export default function DailyScreen() {
     reset,
     passCandidate,
     confirmPass,
+    recordSoftSelect,
   } = useRound();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -198,6 +199,9 @@ export default function DailyScreen() {
   }, [submit]);
 
   const performSubmit = useCallback(async () => {
+    // Before the keeps land, so the reading that produced it is still what the
+    // round looked like. Swallows its own failures; it must never cost a submit.
+    await recordSoftSelect();
     try {
       // The array order is the rank, so the named first choice leads.
       const ordered = interestTargetId
@@ -212,7 +216,7 @@ export default function DailyScreen() {
     } catch {
       // The provider keeps the round open and exposes an actionable error.
     }
-  }, [firstChoiceId, interestTargetId, live, submit]);
+  }, [firstChoiceId, interestTargetId, live, recordSoftSelect, submit]);
 
   const handleSubmit = useCallback(async () => {
     setConfirmOpen(false);

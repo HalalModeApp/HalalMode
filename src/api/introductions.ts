@@ -129,9 +129,27 @@ export async function releaseIntroduction(
 }
 
 /**
+ * Records that this member read the subject at length but had no keep left.
+ *
+ * Not confirmed, unlike a pass. A pass is a judgement about somebody and gets a
+ * question; this only notes that they lingered, costs them nothing if it is
+ * wrong, and is never shown to anyone. The server refuses it outright for a
+ * pair that has been passed.
+ */
+export async function softSelectIntroduction(introductionId: string): Promise<void> {
+  if (USE_MOCKS) return;
+
+  const client = requireSupabase();
+  const { error } = await client.rpc('soft_select_introduction', {
+    p_introduction_id: introductionId,
+  });
+  if (error) throw error;
+}
+
+/**
  * Upgrades a release to a deliberate pass, after the member has confirmed it in
- * their own words. Held for a few months and then forgotten; a second pass much
- * later is what retires the pair.
+ * their own words. The first costs the pair rank and a month of quiet; a second,
+ * months later, also holds them apart.
  *
  * The subject is told nothing, here or ever. The only thing that reaches the
  * server is the decision — how long anyone read anything stays on the device.

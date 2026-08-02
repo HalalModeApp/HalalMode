@@ -41,6 +41,8 @@ export interface CandidateEdgeRow {
   pair_retired_at: string | null;
   /** Absent from an older snapshot; treated as never passed. */
   pair_explicit_pass_count?: number;
+  /** Absent from an older snapshot; treated as never soft selected. */
+  pair_soft_select_count?: number;
 }
 
 export interface MemberSignalRow {
@@ -187,6 +189,7 @@ export function planRound(
         firstReciprocalScore: row.pair_first_score,
         lastReciprocalScore: row.pair_last_score,
         explicitPassCount: row.pair_explicit_pass_count ?? 0,
+        softSelectCount: row.pair_soft_select_count ?? 0,
       };
 
       // Each direction is estimated against the *subject* of that direction.

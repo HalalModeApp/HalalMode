@@ -144,6 +144,7 @@ test('not being picked is situational — a pair may return after cooldown', () 
     firstReciprocalScore: 0.6,
     lastReciprocalScore: 0.58,
     explicitPassCount: 0,
+    softSelectCount: 0,
   };
 
   assert.equal(
@@ -165,6 +166,7 @@ test('a pair stops resurfacing once it hits the repeat limit or is retired', () 
     firstReciprocalScore: 0.6,
     lastReciprocalScore: 0.6,
     explicitPassCount: 0,
+    softSelectCount: 0,
   };
 
   assert.equal(mayResurface(exhausted, 0.6, null, null, now, config), false);
@@ -182,6 +184,7 @@ test('a pair whose estimate keeps collapsing is abandoned', () => {
     firstReciprocalScore: 0.7,
     lastReciprocalScore: 0.3,
     explicitPassCount: 0,
+    softSelectCount: 0,
   };
 
   // 0.7 -> 0.3 is a 0.4 drop, past the 0.35 abandon threshold.
@@ -198,6 +201,7 @@ test('the repeat-abandon boundary is inclusive and emits a durable retirement pr
     firstReciprocalScore: first,
     lastReciprocalScore: first,
     explicitPassCount: 0,
+    softSelectCount: 0,
   };
 
   assert.deepEqual(
@@ -234,6 +238,7 @@ test('repeat exhaustion proposes retirement while an already-retired pair propos
     firstReciprocalScore: 0.7,
     lastReciprocalScore: 0.7,
     explicitPassCount: 0,
+    softSelectCount: 0,
   };
 
   assert.deepEqual(
@@ -254,11 +259,12 @@ test('repeat exhaustion proposes retirement while an already-retired pair propos
   );
 });
 
-const passedPair = (explicitPassCount: number): PairHistory => ({
+const passedPair = (explicitPassCount: number, softSelectCount = 0): PairHistory => ({
   timesShown: 1,
   firstReciprocalScore: null,
   lastReciprocalScore: null,
   explicitPassCount,
+  softSelectCount,
 });
 
 test('the first pass already costs the pair rank', () => {
@@ -356,6 +362,7 @@ test('the soft allowance holds a pair back without retiring it', () => {
     firstReciprocalScore: weakScore,
     lastReciprocalScore: weakScore,
     explicitPassCount: 0,
+    softSelectCount: 0,
   };
 
   assert.deepEqual(
@@ -380,6 +387,7 @@ test('the hard ceiling still retires, whatever the score says', () => {
     firstReciprocalScore: 0.9,
     lastReciprocalScore: 0.9,
     explicitPassCount: 0,
+    softSelectCount: 0,
   };
   assert.deepEqual(
     evaluatePairResurface(exhausted, 0.9, null, null, now, config),
@@ -437,4 +445,60 @@ test('the generosity curve is configurable and fails closed', () => {
 
   assert.throws(() => resolveConfig({ repeat_generosity_curve: 0 }), /Repeat/);
   assert.throws(() => resolveConfig({ repeat_generosity_curve: -1 }), /Repeat/);
+});
+
+// --- Soft select ------------------------------------------------------------
+
+test('a soft select lifts a pair that would otherwise have decayed', () => {
+  // Three showings, so the decayed prior is 0.343 and the lift has room to
+  // land. One showing decays only to 0.7, where the lift would hit the cap and
+  // hide the arithmetic being checked.
+  const shownThrice = (softSelectCount: number): PairHistory => ({
+    timesShown: 3,
+    firstReciprocalScore: null,
+    lastReciprocalScore: null,
+    explicitPassCount: 0,
+    softSelectCount,
+  });
+
+  const plain = pairPrior(shownThrice(0), config);
+  const lifted = pairPrior(shownThrice(1), config);
+
+  assert.ok(lifted > plain, 'being read at length counts for something');
+  assert.ok(Math.abs(lifted - plain * config.soft_select_lift) < 1e-12);
+  assert.ok(lifted <= 1, 'and never past what a never-shown pair scores');
+});
+
+test('the lift cannot carry a pair past a never-shown one', () => {
+  // Capped at 1: a soft-selected pair climbs back to where a fresh pair sits and
+  // no further. Otherwise a much-read pair would start outranking new faces.
+  const heavilyLifted: PairHistory = {
+    timesShown: 1,
+    firstReciprocalScore: null,
+    lastReciprocalScore: null,
+    explicitPassCount: 0,
+    softSelectCount: 8,
+  };
+  assert.equal(pairPrior(heavilyLifted, config), 1);
+  assert.equal(pairPrior(NO_PAIR_HISTORY, config), 1);
+});
+
+test('a pass outweighs a soft select on the same pair', () => {
+  // The database refuses to soft select a passed pair at all, so this should
+  // never arise. If it somehow does, the deliberate no must win over the guess.
+  const both = passedPair(1, 1);
+  assert.ok(
+    pairPrior(both, config) < pairPrior(passedPair(0), config),
+    'a pair that was passed must not be lifted back above one that was not'
+  );
+});
+
+test('the soft select lift is configurable and fails closed', () => {
+  assert.throws(() => resolveConfig({ soft_select_lift: 1 }), /Explicit pass/);
+  assert.throws(() => resolveConfig({ soft_select_lift: 0.5 }), /Explicit pass/);
+  // A pass must always cost more time than simply not being chosen.
+  assert.throws(
+    () => resolveConfig({ explicit_pass_first_cooldown_days: 10 }),
+    /Explicit pass/
+  );
 });

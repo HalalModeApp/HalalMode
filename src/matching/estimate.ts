@@ -66,6 +66,12 @@ export interface PairHistory {
    * its cooldown never reaches here at all — the pair is filtered out upstream.
    */
   explicitPassCount: number;
+  /**
+   * Times this pair was read at length and left unkept for want of a slot. The
+   * one positive signal a round produces, and never set on a pair that has also
+   * been passed.
+   */
+  softSelectCount: number;
 }
 
 export const NO_PAIR_HISTORY: PairHistory = {
@@ -73,6 +79,7 @@ export const NO_PAIR_HISTORY: PairHistory = {
   firstReciprocalScore: null,
   lastReciprocalScore: null,
   explicitPassCount: 0,
+  softSelectCount: 0,
 };
 
 export type PairRetirementReason = 'repeat_limit' | 'score_collapse';
@@ -124,12 +131,23 @@ export function confidence(member: MemberSignals, config: MatchingConfig): numbe
  * chosen; they simply stop outranking people who were never turned down. A
  * second pass adds a cooldown on top of this, and only a member closes a pair
  * for good, by hiding someone.
+ *
+ * A soft select pulls the other way. Somebody read at length and left unkept
+ * only because the keep limit had gone is the strongest positive signal a round
+ * produces, and treating that as an ordinary release throws it away.
+ *
+ * The lift is capped at 1 rather than allowed to exceed it, so a soft-selected
+ * pair can climb back to where a never-shown pair sits and no further. It also
+ * reaches further than rank: the prior feeds the directional estimate, which
+ * feeds the reciprocal score, which is what the cooldown is scaled from — so
+ * one lift both raises the pair and brings it back sooner.
  */
 export function pairPrior(history: PairHistory, config: MatchingConfig): number {
   const decay = Math.pow(config.repeat_decay, Math.max(0, history.timesShown));
   const passes = Math.max(0, history.explicitPassCount);
   const passPenalty = Math.pow(config.repeat_pass_penalty, passes);
-  return clamp(decay * passPenalty, 0, 1);
+  const lift = Math.pow(config.soft_select_lift, Math.max(0, history.softSelectCount));
+  return clamp(decay * passPenalty * lift, 0, 1);
 }
 
 /**

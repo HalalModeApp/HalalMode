@@ -1,7 +1,7 @@
 begin;
 
 set local search_path = public, extensions;
-select plan(19);
+select plan(25);
 
 -- The three strengths of "no", and the repetition scaling that sits behind
 -- them. Covers migrations 0070 through 0079.
@@ -145,6 +145,66 @@ select ok(
   'passing twice does not close the pair — only a member does that'
 );
 
+-- --- A submission must not undo the decision that preceded it ---------------
+--
+-- submit_round_selections writes kept-or-released for every introduction in the
+-- round, and a pass is made before submission because pass_introduction requires
+-- an unsubmitted round. Until 0083 the submit that followed a moment later
+-- overwrote 'explicit_pass' straight back to 'released', so the ban never
+-- happened. Both the live check in 0080 and the first version of this file
+-- called pass_introduction on its own and never followed it with the one
+-- sequence every real member performs.
+
+-- Expiry above has already returned this row to 'released', so put the ban back
+-- before testing that a sweep cannot take it away.
+update introduction_selections
+set decision = 'explicit_pass'
+where introduction_id = '00000000-0000-0000-0000-00000000700b';
+
+update introduction_selections
+set decision = 'released'
+where introduction_id = '00000000-0000-0000-0000-00000000700b';
+
+select is(
+  (select decision::text from introduction_selections
+   where introduction_id = '00000000-0000-0000-0000-00000000700b'),
+  'explicit_pass',
+  'a bulk release sweep cannot undo a deliberate pass'
+);
+
+update introduction_selections
+set decision = 'kept'
+where introduction_id = '00000000-0000-0000-0000-00000000700b';
+
+select is(
+  (select decision::text from introduction_selections
+   where introduction_id = '00000000-0000-0000-0000-00000000700b'),
+  'kept',
+  'but keeping somebody wins — a member who changed their mind meant the later act'
+);
+
+update introduction_selections
+set decision = 'explicit_pass'
+where introduction_id = '00000000-0000-0000-0000-00000000700b';
+
+-- --- A first pass costs a month ---------------------------------------------
+
+select ok(
+  (select cooldown_until from halal_mode_private.pair_exposure
+   where user_low = '00000000-0000-0000-0000-000000007001'
+     and user_high = '00000000-0000-0000-0000-000000007002')
+  >= now() + make_interval(days => (halal_mode_private.active_matching_config()
+                                    ->> 'explicit_pass_first_cooldown_days')::int - 1),
+  'a pass buys a month of quiet, not the ordinary repeat wait'
+);
+select ok(
+  (halal_mode_private.active_matching_config()
+   ->> 'explicit_pass_first_cooldown_days')::int
+  > (halal_mode_private.active_matching_config()
+     ->> 'max_repeat_cooldown_days')::int,
+  'and always more than simply not being chosen'
+);
+
 -- --- The cooldown scales with the estimate ----------------------------------
 
 update halal_mode_private.pair_exposure
@@ -225,6 +285,69 @@ select ok(
   'the wait runs against the estimate, not with it'
 );
 
+-- --- Soft select ------------------------------------------------------------
+--
+-- The one positive outcome. Refused outright on a pair that has been passed:
+-- the member already answered that question in the other direction.
+
+do $$
+begin
+  perform public.soft_select_introduction('00000000-0000-0000-0000-00000000700b');
+end $$;
+
+select is(
+  (select coalesce(soft_select_count, 0)::int from halal_mode_private.pair_exposure
+   where user_low = '00000000-0000-0000-0000-000000007001'
+     and user_high = '00000000-0000-0000-0000-000000007002'),
+  0,
+  'a passed pair is never soft selected, whatever the reading time said'
+);
+
+-- A clean pair, to see it actually record.
+insert into rounds (id, user_id, tier, expires_at) values
+  ('00000000-0000-0000-0000-00000000700c', '00000000-0000-0000-0000-000000007002',
+   'free', now() + interval '1 day');
+insert into introductions (id, round_id, viewer_id, subject_id) values
+  ('00000000-0000-0000-0000-00000000700d', '00000000-0000-0000-0000-00000000700c',
+   '00000000-0000-0000-0000-000000007002', '00000000-0000-0000-0000-000000007001');
+
+do $$
+begin
+  perform set_config(
+    'request.jwt.claims',
+    '{"sub":"00000000-0000-0000-0000-000000007002","role":"authenticated"}',
+    true
+  );
+  -- Clear the passes so this pair is eligible for the positive signal.
+  update halal_mode_private.pair_exposure set explicit_pass_count = 0
+  where user_low = '00000000-0000-0000-0000-000000007001'
+    and user_high = '00000000-0000-0000-0000-000000007002';
+  perform public.soft_select_introduction('00000000-0000-0000-0000-00000000700d');
+end $$;
+
+select is(
+  (select soft_select_count::int from halal_mode_private.pair_exposure
+   where user_low = '00000000-0000-0000-0000-000000007001'
+     and user_high = '00000000-0000-0000-0000-000000007002'),
+  1,
+  'reading somebody at length and having no keep left is recorded'
+);
+select is(
+  (select decision::text from introduction_selections
+   where introduction_id = '00000000-0000-0000-0000-00000000700d'),
+  'soft_select',
+  'and is its own outcome, not an ordinary release'
+);
+
+do $$
+begin
+  perform set_config(
+    'request.jwt.claims',
+    '{"sub":"00000000-0000-0000-0000-000000007001","role":"authenticated"}',
+    true
+  );
+end $$;
+
 -- --- Hiding -----------------------------------------------------------------
 
 do $$
@@ -281,6 +404,10 @@ select ok(
   and not has_function_privilege('authenticated', 'halal_mode_private.hide_pair(uuid, uuid)', 'EXECUTE')
   and not has_table_privilege('authenticated', 'halal_mode_private.member_hides', 'SELECT'),
   'and cannot reach the machinery behind them, or read who has hidden whom'
+);
+select ok(
+  has_function_privilege('authenticated', 'public.soft_select_introduction(uuid)', 'EXECUTE'),
+  'soft select is a member action like the rest'
 );
 
 select * from finish();

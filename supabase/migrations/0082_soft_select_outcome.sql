@@ -1,0 +1,21 @@
+-- A fourth thing a member can mean, and the only positive one.
+--
+-- Every outcome so far is a shade of no: not this round, a deliberate pass, or
+-- gone for good. But a member who reads one profile far longer than the rest and
+-- still cannot keep them has told us something real — free members keep exactly
+-- one of five, so the second-most-read person is not a rejection, they are a
+-- casualty of the budget.
+--
+-- Outcome vocabulary after this change:
+--
+--   kept          -> selected
+--   soft_select   -> wanted, but the keep limit had already gone
+--   released      -> not selected this round, situational
+--   explicit_pass -> a deliberate refusal
+--   expired       -> the round lapsed unresolved
+--
+-- Separate migration, same reason as 0050: PostgreSQL will not let a newly added
+-- enum value be *used* in the transaction that adds it, so everything that reads
+-- or writes 'soft_select' has to land after this.
+
+alter type selection_decision add value if not exists 'soft_select';

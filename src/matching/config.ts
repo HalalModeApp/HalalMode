@@ -195,6 +195,18 @@ export interface MatchingConfig {
    * a nudge, not a disappearance.
    */
   explicit_pass_ban_after: number;
+  /**
+   * Days a pair waits after a single pass. A floor rather than a replacement,
+   * so a weak pair already owing three weeks is not shortened by being passed.
+   * Deliberately longer than max_repeat_cooldown_days: a pass must always cost
+   * more time than simply not being chosen.
+   */
+  explicit_pass_first_cooldown_days: number;
+  /**
+   * What each soft select multiplies the pair prior by. Above 1 — it is a lift,
+   * never a penalty — and capped at what a never-shown pair would score.
+   */
+  soft_select_lift: number;
 }
 
 /** Matches the seeded row in migration 0049. */
@@ -279,6 +291,8 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
   explicit_pass_cooldown_days: 90,
   repeat_pass_penalty: 0.5,
   explicit_pass_ban_after: 2,
+  explicit_pass_first_cooldown_days: 30,
+  soft_select_lift: 1.5,
 };
 
 /**
@@ -437,7 +451,10 @@ export function validateConfig(config: MatchingConfig): MatchingConfig {
       || !Number.isInteger(config.explicit_pass_cooldown_days)
       || !(config.repeat_pass_penalty > 0 && config.repeat_pass_penalty <= 1)
       || config.explicit_pass_ban_after < 2
-      || !Number.isInteger(config.explicit_pass_ban_after)) {
+      || !Number.isInteger(config.explicit_pass_ban_after)
+      || !Number.isInteger(config.explicit_pass_first_cooldown_days)
+      || config.explicit_pass_first_cooldown_days <= config.max_repeat_cooldown_days
+      || !(config.soft_select_lift > 1)) {
     throw new Error('Explicit pass configuration is invalid');
   }
   return config;

@@ -15,9 +15,10 @@ import {
   fetchCurrentRoundState,
   passIntroduction,
   releaseIntroduction,
+  softSelectIntroduction,
   submitKeeps,
 } from '@/api/introductions';
-import { DwellLedger, inferPassCandidate } from '@/lib/dwell';
+import { DwellLedger, inferPassCandidate, inferSoftSelect } from '@/lib/dwell';
 import type { DailyRoundEmptyReason, NarrowingCriterion } from '@/lib/dailyRoundState';
 import { queryKeys } from '@/lib/queryClient';
 import { getRoundInteractionState, resolveActiveId } from '@/lib/roundInvariants';
@@ -75,6 +76,11 @@ interface RoundValue {
   passCandidate: () => string | null;
   /** Turns a release into a deliberate pass, once the member has confirmed. */
   confirmPass: (introductionId: string) => Promise<void>;
+  /**
+   * Notes whoever was read longest but not kept, before the round is submitted.
+   * Not confirmed: it costs the member nothing and is never shown to anyone.
+   */
+  recordSoftSelect: () => Promise<void>;
 
   submitting: boolean;
   /** Commits the surviving introductions. Resolves with the mutual matches. */
@@ -224,6 +230,17 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     [ledger, released, round]
   );
 
+  const softSelectMutation = useMutation({ mutationFn: softSelectIntroduction });
+  const recordSoftSelect = useCallback(async () => {
+    const candidate = inferSoftSelect(ledger.records(), Object.keys(released));
+    if (!candidate) return;
+    try {
+      await softSelectMutation.mutateAsync(candidate);
+    } catch {
+      // A courtesy signal. Losing it must never cost the member their round.
+    }
+  }, [ledger, released, softSelectMutation]);
+
   const passMutation = useMutation({ mutationFn: passIntroduction });
   const confirmPass = useCallback(
     async (id: string) => {
@@ -315,6 +332,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       profileClosed,
       passCandidate,
       confirmPass,
+      recordSoftSelect,
       submitting: submitMutation.isPending,
       submit,
       submitted,
@@ -344,6 +362,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       profileClosed,
       passCandidate,
       confirmPass,
+      recordSoftSelect,
       submitMutation.isPending,
       submit,
       submitted,
