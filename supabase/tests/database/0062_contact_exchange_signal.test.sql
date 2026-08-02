@@ -73,7 +73,7 @@ select is(
 select is(
   (select count(*)::int from information_schema.columns
    where table_schema = 'public' and table_name = 'connections'
-     and column_name ilike '%phone%' or column_name ilike '%number%'),
+     and (column_name ilike '%phone%' or column_name ilike '%number%')),
   0,
   'no column exists that could hold the contact details themselves'
 );

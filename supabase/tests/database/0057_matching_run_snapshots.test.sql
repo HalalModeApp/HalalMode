@@ -92,10 +92,10 @@ create temporary table snapshot_test_runs (
 ) on commit drop;
 
 insert into snapshot_test_runs values
-  ('first', public.matching_run_start_service('snapshot-v1', 1, 5701, 'live', '2026-07-30', '2026-07-30 04:30 Asia/Riyadh')),
-  ('last', public.matching_run_start_service('snapshot-v1', 1, 5702, 'live', '2026-08-05', '2026-08-05 04:35 Asia/Riyadh')),
-  ('live', public.matching_run_start_service('snapshot-v1', 1, 5703, 'live', '2026-08-01', '2026-08-01 04:32 Asia/Riyadh')),
-  ('shadow', public.matching_run_start_service('snapshot-v1', 1, 9999, 'shadow', '2026-08-01', '2026-08-01 04:32 Asia/Riyadh'));
+  ('first', public.matching_run_start_service('snapshot-v1', halal_mode_private.active_matching_config_version(), 5701, 'live', '2026-07-30', '2026-07-30 04:30 Asia/Riyadh')),
+  ('last', public.matching_run_start_service('snapshot-v1', halal_mode_private.active_matching_config_version(), 5702, 'live', '2026-08-05', '2026-08-05 04:35 Asia/Riyadh')),
+  ('live', public.matching_run_start_service('snapshot-v1', halal_mode_private.active_matching_config_version(), 5703, 'live', '2026-08-01', '2026-08-01 04:32 Asia/Riyadh')),
+  ('shadow', public.matching_run_start_service('snapshot-v1', halal_mode_private.active_matching_config_version(), 9999, 'shadow', '2026-08-01', '2026-08-01 04:32 Asia/Riyadh'));
 
 select ok(
   (select context ?& array[

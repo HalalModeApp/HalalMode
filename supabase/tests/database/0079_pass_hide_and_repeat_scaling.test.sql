@@ -1,7 +1,7 @@
 begin;
 
 set local search_path = public, extensions;
-select plan(25);
+select plan(29);
 
 -- The three strengths of "no", and the repetition scaling that sits behind
 -- them. Covers migrations 0070 through 0079.

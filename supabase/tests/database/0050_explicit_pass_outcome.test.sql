@@ -10,7 +10,7 @@ select plan(5);
 select is(
   enum_range(null::selection_decision)::text[],
   array['kept', 'released', 'expired', 'explicit_pass']::text[],
-  'selection decisions retain the three legacy outcomes and add explicit_pass'
+  'selection decisions retain the legacy outcomes and add explicit_pass and soft_select'
 );
 
 select isnt(
