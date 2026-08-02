@@ -1,5 +1,78 @@
 # Handoff notes
 
+> **State as of 2026-08-02.** Migrations through `0088` are applied to the
+> hosted project; the `generate-round` Edge Function is deployed at version 10;
+> the active matching configuration is version 8. 203 client tests pass. CI has
+> **two known failures**, both the same open question — see "Decisions waiting
+> on you" below. Nothing in the matching stack has ever run against real data:
+> the project holds **zero profiles**, so every shadow round returns
+> `pairsCreated: 0` and every claim below is about mechanism, not behaviour.
+
+## Decisions waiting on you
+
+1. **Is the same-country distance cap absolute, or only when marked "must
+   have"?** `0061` made it conditional on the marking. Its own comment says the
+   opposite — *"distance stays a hard limit for same-country pairs whether or
+   not it is marked... a member who set a radius has already expressed a
+   boundary"* — and two contract tests (`0021` tests 10 and 16) side with the
+   comment. The code and its stated rationale disagree; one of them is wrong.
+   This changes who gets matched, so it was left for you. Those two tests are
+   the only CI failures.
+
+2. **The thresholds in the matching config are estimates, not findings.** 30
+   days after a first pass, ×0.5 rank per pass, ×1.5 per soft select, the 0.6
+   generosity anchor, the squared curve, 2–5 appearances, 2–21 day cooldowns.
+   All are versioned config, changeable without a deploy. None has been tested
+   against a real member.
+
+## Things worth pointing out
+
+- **Pushing needs the `HalalModeApp` GitHub account.** `gh` has both it and
+  `ArtificialMo` logged in; the latter has no write access and a push as it
+  fails with a 403. `gh auth switch --user HalalModeApp` before pushing.
+- **The round scheduler secret was rotated** on 2026-08-02 and exists only in
+  Supabase Vault (`halal_mode_round_scheduler`). Both cron jobs read it at call
+  time, so nothing needs redeploying, but a manual shadow run needs it from the
+  dashboard.
+- **Docker is installed on this machine but its engine has never started**, and
+  nothing here needs it. `verify:sql`, `verify:client`, `db push` and the hosted
+  shadow run are all Docker-free; only `db:reset`, `db:test:local` and
+  `supabase start` need it, and CI runs those. A local Supabase stack would add
+  a second database that can drift from hosted — this codebase has already been
+  bitten twice by two copies of one truth drifting, so that is a real cost.
+- **A shadow round is a free end-to-end smoke test** and worth running after any
+  migration that touches the round pipeline:
+  `curl.exe -X POST ".../functions/v1/generate-round?mode=shadow" -H "x-cron-secret: ..."`.
+  It exercises config read, snapshot prepare, edge paging, planning and
+  finalisation without touching anything a member can see. While the project has
+  no members, `pairsCreated: 0` is the expected answer; after launch, a `0`
+  there means something is wrong.
+
+## The failure mode this codebase actually has
+
+Four times in one sitting, a piece of work was complete and correct read on its
+own, and did nothing — or the wrong thing — where it sat. Worth knowing, because
+none of it was caught by tests passing or migrations applying cleanly:
+
+- `explicit_pass` was read by four call sites and written by none, for eight
+  migrations.
+- `expire_explicit_passes()` was defined in a schema PostgREST cannot reach and
+  called by nothing.
+- The SQL and TypeScript halves of the repeat curve diverged when only one
+  gained an exponent; both looked right alone.
+- A guard added to stop submissions erasing a pass also blocked the expiry that
+  is *supposed* to erase it, so bans became permanent.
+
+Two more were regressions from restatements: `0064` restated `update_my_profile`
+and dropped the media guard `0055` exists to protect; `0069` restated
+`matching_member_signals()` and re-applied a grant `0054` had deliberately
+revoked. **`create or replace` carries the body forward and leaves grants alone
+— the risk is in the lines written around it out of habit.**
+
+The defences that now exist for this: a mirror test comparing the stored config
+to the code, assertion blocks inside migrations that run against the live
+database, and CI. Prefer adding to those over adding a comment.
+
 Read [README.md](README.md), [quality gates](docs/QUALITY_GATES.md), and the
 [release checklist](docs/RELEASE_CHECKLIST.md) first. These notes describe the
 current source; they are not evidence that every capability has passed native
@@ -19,15 +92,19 @@ or production verification.
 - Profile voice introductions use `expo-audio` and private storage. Chat voice
   sending and actual calling remain unavailable by design until a provider,
   consent model, abuse controls, and retention policy are approved.
-- Migrations through `0059` and the matching pgTAP contracts are committed and
-  pass in the isolated Docker-backed GitHub Actions job (run `30695903597`).
-  They still need deployment and hosted-project verification before their
-  server-side changes can be called live.
+- Migrations through `0088` are applied to the hosted project and the Edge
+  Function is deployed. Saying no now has four strengths: not selected this
+  round, a deliberate pass (rank penalty plus 30 days), a second pass (further
+  rank penalty plus ~90 days), and hiding, which is mutual, permanent and only
+  ever chosen explicitly. Soft select is the one positive outcome. Repeat
+  allowance (2–5) and cooldown (2–21 days) both scale with the reciprocal
+  estimate.
 
 ## What is not release-ready
 
-1. The isolated pgTAP CI job has now run successfully in GitHub Actions; this
-   machine still has no Docker/Podman runtime for an equivalent local run.
+1. The isolated pgTAP CI job runs on every push and currently has two known
+   failures, both the distance question in "Decisions waiting on you". This
+   machine has no working Docker runtime and deliberately does not need one.
 2. Maestro source contracts and stable test IDs cover key paths, but they have
    not run against a configured native build with controlled test accounts.
 3. The native matrix, Arabic cold-restart behavior, screen reader behavior, and
@@ -77,11 +154,10 @@ especially §10 (three design errors simulation caught), §11 (scale) and §12
 
 ## Verified implementation baseline
 
-- Migrations through `0059` apply from a clean database and all 542 pgTAP
-  contracts pass in GitHub Actions run `30695762522` (including the realistic
-  shadow-isolation fixture).
-- Client typecheck, lint, all 131 tests, the Android export, and the
-  `generate-round` Deno typecheck pass in the same run.
+- Migrations through `0088` apply from a clean database. 44 pgTAP files run in
+  GitHub Actions; two assertions fail, both the open distance question.
+- Client typecheck, lint, all 203 tests, the Android export, and the
+  `generate-round` Deno typecheck pass.
 - Live completion is one idempotent database transaction: it rechecks current
   safety state, persists reciprocal rounds, stores durable repeat retirements,
   records derived metrics, and claims the cycle together. A classifiable late
@@ -138,10 +214,12 @@ In dependency order.
    and `at_match_capacity` are accepted by the client normalizer and rendered
    with their existing English and Arabic copy in `app/(tabs)/daily.tsx`.
 
-4. **`explicit_pass` has no way to be set.** The enum value exists and the
-   prefilter honours it, but no UI or RPC ever writes it. Either add a
-   deliberate "not for me" action or drop the value — a filter nothing can
-   trigger is worse than no filter.
+4. **`explicit_pass` has no way to be set.** **Done.** It is inferred from how
+   a member reads their whole set — every profile read and one read least, or
+   every profile but one read and that one never opened — then confirmed once
+   before submission. Reading times never leave the device. `soft_select` was
+   added as its positive counterpart and is not confirmed, because it costs the
+   member nothing if wrong. Neither has run against a real member.
 
 5. **Retire the dead path.** Once v1 is live, `generate_round_for_pairs` and the
    `|band| <= 1` gate are unused. Removing them is the point at which the band
