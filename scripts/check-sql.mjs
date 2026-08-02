@@ -15,9 +15,15 @@ import { join } from 'node:path';
 import { loadModule, parse } from 'libpg-query';
 
 const DIR = 'supabase/migrations';
+const TEST_DIR = 'supabase/tests/database';
 
 const files = readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort();
 const read = (f) => readFileSync(join(DIR, f), 'utf8');
+
+// The pgTAP suite only runs where Docker runs, which is CI. Parsing it here
+// means a syntax error in a test surfaces on the same command as everything
+// else rather than several minutes into a container build.
+const testFiles = readdirSync(TEST_DIR).filter((f) => f.endsWith('.sql')).sort();
 
 await loadModule();
 
@@ -30,6 +36,16 @@ for (const file of files) {
   } catch (error) {
     failures += 1;
     console.error(`syntax error in ${file}: ${String(error.message).split('\n')[0]}`);
+  }
+}
+
+// --- 1b. So must every database test ----------------------------------------
+for (const file of testFiles) {
+  try {
+    await parse(readFileSync(join(TEST_DIR, file), 'utf8'));
+  } catch (error) {
+    failures += 1;
+    console.error(`syntax error in ${TEST_DIR}/${file}: ${String(error.message).split('\n')[0]}`);
   }
 }
 
@@ -90,6 +106,7 @@ for (const file of files) {
 }
 
 console.log(
-  `${files.length} migrations parsed, ${bodies} language-sql bodies parsed, ${failures} problem(s)`
+  `${files.length} migrations parsed, ${testFiles.length} database tests parsed, `
+    + `${bodies} language-sql bodies parsed, ${failures} problem(s)`
 );
 if (failures > 0) process.exit(1);
