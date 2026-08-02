@@ -431,6 +431,16 @@ Deno.serve(async (request: Request) => {
     console.error('weight tuning skipped:', tuned.error.message);
   }
 
+  // Read before the round is built, so a reading exists even on a cycle that
+  // fails to generate — a failed cycle is exactly when the numbers are wanted.
+  // Idempotent within a day, so a retry overwrites rather than duplicating.
+  const measured = await client.rpc('capture_matching_outcomes_service', {
+    p_window_days: 30,
+  });
+  if (measured.error) {
+    console.error('outcome measurement skipped:', measured.error.message);
+  }
+
   // A pass holds for a few months and then stops holding. Without this the
   // cooldown would be a number in a config table that nothing ever read, and
   // every pass would be permanent — which is the behaviour it replaced.
