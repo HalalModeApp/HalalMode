@@ -276,21 +276,27 @@ export function AuthGate({ children }: { children: ReactNode }) {
     const inAuth = rootSegment === 'auth';
     const inOnboarding = rootSegment === 'onboarding';
     const inLegalConsent = rootSegment === 'legal-consent';
+    // The public waitlist landing. Reachable by anyone, signed in or not, and
+    // never redirected away from — it is the page halalmo.de points at.
+    const inJoin = rootSegment === 'join';
 
     // Demo/mock mode must never require email or Supabase authentication.
     // Redirect only from entry gates so normal demo navigation still works.
     if (USE_MOCKS) {
       if (
-        !rootSegment ||
-        inAuth ||
-        inOnboarding ||
-        inLegalConsent
+        (!rootSegment ||
+          inAuth ||
+          inOnboarding ||
+          inLegalConsent) &&
+        !inJoin
       ) {
         router.replace('/(tabs)/daily');
       }
 
       return;
     }
+
+    if (inJoin) return;
 
     if (!user && !inAuth) {
       router.replace('/auth');

@@ -16,6 +16,13 @@ export const testIds = {
     ageConfirm: 'onboarding-age-confirm',
     legalConsent: 'onboarding-legal-consent',
   },
+  join: {
+    email: 'join-email',
+    city: 'join-city',
+    age: (range: string) => `join-age-${range}`,
+    submit: 'join-submit',
+    success: 'join-success',
+  },
   daily: {
     reset: 'daily-reset',
     deck: 'daily-hero-deck',
