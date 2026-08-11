@@ -145,6 +145,11 @@ export const en = {
   'daily.finishProfile': 'Finish my introduction',
   'daily.waitingConnection': 'A mutual connection is waiting until both of you have room for a conversation. We will let you know when it opens.',
   'daily.today': 'Today · resets at Fajr',
+  // English needs a singular. Arabic additionally needs a dual, because two of
+  // something is its own grammatical number there — so the set size picks
+  // between three strings rather than interpolating a count into one.
+  'daily.titleOne': 'One introduction,\ntoday.',
+  'daily.titleTwo': 'Two introductions,\none at a time.',
   'daily.title': '{{count}} introductions,\none at a time.',
   'daily.demoResetLabel': 'Start the demo round again',
   'daily.releaseError': 'That choice was not saved, so the profile was restored.',
@@ -844,6 +849,8 @@ export const ar: TranslationCatalog = {
   'daily.finishProfile': 'إكمال تقديمي',
   'daily.waitingConnection': 'هناك اتصال متبادل ينتظر حتى تتوفر مساحة للمحادثة لدى الطرفين. سنخبرك عند فتحه.',
   'daily.today': 'اليوم · تتجدد عند الفجر',
+  'daily.titleOne': 'تعارف واحد،\nاليوم.',
+  'daily.titleTwo': 'تعارفان،\nواحدًا تلو الآخر.',
   'daily.title': '{{count}} تعارفات،\nواحدًا تلو الآخر.',
   'daily.demoResetLabel': 'بدء الجولة التجريبية من جديد',
   'daily.releaseError': 'لم يُحفظ هذا الاختيار، لذلك أعدنا الملف.',

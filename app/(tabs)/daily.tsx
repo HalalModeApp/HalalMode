@@ -407,7 +407,14 @@ export default function DailyScreen() {
         <View style={styles.headlineText}>
           <Text variant="micro">{t('daily.today')}</Text>
           <Text variant="display" style={styles.title}>
-            {t('daily.title', { count: round.introductions.length })}
+            {t(
+              round.introductions.length === 1
+                ? 'daily.titleOne'
+                : round.introductions.length === 2
+                  ? 'daily.titleTwo'
+                  : 'daily.title',
+              { count: round.introductions.length }
+            )}
           </Text>
         </View>
         {USE_MOCKS ? (
