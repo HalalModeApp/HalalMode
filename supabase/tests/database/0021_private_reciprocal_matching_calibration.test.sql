@@ -1,7 +1,7 @@
 begin;
 
 set local search_path = public, extensions;
-select plan(20);
+select plan(21);
 
 select is(
   (select count(*)::int from halal_mode_private.matching_band_policies),
@@ -87,10 +87,33 @@ select ok(
   and passes_criteria('00000000-0000-0000-0000-000000000212', '00000000-0000-0000-0000-000000000211'),
   'an explicitly reciprocal international pair passes even when its local distance caps are small'
 );
+-- Distance is a hard cap only where the member marked it "must have". The app
+-- offers that toggle for distance alongside age, height and the rest; if the
+-- cap applied regardless, the toggle would be controls that do nothing. A
+-- radius left unmarked is a preference the score accounts for, not a wall —
+-- which also keeps a thin pool from producing empty rounds.
+update private_preferences
+set must_have = coalesce(must_have, '{}'::jsonb) || '{"distance": true}'::jsonb
+where user_id = '00000000-0000-0000-0000-000000000211';
+
 select ok(
   not passes_criteria('00000000-0000-0000-0000-000000000211', '00000000-0000-0000-0000-000000000213'),
-  'same-country pairs still respect the local distance cap'
+  'a same-country pair beyond the cap is excluded when distance is a must have'
 );
+
+update private_preferences
+set must_have = must_have - 'distance'
+where user_id = '00000000-0000-0000-0000-000000000211';
+
+select ok(
+  passes_criteria('00000000-0000-0000-0000-000000000211', '00000000-0000-0000-0000-000000000213'),
+  'and is allowed when it is not, so the toggle decides rather than decorates'
+);
+
+-- Restored, because the round built further down expects this pair excluded.
+update private_preferences
+set must_have = coalesce(must_have, '{}'::jsonb) || '{"distance": true}'::jsonb
+where user_id = '00000000-0000-0000-0000-000000000211';
 
 update profiles set relocation = 'strictly_local'
 where id = '00000000-0000-0000-0000-000000000211';
