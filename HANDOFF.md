@@ -1,52 +1,73 @@
 # Handoff notes
 
-> **State as of 2026-08-02.** Migrations through `0088` are applied to the
-> hosted project; the `generate-round` Edge Function is deployed at version 10;
-> the active matching configuration is version 8. 203 client tests pass. CI has
-> **two known failures**, both the same open question — see "Decisions waiting
-> on you" below. Nothing in the matching stack has ever run against real data:
-> the project holds **zero profiles**, so every shadow round returns
-> `pairsCreated: 0` and every claim below is about mechanism, not behaviour.
+> **State as of 2026-08-12.** Migrations through `0095` are applied to the
+> hosted project; the `generate-round` Edge Function is at version 12; the
+> active matching configuration is version 10. 209 client tests pass and **CI is
+> fully green**, including the 44-file pgTAP suite. The app has been run against
+> the live backend and a complete member journey verified end to end.
 
-## Decisions waiting on you
+## What is actually proven now
 
-1. **Is the same-country distance cap absolute, or only when marked "must
-   have"?** `0061` made it conditional on the marking. Its own comment says the
-   opposite — *"distance stays a hard limit for same-country pairs whether or
-   not it is marked... a member who set a radius has already expressed a
-   boundary"* — and two contract tests (`0021` tests 10 and 16) side with the
-   comment. The code and its stated rationale disagree; one of them is wrong.
-   This changes who gets matched, so it was left for you. Those two tests are
-   the only CI failures.
+A real journey, walked in a browser against the hosted project rather than
+argued from tests:
 
-2. **The thresholds in the matching config are estimates, not findings.** 30
-   days after a first pass, ×0.5 rank per pass, ×1.5 per soft select, the 0.6
-   generosity anchor, the squared curve, 2–5 appearances, 2–21 day cooldowns.
-   All are versioned config, changeable without a deploy. None has been tested
-   against a real member.
+sign in by magic link -> onboarding -> profile readiness -> a generated round ->
+reciprocal introductions -> one-sided interest (which created nothing and was
+invisible to the other member) -> mutual interest -> a connection at
+`choosing_questions`.
 
-## Things worth pointing out
+Fourteen test members exist, all built through the app's own RPCs. The privacy
+promises held at every step that could be checked, and two server boundaries
+correctly refused the test harness mid-run.
+
+## Decisions made
+
+1. **The same-country distance cap applies only where a member marks distance a
+   "must have".** The app offers that toggle beside age, height and sect; if the
+   radius applied regardless, those controls would do nothing. An unmarked
+   radius means "ideally nearby" and the score accounts for it, which also keeps
+   a thin pool from producing empty rounds. Missing coordinates still fail
+   closed, unconditionally. Recorded in `0092`, with the misleading comment that
+   caused a near-miss corrected in the live function.
+
+2. **The waitlist lives at `/join`** and is the page halalmo.de points at. Same
+   backend, separate route from the app's sign-in splash, and it retires when
+   signups open. Collects email, city, age range.
+
+## Still open
+
+- **The thresholds in the matching config are estimates**, not findings: 30 days
+  after a first pass, x0.5 rank per pass, x1.5 per soft select, the 0.6
+  generosity anchor, 2-5 appearances, 2-21 day cooldowns. All versioned config,
+  changeable without a deploy, none tested against a real member.
+- **`reciprocal_matching_v1` is still off**, so live rounds use the legacy band
+  matcher. The v1 scoring work is inert until it is flipped; shadow first, per
+  the rollout section at the foot of this file.
+- **The client-side dwell inference has never run in a browser.** The pass and
+  soft-select server paths are covered by pgTAP and by `0085` against the live
+  database, but the part that watches how long a profile is read has only unit
+  tests.
+- **Nothing has been seen on a device.** Web is a means, not a target.
+
+## Working on this project
 
 - **Pushing needs the `HalalModeApp` GitHub account.** `gh` has both it and
-  `ArtificialMo` logged in; the latter has no write access and a push as it
-  fails with a 403. `gh auth switch --user HalalModeApp` before pushing.
-- **The round scheduler secret was rotated** on 2026-08-02 and exists only in
-  Supabase Vault (`halal_mode_round_scheduler`). Both cron jobs read it at call
-  time, so nothing needs redeploying, but a manual shadow run needs it from the
-  dashboard.
-- **Docker is installed on this machine but its engine has never started**, and
-  nothing here needs it. `verify:sql`, `verify:client`, `db push` and the hosted
-  shadow run are all Docker-free; only `db:reset`, `db:test:local` and
-  `supabase start` need it, and CI runs those. A local Supabase stack would add
-  a second database that can drift from hosted — this codebase has already been
-  bitten twice by two copies of one truth drifting, so that is a real cost.
-- **A shadow round is a free end-to-end smoke test** and worth running after any
-  migration that touches the round pipeline:
-  `curl.exe -X POST ".../functions/v1/generate-round?mode=shadow" -H "x-cron-secret: ..."`.
-  It exercises config read, snapshot prepare, edge paging, planning and
-  finalisation without touching anything a member can see. While the project has
-  no members, `pairsCreated: 0` is the expected answer; after launch, a `0`
-  there means something is wrong.
+  `ArtificialMo` logged in; the latter has no write access and pushes 403. Run
+  `gh auth switch --user HalalModeApp` — it does not always survive a new
+  session.
+- **`EXPO_PUBLIC_USE_MOCKS=0`** — the local app talks to the real project. Set
+  it back to `1` for a demo build.
+- **Test accounts are all `@halalmodetest.com`** and nothing real ever will be.
+  Remove every one of them, and everything hanging off them, with a single call:
+  `purge_test_accounts_service('delete every test account')` as service role.
+- **Running the app on web**: `npx expo start --web`. Metro is slow here — a
+  cold bundle is 30s and a rebuild has been seen to take over three minutes, so
+  a page that will not load is usually still compiling. Expo's reverse geocoding
+  does not work on web, so onboarding cannot pass its location step in a
+  browser; call `complete_onboarding` directly instead.
+- **A shadow round is a free end-to-end smoke test** after any migration
+  touching the round pipeline. It needs the scheduler secret from Dashboard ->
+  Project Settings -> Vault.
 
 ## The failure mode this codebase actually has
 
@@ -92,7 +113,7 @@ or production verification.
 - Profile voice introductions use `expo-audio` and private storage. Chat voice
   sending and actual calling remain unavailable by design until a provider,
   consent model, abuse controls, and retention policy are approved.
-- Migrations through `0088` are applied to the hosted project and the Edge
+- Migrations through `0095` are applied to the hosted project and the Edge
   Function is deployed. Saying no now has four strengths: not selected this
   round, a deliberate pass (rank penalty plus 30 days), a second pass (further
   rank penalty plus ~90 days), and hiding, which is mutual, permanent and only
@@ -102,9 +123,8 @@ or production verification.
 
 ## What is not release-ready
 
-1. The isolated pgTAP CI job runs on every push and currently has two known
-   failures, both the distance question in "Decisions waiting on you". This
-   machine has no working Docker runtime and deliberately does not need one.
+1. The isolated pgTAP CI job runs on every push and is green. This machine has
+   no working Docker runtime and deliberately does not need one.
 2. Maestro source contracts and stable test IDs cover key paths, but they have
    not run against a configured native build with controlled test accounts.
 3. The native matrix, Arabic cold-restart behavior, screen reader behavior, and
@@ -154,9 +174,9 @@ especially §10 (three design errors simulation caught), §11 (scale) and §12
 
 ## Verified implementation baseline
 
-- Migrations through `0088` apply from a clean database. 44 pgTAP files run in
-  GitHub Actions; two assertions fail, both the open distance question.
-- Client typecheck, lint, all 203 tests, the Android export, and the
+- Migrations through `0095` apply from a clean database and all 44 pgTAP files
+  pass in GitHub Actions.
+- Client typecheck, lint, all 209 tests, the Android export, and the
   `generate-round` Deno typecheck pass.
 - Live completion is one idempotent database transaction: it rechecks current
   safety state, persists reciprocal rounds, stores durable repeat retirements,
