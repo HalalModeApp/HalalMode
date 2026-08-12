@@ -31,6 +31,8 @@ interface RoundValue {
   emptyReason: DailyRoundEmptyReason | null;
   /** Which of the member's own must-haves to loosen first, when relevant. */
   narrowingCriterion: NarrowingCriterion | null;
+  /** Set only while a built set waits to open, to name whose dawn it is. */
+  nextSetCity: string | null;
   isLoading: boolean;
   error: Error | null;
   refresh: () => void;
@@ -133,6 +135,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     : null;
 
   const narrowingCriterion = roundState?.narrowingCriterion ?? null;
+  const nextSetCity = roundState?.city ?? null;
 
   const keepLimit = TIER_LIMITS[tier].keeps;
 
@@ -306,6 +309,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       round,
       emptyReason,
       narrowingCriterion,
+      nextSetCity,
       isLoading,
       error: (error as Error) ?? null,
       refresh: () => void refetch(),
@@ -344,6 +348,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       round,
       emptyReason,
       narrowingCriterion,
+      nextSetCity,
       isLoading,
       error,
       refetch,

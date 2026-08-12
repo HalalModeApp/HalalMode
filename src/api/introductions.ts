@@ -17,6 +17,11 @@ export interface CurrentRoundState {
    * costing them the most. Never names another member or a pool size.
    */
   narrowingCriterion: NarrowingCriterion | null;
+  /**
+   * The member's city, set only while a set is built and waiting to open. It
+   * names whose dawn they are waiting for, and there is no round to carry it.
+   */
+  city?: string | null;
 }
 
 /**
@@ -41,7 +46,7 @@ export async function fetchCurrentRoundState(
   const { data, error } = await client.rpc('get_current_round_state');
   if (error) throw error;
   const payload = data && typeof data === 'object'
-    ? data as { status?: unknown; round?: IntroductionRound | null; criterion?: unknown }
+    ? data as { status?: unknown; round?: IntroductionRound | null; criterion?: unknown; city?: unknown }
     : {};
   const round = payload.round ?? undefined;
   const status = normalizeDailyRoundStatus(payload.status);
@@ -52,6 +57,9 @@ export async function fetchCurrentRoundState(
       status: status === 'ready' ? 'no_suitable_introductions' : status,
       round: undefined,
       narrowingCriterion,
+      // Only meaningful while waiting for a set to open, which is the one state
+      // with no round to carry it.
+      city: typeof payload.city === 'string' ? payload.city : null,
     };
   }
   return {

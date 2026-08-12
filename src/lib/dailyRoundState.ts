@@ -4,6 +4,10 @@ export const dailyRoundStatuses = [
   'no_suitable_introductions',
   'matching_inputs_unavailable',
   'awaiting_turn',
+  // A set that exists and has not opened yet. Rounds open at each member's own
+  // Fajr, so between being built and being seen there is a real, ordinary wait
+  // that is not any kind of problem — unlike every other status here.
+  'next_set_scheduled',
   'at_match_capacity',
   'filters_too_narrow',
   'legal_consent_required',

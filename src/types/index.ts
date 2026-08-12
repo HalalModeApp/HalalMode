@@ -160,10 +160,17 @@ export interface Introduction {
 
 export interface IntroductionRound {
   id: string;
-  /** ISO timestamp. Rounds reset at Fajr, not midnight. */
+  /**
+   * ISO timestamps. A round opens at this member's own Fajr and runs for their
+   * own day from there, so two members in each other's sets act on the same
+   * pair at different times. `opensAt` is a gate: a round exists before it is
+   * meant to be seen.
+   */
   opensAt: string;
   expiresAt: string;
   tier: MembershipTier;
+  /** The member's city, so the app can name whose dawn it means. */
+  city?: string | null;
   introductions: Introduction[];
   /** True once the member has submitted their keeps for this round. */
   submitted: boolean;

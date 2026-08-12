@@ -67,6 +67,7 @@ export default function DailyScreen() {
     round,
     emptyReason,
     narrowingCriterion,
+    nextSetCity,
     isLoading,
     error,
     refresh,
@@ -350,6 +351,25 @@ export default function DailyScreen() {
     const filtersTooNarrow =
       emptyReason === 'filters_too_narrow' && narrowingCriterion !== null;
 
+    // A set that is built and simply has not opened yet. Every other message
+    // below describes something being wrong; this one is a member waiting for
+    // their own dawn, which is the app working exactly as intended.
+    if (emptyReason === 'next_set_scheduled') {
+      return (
+        <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
+          <BrandHeader />
+          <EmptyState
+            title={t('daily.nextSetTitle')}
+            message={
+              nextSetCity
+                ? t('daily.nextSetBody', { city: nextSetCity })
+                : t('daily.nextSetBodyPlain')
+            }
+          />
+        </Screen>
+      );
+    }
+
     if (filtersTooNarrow) {
       return (
         <Screen withTabBar style={isRTL ? styles.rtl : undefined}>
@@ -405,7 +425,9 @@ export default function DailyScreen() {
 
       <View style={[styles.headline, isRTL && styles.rowReverse]}>
         <View style={styles.headlineText}>
-          <Text variant="micro">{t('daily.today')}</Text>
+          <Text variant="micro">
+            {round.city ? t('daily.todayIn', { city: round.city }) : t('daily.today')}
+          </Text>
           <Text variant="display" style={styles.title}>
             {t(
               round.introductions.length === 1

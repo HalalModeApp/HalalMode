@@ -2,6 +2,7 @@
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
 import { resolveStoredConfig, type MatchingConfig } from '../../../src/matching/config.ts';
+import { nextFajrAfter } from '../../../src/lib/prayerTimes.ts';
 import {
   ALGORITHM_VERSION,
   liveFinalizationArgs,
@@ -21,6 +22,12 @@ import {
 } from './runContext.ts';
 
 const MADINAH_TIME_ZONE = 'Asia/Riyadh';
+
+interface MemberLocationRow {
+  user_id: string;
+  latitude: number;
+  longitude: number;
+}
 
 class MatchingRunError extends Error {
   constructor(
@@ -327,6 +334,37 @@ async function finalizeShadowInBatches(
   return parseFinalizationResult(closed);
 }
 
+/**
+ * When each member's next round opens, and when their day with it ends.
+ *
+ * Dawn is worked out from their own coordinates rather than fetched, so this
+ * costs one database read and no network calls however many members there are.
+ *
+ * A member without a dawn is left out rather than given a guess. Above the
+ * Arctic circle in summer the sun never reaches the Fajr angle, so there is no
+ * time to open their round at; they simply wait for a day that has one.
+ */
+async function dawnScheduleFor(client: SupabaseClient) {
+  const members = await client.rpc('members_awaiting_round_service');
+  if (members.error) throw new Error(members.error.message);
+
+  const now = new Date();
+  const schedule: { user_id: string; opens_at: string; expires_at: string }[] = [];
+
+  for (const row of (members.data ?? []) as MemberLocationRow[]) {
+    const opens = nextFajrAfter(row.latitude, row.longitude, now);
+    if (!opens) continue;
+    schedule.push({
+      user_id: row.user_id,
+      opens_at: opens.toISOString(),
+      // Their own day, measured from their own dawn — not a global clock.
+      expires_at: new Date(opens.getTime() + 24 * 3_600_000).toISOString(),
+    });
+  }
+
+  return schedule;
+}
+
 async function fetchCandidateEdges(
   client: SupabaseClient,
   runId: string,
@@ -520,7 +558,8 @@ Deno.serve(async (request: Request) => {
       });
     }
 
-    const generated = await client.rpc('generate_round_for_pairs', { p_expires_at: expiresAt });
+    const schedule = await dawnScheduleFor(client);
+    const generated = await client.rpc('generate_round_for_pairs_scheduled', { p_schedule: schedule });
     if (generated.error) throw new Error(generated.error.message);
     return Response.json({ expiredSelections: expired.data, pairsCreated: generated.data, expiresAt, cycleDate: timing.cycleDate });
   } catch (error) {
