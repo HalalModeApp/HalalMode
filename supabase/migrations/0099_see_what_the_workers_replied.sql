@@ -24,14 +24,26 @@ $$;
 revoke all on function public.recent_worker_replies_service(integer) from public, anon, authenticated;
 grant execute on function public.recent_worker_replies_service(integer) to service_role;
 
--- Fire the deletion worker once now, exactly as the cron does, so the wiring is
+-- Fire the deletion worker once, exactly as the cron does, so the wiring is
 -- proven today rather than assumed until the first real erasure is due. With an
 -- empty queue the worker claims nothing and deletes nothing.
-select net.http_post(
-  url := 'https://rikqvwwhuwstanngsihs.supabase.co/functions/v1/finalize-account-deletions',
-  headers := jsonb_build_object(
-    'x-deletion-worker-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'halal_mode_deletion_worker' order by created_at desc limit 1),
-    'Content-Type', 'application/json'
-  ),
-  body := '{}'::jsonb
-);
+--
+-- Only on a database that has actually generated rounds. A fresh one — CI, or a
+-- developer's reset — would otherwise post to the production URL while setting
+-- itself up. 0100 replaces this with a function, which is the right shape for
+-- an action; this stays guarded rather than edited away, because it has already
+-- run on the live project and the file should say what was applied.
+do $$
+begin
+  if exists (select 1 from round_generation_runs) then
+    perform net.http_post(
+      url := 'https://rikqvwwhuwstanngsihs.supabase.co/functions/v1/finalize-account-deletions',
+      headers := jsonb_build_object(
+        'x-deletion-worker-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'halal_mode_deletion_worker' order by created_at desc limit 1),
+        'Content-Type', 'application/json'
+      ),
+      body := '{}'::jsonb
+    );
+  end if;
+end;
+$$;
