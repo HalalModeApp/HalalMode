@@ -16,6 +16,7 @@
     "../src/lib/birthDate.ts",
     "../src/lib/countrySelection.ts",
     "../src/lib/roundInvariants.ts",
+    "../src/lib/countdown.ts",
     "../src/lib/prayerTimes.ts",
     "../src/matching/config.ts",
     "../src/matching/estimate.ts",

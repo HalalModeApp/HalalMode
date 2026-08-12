@@ -33,6 +33,7 @@ import { fetchMyProfileReadiness } from '@/api/profile';
 import { trackProductEvent } from '@/lib/analytics';
 import { queryKeys } from '@/lib/queryClient';
 import { acceptConduct, hasAcceptedConduct } from '@/lib/conductAcknowledgement';
+import { countdownTo, countdownTick } from '@/lib/countdown';
 import { playPop, startShimmer, stopShimmer } from '@/lib/sound';
 import { USE_MOCKS } from '@/lib/supabase';
 import { testIds } from '@/lib/testIds';
@@ -162,6 +163,30 @@ export default function DailyScreen() {
       router.replace('/legal-consent' as Href);
     }
   }, [emptyReason]);
+
+  // Under "resets at Fajr in London": yes, but when. Re-reads once a minute
+  // until the last minute, so the phone is not woken every second for a number
+  // that has not changed.
+  const resetsAt = round?.expiresAt;
+  const [countdown, setCountdown] = useState(() => countdownTo(resetsAt));
+  useEffect(() => {
+    setCountdown(countdownTo(resetsAt));
+    if (!resetsAt) return;
+    const timer = setInterval(() => {
+      setCountdown(countdownTo(resetsAt));
+    }, countdownTick(countdownTo(resetsAt)));
+    return () => clearInterval(timer);
+  }, [resetsAt]);
+
+  const countdownLabel = !countdown
+    ? null
+    : countdown.done
+      ? t('daily.newSetArriving')
+      : countdown.hours > 0
+        ? t('daily.newSetInHours', { hours: countdown.hours, minutes: countdown.minutes })
+        : countdown.minutes > 0
+          ? t('daily.newSetInMinutes', { minutes: countdown.minutes })
+          : t('daily.newSetInSeconds');
 
   const popPulseStyle = useAnimatedStyle(() => ({
     opacity: popPulse.value * 0.7,
@@ -428,6 +453,9 @@ export default function DailyScreen() {
           <Text variant="micro">
             {round.city ? t('daily.todayIn', { city: round.city }) : t('daily.today')}
           </Text>
+          {countdownLabel ? (
+            <Text variant="micro" style={styles.countdown}>{countdownLabel}</Text>
+          ) : null}
           <Text variant="display" style={styles.title}>
             {t(
               round.introductions.length === 1
@@ -674,6 +702,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 26,
     paddingTop: 6,
   },
+  countdown: { color: color.faintest, marginTop: 2 },
   headlineText: { flex: 1 },
   title: { marginTop: 4 },
   resetButton: {
