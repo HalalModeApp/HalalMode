@@ -21,7 +21,9 @@
     "../src/matching/fairness.ts",
     "../src/matching/allocate.ts",
     "../src/matching/rotation.ts",
-    "../src/matching/simulate.ts"
+    "../src/matching/simulate.ts",
+    "../supabase/functions/generate-round/matching.ts",
+    "../supabase/functions/generate-round/runContext.ts"
   ],
   "exclude": []
 }
