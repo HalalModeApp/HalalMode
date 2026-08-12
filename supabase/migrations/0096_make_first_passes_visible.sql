@@ -241,11 +241,16 @@ do $$
 declare
   v jsonb := halal_mode_private.matching_outcome_metrics(now() - interval '30 days');
 begin
-  assert v ? 'pairs_passed' and v ? 'pass_rate_per_round',
+  assert v ? 'pairs_passed' and v ? 'pairs_passed_twice' and v ? 'pass_rate_per_round',
     'passes must be countable over a window';
-  -- The pass made while testing this must now be visible. If this fails, the
-  -- metric is still blind to first passes and the whole point was missed.
-  assert (v ->> 'pairs_passed')::int >= 1,
-    format('a pass was made and should be counted; got %s', v ->> 'pairs_passed');
+  -- Shape only. An earlier version of this asserted that at least one pass
+  -- existed, which held on the database it was written against and failed on
+  -- every empty one — including the clean database CI builds from scratch, so
+  -- it broke the reset rather than a test. A migration may assert what must be
+  -- true of any database; whether a row happens to exist belongs in a test with
+  -- its own fixture, which is where that check now lives.
+  assert (v ->> 'pairs_passed') is not null
+     and (v ->> 'pairs_passed')::int >= 0,
+    'the pass count must be a number even when nobody has passed';
 end;
 $$;

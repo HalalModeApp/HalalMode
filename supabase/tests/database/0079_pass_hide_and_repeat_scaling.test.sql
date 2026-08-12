@@ -1,7 +1,7 @@
 begin;
 
 set local search_path = public, extensions;
-select plan(29);
+select plan(31);
 
 -- The three strengths of "no", and the repetition scaling that sits behind
 -- them. Covers migrations 0070 through 0079.
@@ -283,6 +283,26 @@ select ok(
   halal_mode_private.pair_cooldown_days(0.60, halal_mode_private.active_matching_config())
   < halal_mode_private.pair_cooldown_days(0.30, halal_mode_private.active_matching_config()),
   'the wait runs against the estimate, not with it'
+);
+
+-- --- A pass is countable ------------------------------------------------------
+--
+-- The metric counted decisions of 'explicit_pass', which a first pass never
+-- writes, so passes were invisible until somebody passed twice. It now counts
+-- from the pair, which needs a timestamp there — checked with a fixture rather
+-- than in the migration, where an earlier version asserted a pass existed and
+-- broke every clean database that had none.
+
+select ok(
+  (select last_passed_at is not null from halal_mode_private.pair_exposure
+   where user_low = '00000000-0000-0000-0000-000000007001'
+     and user_high = '00000000-0000-0000-0000-000000007002'),
+  'passing stamps when it happened'
+);
+select ok(
+  (halal_mode_private.matching_outcome_metrics(now() - interval '1 day')
+   ->> 'pairs_passed')::int >= 1,
+  'and a first pass is visible in the measurement, not only a second'
 );
 
 -- --- Soft select ------------------------------------------------------------
