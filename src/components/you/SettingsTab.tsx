@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { requestAccountDeletion, setProfilePaused } from '@/api/account';
 import { disableMyNotifications, enableMyNotifications, fetchMyNotificationConsent } from '@/api/notifications';
@@ -278,7 +278,22 @@ export function SettingsTab({
         <SettingRow
           title={t('settings.support')}
           subtitle={t('settings.supportBody')}
-          badge={t('settings.comingLater')}
+          trailing={
+            <Button
+              testID={testIds.settings.support}
+              label={t('settings.supportAction')}
+              variant="quiet"
+              onPress={() => {
+                // A real address rather than a ticketing system. The Terms and
+                // the Privacy Notice both tell members to write here, and both
+                // promise a person reads it — so this has to go somewhere a
+                // person actually is.
+                void Linking.openURL(
+                  `mailto:hello@halalmo.de?subject=${encodeURIComponent(t('settings.supportSubject'))}`
+                ).catch(() => Alert.alert(t('settings.support'), t('settings.supportFallback')));
+              }}
+            />
+          }
         />
         <SettingRow
           title={t('settings.delete')}

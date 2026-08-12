@@ -41,6 +41,7 @@ export const testIds = {
     updateLocation: 'profile-update-location',
   },
   settings: {
+    support: 'settings-support',
     blocked: 'settings-blocked-members',
     blockedTitle: 'settings-blocked-title',
     notifications: 'settings-notifications',
