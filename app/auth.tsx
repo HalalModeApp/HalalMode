@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import { signInWithProvider, type AuthProvider } from '@/api/auth';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
@@ -19,6 +20,7 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [secondsUntilResend, setSecondsUntilResend] = useState(0);
+  const [busyProvider, setBusyProvider] = useState<AuthProvider | null>(null);
 
   useEffect(() => {
     if (secondsUntilResend <= 0) return;
@@ -27,6 +29,19 @@ export default function AuthScreen() {
     }, 1_000);
     return () => clearInterval(timer);
   }, [secondsUntilResend]);
+
+  const continueWith = async (provider: AuthProvider) => {
+    if (busyProvider) return;
+    clearAuthError();
+    setBusyProvider(provider);
+    try {
+      await signInWithProvider(provider);
+    } catch {
+      Alert.alert(t('auth.providerFailed'), t('auth.providerFailedBody'));
+    } finally {
+      setBusyProvider(null);
+    }
+  };
 
   const sendLink = async () => {
     if (sending || secondsUntilResend > 0) return;
@@ -77,6 +92,28 @@ export default function AuthScreen() {
           <Text variant="body" style={[styles.copy, isRTL && styles.rtlText]}>{t('auth.body')}</Text>
         </View>
         <View style={styles.form}>
+          <Button
+            testID={testIds.auth.google}
+            label={t('auth.continueGoogle')}
+            loading={busyProvider === 'google'}
+            disabled={busyProvider !== null}
+            onPress={() => void continueWith('google')}
+          />
+          {/* Android has no Apple accounts to speak of; a button that leads
+              somewhere nobody there can finish is worse than no button. */}
+          {Platform.OS === 'android' ? null : (
+            <Button
+              testID={testIds.auth.apple}
+              label={t('auth.continueApple')}
+              variant="secondary"
+              loading={busyProvider === 'apple'}
+              disabled={busyProvider !== null}
+              onPress={() => void continueWith('apple')}
+            />
+          )}
+          <Text variant="caption" style={[styles.divider, isRTL && styles.rtlText]}>
+            {t('auth.orEmail')}
+          </Text>
           <Text variant="label" style={isRTL ? styles.rtlText : undefined}>{t('auth.email')}</Text>
           {authError === 'invalid_link' ? (
             <Text accessibilityRole="alert" variant="caption" style={[styles.authError, isRTL && styles.rtlText]}>
@@ -101,6 +138,7 @@ export default function AuthScreen() {
           <Button
             testID={testIds.auth.submit}
             label={secondsUntilResend > 0 ? t('auth.waitToResend', { seconds: secondsUntilResend }) : t('auth.send')}
+            variant="secondary"
             loading={sending}
             disabled={secondsUntilResend > 0}
             onPress={() => void sendLink()}
@@ -125,6 +163,7 @@ const styles = StyleSheet.create({
   authError: { color: color.inkSoft, lineHeight: 18 },
   privacyNote: { color: color.inkSoft, lineHeight: 18 },
   form: { gap: 10 },
+  divider: { color: color.faintest, textAlign: 'center', marginTop: 6 },
   input: {
     borderWidth: 1, borderColor: '#D9D6CE', borderRadius: radius.lg,
     paddingHorizontal: 15, height: 52, color: color.ink, fontFamily: 'Beiruti_400Regular', fontSize: 16,
