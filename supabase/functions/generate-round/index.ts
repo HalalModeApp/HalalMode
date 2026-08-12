@@ -6,7 +6,7 @@ import {
   ALGORITHM_VERSION,
   liveFinalizationArgs,
   planRound,
-  shadowFinalizationArgs,
+  type RoundPlan,
   type CandidateEdgeRow,
   type MemberSignalRow,
 } from './matching.ts';
@@ -212,11 +212,7 @@ async function runMatchingV1Attempt(
       finalized = parseFinalizationResult(persisted);
     } else {
       finalizationAttempted = true;
-      const shadow = await finalizeWithExactRetry(() => client.rpc(
-        'matching_shadow_finalize_service',
-        shadowFinalizationArgs(runId, plan)
-      ));
-      finalized = parseFinalizationResult(shadow);
+      finalized = await finalizeShadowInBatches(client, runId, plan);
     }
 
     if (finalized.pairs_created !== plan.edges.length
@@ -281,6 +277,54 @@ async function runMatchingV1(
     }
   }
   throw new Error('Matching retry loop exhausted unexpectedly');
+}
+
+/**
+ * Writes a shadow round in batches, each its own short transaction.
+ *
+ * The size is a compromise between round trips and transaction length. Five
+ * hundred pairs is a thousand rows, which lands well inside a second, so no
+ * batch can approach the gateway's 125-second ceiling or hold a lock long
+ * enough to block the run behind it. A round of a million pairs is two
+ * thousand of these rather than one call that cannot finish.
+ *
+ * Batches are idempotent, so a retry re-sends rather than repairs. `close`
+ * refuses to mark the run finished unless every declared pair arrived, which
+ * is what stops a lost batch becoming a round that quietly introduced fewer
+ * people than it planned to.
+ */
+const FINALIZE_BATCH_PAIRS = 500;
+
+async function finalizeShadowInBatches(
+  client: SupabaseClient,
+  runId: string,
+  plan: RoundPlan
+) {
+  // finalizeWithExactRetry returns the data and throws on failure, so every
+  // call here either advanced or ended the run.
+  await finalizeWithExactRetry(() => client.rpc(
+    'matching_shadow_open_service',
+    { p_run_id: runId, p_expected_pairs: plan.edges.length }
+  ));
+
+  for (let index = 0; index < plan.edges.length; index += FINALIZE_BATCH_PAIRS) {
+    const chunk = plan.edges.slice(index, index + FINALIZE_BATCH_PAIRS);
+    await finalizeWithExactRetry(() => client.rpc(
+      'matching_shadow_batch_service',
+      { p_run_id: runId, p_edges: chunk }
+    ));
+  }
+
+  const closed = await finalizeWithExactRetry(() => client.rpc(
+    'matching_shadow_close_service',
+    {
+      p_run_id: runId,
+      p_stage_latencies: plan.stageLatencies,
+      p_peak_memory_bytes: plan.peakMemoryBytes,
+      p_threshold_breaches: plan.thresholdBreaches,
+    }
+  ));
+  return parseFinalizationResult(closed);
 }
 
 async function fetchCandidateEdges(
