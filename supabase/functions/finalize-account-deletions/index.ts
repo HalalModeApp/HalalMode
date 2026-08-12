@@ -1,30 +1,33 @@
 /**
- * Deletes only already-paused, member-requested accounts. Deploy this function
- * with a high-entropy DELETION_WORKER_SECRET and invoke it from a trusted job.
- * The service-role key stays in Supabase Edge Function secrets.
+ * Erases accounts whose 30-day recovery window has passed.
+ *
+ * Requesting deletion already pauses the member and closes their connections
+ * straight away; this is the second half, and until it runs on a schedule the
+ * erasure the Privacy Notice promises never actually happens.
+ *
+ * The caller proves itself against the vault rather than an environment
+ * variable, the same way round generation does. That keeps the secret in one
+ * place — rotating it is a single update with nothing to redeploy — and means
+ * deploying this function needs no secrets configured by hand.
  */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 type DeletionRequest = { user_id: string; photo_paths: string[] | null; voice_path: string | null };
 
-function equalSecret(left: string, right: string) {
-  if (!left || left.length !== right.length) return false;
-  let difference = 0;
-  for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  return difference === 0;
-}
-
 Deno.serve(async (request) => {
   if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
-  const workerSecret = Deno.env.get('DELETION_WORKER_SECRET') ?? '';
-  if (!equalSecret(request.headers.get('x-deletion-worker-secret') ?? '', workerSecret)) {
-    return new Response('Forbidden', { status: 403 });
-  }
 
   const client = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   );
+
+  const verified = await client.rpc('verify_deletion_worker_secret', {
+    p_secret: request.headers.get('x-deletion-worker-secret') ?? '',
+  });
+  if (verified.error || verified.data !== true) {
+    return new Response('Forbidden', { status: 403 });
+  }
   const claimed = await client.rpc('claim_account_deletion_requests', { p_limit: 25 });
   if (claimed.error) return Response.json({ error: 'Could not claim deletion requests' }, { status: 500 });
 

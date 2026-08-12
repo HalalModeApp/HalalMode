@@ -53,3 +53,15 @@ policy = "oneshot"
 
 [analytics]
 enabled = false
+
+# Both functions are called by pg_cron, which sends a shared secret in a header
+# and no JWT. With JWT verification on, the gateway answers 401 before the
+# function runs and the job fails silently every night — which is exactly what
+# happened to the deletion worker. Each function checks its own secret against
+# the vault, so this is written down here rather than left as a deploy flag
+# somebody has to remember.
+[functions.generate-round]
+verify_jwt = false
+
+[functions.finalize-account-deletions]
+verify_jwt = false
