@@ -116,11 +116,15 @@ select is(
 select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-000000008003","role":"authenticated"}', true);
 
-select is(
-  halal_mode_private.get_connection_after_legal_consent(
-    '00000000-0000-0000-0000-00000000800c'),
+-- Raises rather than returning an empty payload, which is the stronger answer:
+-- there is no shape for a caller to inspect and no null to mistake for "no
+-- answers yet".
+select throws_ok(
+  $$ select halal_mode_private.get_connection_after_legal_consent(
+       '00000000-0000-0000-0000-00000000800c') $$,
   null,
-  'a member outside the connection gets nothing at all'
+  null,
+  'a member outside the connection is refused outright'
 );
 
 select ok(
