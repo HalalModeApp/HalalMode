@@ -80,7 +80,10 @@ test('the public page is reachable without an account', () => {
   // land on it rather than be bounced to a sign-in screen for an app they have
   // not heard of yet.
   assert.match(gate, /rootSegment === 'join'/u);
-  assert.match(gate, /if \(inJoin\) return;/u);
+  assert.match(gate, /if \(inJoin \|\| inLegalPage\) return;/u);
+  // Terms and the Privacy Notice sit behind the same exemption: somebody
+  // deciding whether to agree has to be able to read them first.
+  assert.match(gate, /rootSegment === 'terms' \|\| rootSegment === 'privacy'/u);
 });
 
 test('the waitlist speaks both languages', () => {
