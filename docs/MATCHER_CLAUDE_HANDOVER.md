@@ -156,6 +156,52 @@ can produce trustworthy measurements.
    fairness `boost_cap`, no duplicate pairs, and capacity invariants.
 5. Benchmark 2k, 10k, 25k, 50k, 100k, and 200k after every structural change.
 
+### Phase 2A — investigate incremental coverage before considering a rewrite
+
+Do not assume the matcher must compare the entire world in one run. A simpler
+and potentially cheaper model is to process a bounded, never-before-visited
+slice of the eligible universe on each job/day, retain only the best bounded
+private candidates per member, and move to another slice on the next cycle.
+Over many cycles, the app can cover the eligible universe without ever holding
+billions of pairs in memory at once.
+
+This is an investigation first, not permission to invent a second matcher.
+Reuse the existing set-based eligibility, V2 scoring, V2 invariants, chunk
+progress tables, shadow finalizer, and tests. Adapt the smallest proven pieces;
+do not replace the system with a fresh general-purpose rewrite.
+
+The design must answer these questions with a small prototype and numbers:
+
+1. **How is a pair assigned to a slice?** Prefer a symmetric deterministic
+   pair-bucket key (for example, a seeded hash of the ordered member IDs),
+   combined with region/eligibility partitions. Both endpoints of a pair must
+   be considered in the same slice so reciprocity cannot be broken.
+2. **How does coverage advance?** Persist an epoch, bucket/cursor, seed, and
+   completion state. A retry must be idempotent; a restart must resume; a new
+   epoch must use a new deterministic shuffle so the same popular profiles are
+   not always processed first.
+3. **How are the best candidates retained?** Keep a bounded private top-K
+   reservoir or equivalent per member across processed slices. A later slice
+   must be able to replace an earlier candidate; otherwise “eventually” does
+   not improve the set. Never expose this reservoir or its scores to clients.
+4. **How is a daily round built?** Allocate only from the current private
+   reservoir plus the current slice, then persist reciprocal edges in one
+   bounded finalization step. The selected set must still have zero one-sided
+   edges, no duplicate pairs, and valid capacities.
+5. **What does “everyone eventually” mean?** Measure coverage over the eligible,
+   non-blocked, non-hidden, non-retired pair universe. Do not promise exposure
+   to pairs excluded by preferences, safety, age, distance, consent, or churn.
+6. **Does it improve the product target?** Compare incremental coverage with V2
+   on the same frozen graph: set-local mutual-first-choice rate, full-set
+   coverage, mean reciprocal quality, exposure fairness, repeat rate, memory,
+   and time per slice. Include interrupted jobs, pool changes, imbalanced pools,
+   and cross-timezone members.
+
+A viable slice design is allowed to take days or weeks to cover a very large
+eligible universe, but it must provide a measurable coverage guarantee,
+bounded per-job cost, and useful rounds every day. Do not trade away today's
+reciprocal safety merely to claim eventual reach.
+
 ### Phase 3 — optimize the real product objective
 
 1. Define the measured target as set-local mutual-first-choice rate, plus full
@@ -243,6 +289,15 @@ has stalled, and the current JavaScript edge representation does not scale to
 sets, measured together with full-set coverage, reciprocal quality, and fair
 exposure. Synthetic truth models are only regression tools.
 
+Use Occam's razor. Preserve and adapt the strongest working parts of Legacy V1,
+V2, and V3 instead of writing a fresh matcher. Investigate this alternative
+scale strategy explicitly: the app does not need to score every possible person
+before serving today's round. It can process a bounded, randomized, symmetric
+pair slice, retain the best private candidates, and advance to an untouched
+slice over later days or weeks. Prove that the slice schedule is resumable,
+eventually covers the eligible universe, keeps both endpoints together, and
+does not reduce reciprocal quality or fairness before implementing it.
+
 Work in this order:
 1. Finish a shadow-only hosted proof and fix the batched finalizer. Verify
    pairs_created, no error, zero one-sided edges, balanced exposure, and no
@@ -252,10 +307,13 @@ Work in this order:
    and eliminate repeated ordered.find/indexOf scans with adjacency indexes or
    bounded queues. Preserve reciprocity, capacity, score floor, fairness
    boost_cap, privacy, and shadow write isolation.
-3. Only then test a small set-local improvement to V2. Do not ship another
+3. Investigate the incremental pair-slice/reservoir strategy described above.
+   Reuse the current SQL, V2 scoring, chunk progress, and finalization code;
+   prototype the smallest measurable version before adding new abstractions.
+4. Only then test a small set-local improvement to V2. Do not ship another
    global anchor heuristic without proving mutual-first-choice lift across
    multiple seeds, truth models, imbalanced pools, genders, tiers, and regions.
-4. Add durable outcome metrics and estimator calibration from real double-blind
+5. Add durable outcome metrics and estimator calibration from real double-blind
    selections. Never expose private scores or preferences.
 
 Do not delete Legacy V1, V2, or rollback branches. Do not make destructive
