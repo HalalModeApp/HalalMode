@@ -145,6 +145,154 @@ export function qualityBand(quality: number, width: number): number {
  * weight maximisation anyway — it is weight subject to fairness — so exactness
  * would buy little against a target that is itself a judgement call.
  */
+/**
+ * Stable rounds: pair people off five times, best mutual partner first.
+ *
+ * The goal is that a member's favourite in their set picks them back. The
+ * greedy allocators take the highest-scoring edges in order, which fills a set
+ * with five near-equals — so a member's favourite is surrounded by four rivals,
+ * and the same is true for them. Measured against a predictive estimator, that
+ * lands at or below random chance.
+ *
+ * Pairing is the classic answer to "who should be whose number one", so this
+ * uses it directly. Each round runs a deferred-acceptance pass: every member
+ * with room proposes down their own preference list, and the person proposed to
+ * holds the best offer by *their* estimate, dropping a weaker one they were
+ * holding. When it settles, nobody is left wanting someone who also wants them
+ * more than their current partner — that is what makes round one each member's
+ * strongest available mutual pair rather than merely their highest score.
+ *
+ * Five rounds give five slots. Round one is the anchor, rounds two to five are
+ * the next-best mutual pairs once earlier ones are taken, so a set is ordered
+ * by genuine mutual strength rather than by one side's ranking.
+ *
+ * Reciprocity is structural: the unit of work is a pair, so a member can only
+ * appear in a set by having the other in theirs. There is no direction to get
+ * wrong.
+ *
+ * Cost is O(rounds x edges). Proposals only ever walk each member's own
+ * shortlist, so it grows with members rather than members squared, and the
+ * shortlist is where discovery (buckets) plugs in unchanged.
+ */
+function stableRounds(input: {
+  ordered: ScoredEdge[];
+  capacities: Map<string, Capacity>;
+  seed: number;
+}): { assigned: ScoredEdge[]; anchored: number } {
+  const { ordered, capacities } = input;
+
+  // Each member's own view of their candidates, strongest first. `forward` is
+  // a's estimate of b; `backward` is b's estimate of a. Falling back to the
+  // symmetric score keeps this correct when directional estimates are absent
+  // rather than silently ranking everyone the same.
+  const preference = new Map<string, ScoredEdge[]>();
+  const wants = (edge: ScoredEdge, id: string): number => {
+    const value = edge.a === id ? edge.forward : edge.backward;
+    return value === undefined || !Number.isFinite(value) ? edge.reciprocal : value;
+  };
+
+  for (const edge of ordered) {
+    for (const id of [edge.a, edge.b]) {
+      const list = preference.get(id);
+      if (list) list.push(edge);
+      else preference.set(id, [edge]);
+    }
+  }
+  for (const [id, list] of preference) {
+    list.sort((left, right) => wants(right, id) - wants(left, id));
+  }
+
+  const remaining = new Map<string, number>();
+  for (const [id, capacity] of capacities) remaining.set(id, Math.max(0, capacity.limit));
+
+  const assigned: ScoredEdge[] = [];
+  const taken = new Set<string>();
+  // How far down their own list each member has already proposed. Carried
+  // across rounds so a member never re-proposes to someone who turned them
+  // down, which is what bounds the whole thing at O(rounds x edges).
+  const cursor = new Map<string, number>();
+  let anchored = 0;
+
+  const rounds = Math.max(...[...capacities.values()].map((c) => c.limit), 0);
+
+  for (let round = 0; round < rounds; round += 1) {
+    // Whoever still has room and still has people left to ask.
+    const proposers: string[] = [];
+    for (const [id, room] of remaining) {
+      if (room > 0 && (cursor.get(id) ?? 0) < (preference.get(id)?.length ?? 0)) {
+        proposers.push(id);
+      }
+    }
+    if (proposers.length === 0) break;
+
+    // Who each member is provisionally holding this round, and the edge it came
+    // from. A held offer can be displaced by a better one before the round ends.
+    const held = new Map<string, ScoredEdge>();
+    const queue = [...proposers];
+
+    while (queue.length > 0) {
+      const proposer = queue.pop()!;
+      if ((remaining.get(proposer) ?? 0) <= 0) continue;
+      if (held.has(proposer)) continue;
+
+      const list = preference.get(proposer) ?? [];
+      let index = cursor.get(proposer) ?? 0;
+
+      while (index < list.length) {
+        const edge = list[index]!;
+        index += 1;
+        const other = edge.a === proposer ? edge.b : edge.a;
+
+        if (taken.has(pairKey(edge.a, edge.b))) continue;
+        if ((remaining.get(other) ?? 0) <= 0) continue;
+        if (held.has(other) && held.get(other) === edge) continue;
+
+        const standing = held.get(other);
+        if (!standing) {
+          held.set(other, edge);
+          held.set(proposer, edge);
+          break;
+        }
+
+        // They are already holding someone. Do they prefer this offer?
+        if (wants(edge, other) > wants(standing, other)) {
+          const displaced = standing.a === other ? standing.b : standing.a;
+          held.delete(displaced);
+          held.set(other, edge);
+          held.set(proposer, edge);
+          // The displaced member is free to ask someone else this round.
+          if ((remaining.get(displaced) ?? 0) > 0) queue.push(displaced);
+          break;
+        }
+      }
+
+      cursor.set(proposer, index);
+    }
+
+    // Commit this round's pairs. Each edge appears twice in `held` (once per
+    // endpoint), so dedupe on the pair before charging capacity.
+    const committed = new Set<ScoredEdge>();
+    for (const edge of held.values()) {
+      if (committed.has(edge)) continue;
+      committed.add(edge);
+
+      const roomA = remaining.get(edge.a) ?? 0;
+      const roomB = remaining.get(edge.b) ?? 0;
+      if (roomA <= 0 || roomB <= 0) continue;
+
+      remaining.set(edge.a, roomA - 1);
+      remaining.set(edge.b, roomB - 1);
+      taken.add(pairKey(edge.a, edge.b));
+      assigned.push(edge);
+      if (round === 0) anchored += 2;
+    }
+
+    if (committed.size === 0) break;
+  }
+
+  return { assigned, anchored };
+}
+
 export function allocate(input: AllocationInput): AllocationResult {
   const { edges, capacities, config, seed } = input;
   const now = input.now ?? (() => Date.now());
@@ -155,7 +303,7 @@ export function allocate(input: AllocationInput): AllocationResult {
   }
 
   let rejectedBelowFloor = 0;
-  const eligible = edges.filter((edge) => {
+  const eligible0 = edges.filter((edge) => {
     // The hard floor. No amount of exposure need moves an edge past it, which
     // is what stops fairness from forcing through an incompatible pair.
     if (edge.reciprocal < config.min_reciprocal_score) {
@@ -165,7 +313,41 @@ export function allocate(input: AllocationInput): AllocationResult {
     return capacities.has(edge.a) && capacities.has(edge.b);
   });
 
+  const eligible = eligible0;
   const ordered = [...eligible].sort(compareEdges(seed, config.quality_band_width));
+
+  // Pairing rather than greedy edge-picking. It returns complete sets, so the
+  // fairness, exploration, repair and composition passes below — all of which
+  // exist to patch up greedy's leftovers — do not apply and are skipped rather
+  // than run against a plan they were not written for.
+  if (config.allocator === 'stable_rounds_v1') {
+    const paired = stableRounds({ ordered, capacities, seed });
+    const shortfallsPaired = new Map<string, number>();
+    const used = new Map<string, number>();
+    for (const edge of paired.assigned) {
+      used.set(edge.a, (used.get(edge.a) ?? 0) + 1);
+      used.set(edge.b, (used.get(edge.b) ?? 0) + 1);
+    }
+    for (const [id, capacity] of capacities) {
+      const left = Math.max(0, capacity.limit) - (used.get(id) ?? 0);
+      if (left > 0) shortfallsPaired.set(id, left);
+    }
+    return {
+      assigned: paired.assigned,
+      shortfalls: shortfallsPaired,
+      stats: {
+        consideredEdges: edges.length,
+        assignedEdges: paired.assigned.length,
+        rejectedBelowFloor,
+        anchoredMembers: paired.anchored,
+        exploratorySlots: 0,
+        compositionSwaps: 0,
+        repairSwaps: 0,
+        repairTimedOut: false,
+        repeatEdges: paired.assigned.reduce((count, edge) => count + (edge.fresh ? 0 : 1), 0),
+      },
+    };
+  }
 
   const assigned: ScoredEdge[] = [];
   const takenPairs = new Set<string>();

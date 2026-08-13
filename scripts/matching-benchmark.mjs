@@ -159,7 +159,7 @@ function allocationFor(algo, edges, members) {
   if (algo === 'v1') return { assigned: legacyAllocate(edges, members, DEFAULT_SEED), stats: null };
   const capacities = new Map(members.map((member) => [member.id, { limit: member.capacity }]));
   const config = resolveConfig({
-    allocator: algo === 'v3' ? 'anchored_maxmin_v1' : 'greedy_global_v1',
+    allocator: algo === 'v3' ? 'anchored_maxmin_v1' : algo === 'v4' ? 'stable_rounds_v1' : 'greedy_global_v1',
     ...(FAST ? { exploration_rate: 0, repair_time_budget_ms: 0 } : {}),
     // Keep runtime guard warnings out of the benchmark result. The returned
     // metrics still include the measured timings and edge count.
@@ -305,7 +305,7 @@ function runWorker(algo, count, mode) {
       },
     };
     const planned = planRound(edgeRows, memberRows, resolveConfig({
-      allocator: algo === 'v3' ? 'anchored_maxmin_v1' : 'greedy_global_v1',
+      allocator: algo === 'v3' ? 'anchored_maxmin_v1' : algo === 'v4' ? 'stable_rounds_v1' : 'greedy_global_v1',
       ...(FAST ? { exploration_rate: 0, repair_time_budget_ms: 0 } : {}),
       warn_round_latency_ms: 1_000_000_000,
       fail_round_latency_ms: 1_000_000_001,
@@ -371,7 +371,7 @@ if (process.argv.includes('--worker')) {
       ? ['core']
       : ['core', 'e2e'];
   const results = [];
-  const matchers = ['v1', 'v2', 'v3'];
+  const matchers = ['v1', 'v2', 'v3', 'v4'];
   for (const mode of requestedModes) {
     for (const members of requested) {
       for (const matcher of matchers) {

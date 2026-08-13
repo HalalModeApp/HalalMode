@@ -15,10 +15,13 @@ export const MATCHER_V2_ALGORITHM_VERSION = 'greedy_global_v1';
 /** Matcher V3 anchors predicted mutual first choices before filling capacity. */
 export const MATCHER_V3_ALGORITHM_VERSION = 'anchored_maxmin_v2';
 
+/** Matcher V4: pairs people off in rounds rather than picking edges greedily. */
+export const MATCHER_V4_ALGORITHM_VERSION = 'stable_rounds_v1';
+
 /** Backwards-compatible name used by older callers and the default config. */
 export const ALGORITHM_VERSION = MATCHER_V2_ALGORITHM_VERSION;
 
-export const ALLOCATORS = ['greedy_global_v1', 'anchored_maxmin_v1'] as const;
+export const ALLOCATORS = ['greedy_global_v1', 'anchored_maxmin_v1', 'stable_rounds_v1'] as const;
 
 export interface MatchingConfig {
   // --- Estimation ---------------------------------------------------------
@@ -153,7 +156,7 @@ export interface MatchingConfig {
    * then fills greedily — the objective that actually serves mutual first
    * choices. Both are kept so the two can be compared in shadow.
    */
-  allocator: 'greedy_global_v1' | 'anchored_maxmin_v1';
+  allocator: 'greedy_global_v1' | 'anchored_maxmin_v1' | 'stable_rounds_v1';
 
   // --- Guards -------------------------------------------------------------
   warn_round_latency_ms: number;
@@ -311,9 +314,9 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
  */
 /** The run label is derived from the selected allocator, never from a client. */
 export function algorithmVersionForConfig(config: Pick<MatchingConfig, 'allocator'>): string {
-  return config.allocator === 'anchored_maxmin_v1'
-    ? MATCHER_V3_ALGORITHM_VERSION
-    : MATCHER_V2_ALGORITHM_VERSION;
+  if (config.allocator === 'anchored_maxmin_v1') return MATCHER_V3_ALGORITHM_VERSION;
+  if (config.allocator === 'stable_rounds_v1') return MATCHER_V4_ALGORITHM_VERSION;
+  return MATCHER_V2_ALGORITHM_VERSION;
 }
 
 export function resolveConfig(params: Partial<MatchingConfig> = {}): MatchingConfig {
