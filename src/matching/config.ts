@@ -9,7 +9,14 @@
  * See docs/RECIPROCAL_MATCHING_V1_DESIGN.md.
  */
 
-export const ALGORITHM_VERSION = 'greedy_global_v1';
+/** Matcher V2 is the preserved greedy baseline used by historical runs. */
+export const MATCHER_V2_ALGORITHM_VERSION = 'greedy_global_v1';
+
+/** Matcher V3 anchors predicted mutual first choices before filling capacity. */
+export const MATCHER_V3_ALGORITHM_VERSION = 'anchored_maxmin_v2';
+
+/** Backwards-compatible name used by older callers and the default config. */
+export const ALGORITHM_VERSION = MATCHER_V2_ALGORITHM_VERSION;
 
 export const ALLOCATORS = ['greedy_global_v1', 'anchored_maxmin_v1'] as const;
 
@@ -140,8 +147,9 @@ export interface MatchingConfig {
   // --- Allocation ---------------------------------------------------------
   repair_time_budget_ms: number;
   /**
-   * 'greedy_global_v1' maximises the total of the edge weights.
-   * 'anchored_maxmin_v1' first gives every member their best available partner,
+   * 'greedy_global_v1' is the Matcher V2 baseline and maximises total weight.
+   * 'anchored_maxmin_v1' is the Matcher V3 selector and first gives members
+   * their best available partner,
    * then fills greedily — the objective that actually serves mutual first
    * choices. Both are kept so the two can be compared in shadow.
    */
@@ -301,6 +309,13 @@ export const DEFAULT_MATCHING_CONFIG: MatchingConfig = {
  * Unknown keys are ignored and missing keys fall back, so adding a parameter
  * does not require a coordinated deploy of function and config row.
  */
+/** The run label is derived from the selected allocator, never from a client. */
+export function algorithmVersionForConfig(config: Pick<MatchingConfig, 'allocator'>): string {
+  return config.allocator === 'anchored_maxmin_v1'
+    ? MATCHER_V3_ALGORITHM_VERSION
+    : MATCHER_V2_ALGORITHM_VERSION;
+}
+
 export function resolveConfig(params: Partial<MatchingConfig> = {}): MatchingConfig {
   const merged: MatchingConfig = { ...DEFAULT_MATCHING_CONFIG };
   for (const key of Object.keys(DEFAULT_MATCHING_CONFIG) as (keyof MatchingConfig)[]) {

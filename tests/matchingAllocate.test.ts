@@ -608,6 +608,35 @@ function directional(a: string, b: string, forward: number, backward: number): S
   return { a, b, reciprocal, quality: reciprocal, utility: reciprocal, forward, backward, fresh: true };
 }
 
+test('Matcher V3 anchors a mutual first choice ahead of a stronger one-sided edge', () => {
+  const config = resolveConfig({ allocator: 'anchored_maxmin_v1' });
+  const edges = [
+    // A is predicted to prefer B, while X is predicted to prefer Y. A-X is
+    // globally stronger, but it is not either member's mutual first choice.
+    directional('a', 'x', 0.7, 0.99),
+    directional('a', 'b', 0.8, 0.8),
+    directional('x', 'y', 1, 0.2),
+  ];
+  const caps = capacities([
+    ['a', 1],
+    ['b', 1],
+    ['x', 1],
+    ['y', 1],
+  ]);
+
+  const result = allocate({ edges, capacities: caps, config, seed: 44 });
+  assert.deepEqual(verifyAllocation(result, caps), { ok: true });
+  assert.ok(
+    result.assigned.some((edge) => pairKey(edge.a, edge.b) === pairKey('a', 'b')),
+    'the mutual first-choice edge should survive the anchor pass'
+  );
+  assert.ok(
+    !result.assigned.some((edge) => pairKey(edge.a, edge.b) === pairKey('a', 'x')),
+    'the globally stronger but one-sided edge should not displace it'
+  );
+  assert.ok(result.stats.anchoredMembers >= 2);
+});
+
 test('composition leaves alone a member whose picks are returned', () => {
   const config = resolveConfig();
   const edges = [

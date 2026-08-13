@@ -226,6 +226,12 @@ export function planRound(
         fresh: row.pair_times_shown <= 0,
         quality: reciprocal * decay,
         utility: adjustedUtility(reciprocal, low, high, config, window) * decay,
+        // Keep the two directional estimates all the way into allocation.
+        // Matcher V3 ranks each member's current candidate set by the value
+        // that member is predicted to assign to the other; collapsing them
+        // here would turn the first-choice objective back into a global sort.
+        forward: lowPicksHigh,
+        backward: highPicksLow,
       });
     }
     return { edges: out, retirements };

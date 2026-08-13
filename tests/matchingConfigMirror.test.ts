@@ -3,7 +3,13 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { DEFAULT_MATCHING_CONFIG, resolveStoredConfig } from '../src/matching/config';
+import {
+  algorithmVersionForConfig,
+  DEFAULT_MATCHING_CONFIG,
+  MATCHER_V2_ALGORITHM_VERSION,
+  MATCHER_V3_ALGORITHM_VERSION,
+  resolveStoredConfig,
+} from '../src/matching/config';
 
 /**
  * The database and this module are two mirrors of one contract, and they have
@@ -72,4 +78,9 @@ test('the stored values are the ones the code would have chosen', () => {
   // the point of tuning it. But every divergence should be deliberate, so this
   // pins the ones that exist today and will fail loudly on an accidental one.
   assert.deepEqual(resolved, DEFAULT_MATCHING_CONFIG);
+});
+
+test('the two matcher labels are deterministic and reversible', () => {
+  assert.equal(algorithmVersionForConfig({ allocator: 'greedy_global_v1' }), MATCHER_V2_ALGORITHM_VERSION);
+  assert.equal(algorithmVersionForConfig({ allocator: 'anchored_maxmin_v1' }), MATCHER_V3_ALGORITHM_VERSION);
 });

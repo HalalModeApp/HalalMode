@@ -284,3 +284,17 @@ The real options:
 Recommended: shadow until the comparison is convincing, then whole-pool with the
 flag as the rollback switch. Build geographic cohorting only when a single
 region is large enough for the comparison to be meaningful on its own.
+
+## Matcher V2/V3 comparison state (2026-08-13)
+
+- The pre-change baseline is preserved on local branch `matcher-v2` at commit
+  `573234b`; it has not been deleted or rewritten.
+- Matcher V3 is implemented behind the inactive config row seeded by migration
+  `20260813102643_matcher_v3_anchor_first_config.sql`. Its run label is
+  `anchored_maxmin_v2`; the active config and release flag remain on Matcher V2.
+- V3 now carries directional estimates into allocation and anchors predicted
+  mutual first-choice edges before the constrained-first fill.
+- Hosted shadow smoke evidence is partial only: 430 fake members had 1–5
+  reciprocal edges and zero one-sided edges before the existing batched shadow
+  finalizer stalled at 1,600 edges. Do not enable the release flag until the
+  finalizer completes a full run and the outcome metrics are measured.

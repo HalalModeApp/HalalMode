@@ -172,7 +172,14 @@ export function allocate(input: AllocationInput): AllocationResult {
 
   // Give everyone their best available partner before anyone gets a second.
   const anchored = config.allocator === 'anchored_maxmin_v1'
-    ? anchorPass({ ordered, assigned, takenPairs, remaining, seed })
+    ? anchorPass({
+      ordered,
+      assigned,
+      takenPairs,
+      remaining,
+      seed,
+      qualityBandWidth: config.quality_band_width,
+    })
     : 0;
 
   for (const edge of ordered) {
@@ -247,6 +254,7 @@ interface AnchorInput {
   takenPairs: Set<string>;
   remaining: Map<string, number>;
   seed: number;
+  qualityBandWidth: number;
 }
 
 /**
@@ -272,10 +280,29 @@ interface AnchorInput {
  * Returns the number of anchors placed. The ordinary greedy fill runs
  * afterwards and takes the remaining capacity.
  */
-function anchorPass(input: AnchorInput): number {
-  const { ordered, assigned, takenPairs, remaining, seed } = input;
+function directionalPreference(edge: ScoredEdge, memberId: string): number | null {
+  const value = edge.a === memberId
+    ? edge.forward
+    : edge.b === memberId
+      ? edge.backward
+      : undefined;
+  return value !== undefined && Number.isFinite(value) ? value : null;
+}
 
-  // Best-first per member, following the already-sorted global order.
+function mutualStrength(edge: ScoredEdge): number | null {
+  if (edge.forward === undefined || edge.backward === undefined
+      || !Number.isFinite(edge.forward) || !Number.isFinite(edge.backward)) {
+    return null;
+  }
+  return Math.min(edge.forward, edge.backward);
+}
+
+function anchorPass(input: AnchorInput): number {
+  const { ordered, assigned, takenPairs, remaining, seed, qualityBandWidth } = input;
+  const globalCompare = compareEdges(seed, qualityBandWidth);
+
+  // Build each member's view once. Candidate preparation bounds E, so this is
+  // O(E log E) in memory and CPU rather than a pair-at-a-time database loop.
   const options = new Map<string, ScoredEdge[]>();
   for (const edge of ordered) {
     for (const id of [edge.a, edge.b]) {
@@ -286,29 +313,72 @@ function anchorPass(input: AnchorInput): number {
     }
   }
 
-  const queue = [...options.keys()].sort((left, right) => {
-    const byChoice = (options.get(left)?.length ?? 0) - (options.get(right)?.length ?? 0);
-    if (byChoice !== 0) return byChoice;
-    return tieBreak(seed, left, left) - tieBreak(seed, right, right);
+  for (const [id, list] of options) {
+    list.sort((left, right) => {
+      const leftPreference = directionalPreference(left, id);
+      const rightPreference = directionalPreference(right, id);
+      if (leftPreference !== null || rightPreference !== null) {
+        if (leftPreference === null) return 1;
+        if (rightPreference === null) return -1;
+        if (rightPreference !== leftPreference) return rightPreference - leftPreference;
+      }
+      return globalCompare(left, right);
+    });
+  }
+
+  // A mutual top edge is number one in both endpoint views. These are the
+  // direct proxy for the product's success criterion, so place them first.
+  const topChoice = new Map<string, ScoredEdge>();
+  for (const [id, list] of options) {
+    const first = list[0];
+    if (first) topChoice.set(id, first);
+  }
+  const mutualTop = ordered.filter((edge) => {
+    const strength = mutualStrength(edge);
+    return strength !== null
+      && topChoice.get(edge.a) === edge
+      && topChoice.get(edge.b) === edge;
+  }).sort((left, right) => {
+    const leftStrength = mutualStrength(left)!;
+    const rightStrength = mutualStrength(right)!;
+    if (rightStrength !== leftStrength) return rightStrength - leftStrength;
+    return globalCompare(left, right);
   });
 
+  const anchored = new Set<string>();
   let placed = 0;
+  const place = (edge: ScoredEdge) => {
+    const key = pairKey(edge.a, edge.b);
+    if (takenPairs.has(key)) return false;
+    const roomA = remaining.get(edge.a) ?? 0;
+    const roomB = remaining.get(edge.b) ?? 0;
+    if (roomA <= 0 || roomB <= 0) return false;
+    remaining.set(edge.a, roomA - 1);
+    remaining.set(edge.b, roomB - 1);
+    takenPairs.add(key);
+    assigned.push(edge);
+    anchored.add(edge.a);
+    anchored.add(edge.b);
+    placed += 1;
+    return true;
+  };
+
+  for (const edge of mutualTop) place(edge);
+
+  // Cover the remaining members best-first, but process constrained members
+  // before popular ones so a hub cannot consume the whole pool.
+  const queue = [...options.keys()]
+    .filter((id) => !anchored.has(id))
+    .sort((left, right) => {
+      const byChoice = (options.get(left)?.length ?? 0) - (options.get(right)?.length ?? 0);
+      if (byChoice !== 0) return byChoice;
+      return tieBreak(seed, left, left) - tieBreak(seed, right, right);
+    });
+
   for (const id of queue) {
     if ((remaining.get(id) ?? 0) <= 0) continue;
-
     for (const edge of options.get(id) ?? []) {
-      const key = pairKey(edge.a, edge.b);
-      if (takenPairs.has(key)) continue;
-      const roomA = remaining.get(edge.a) ?? 0;
-      const roomB = remaining.get(edge.b) ?? 0;
-      if (roomA <= 0 || roomB <= 0) continue;
-
-      remaining.set(edge.a, roomA - 1);
-      remaining.set(edge.b, roomB - 1);
-      takenPairs.add(key);
-      assigned.push(edge);
-      placed += 1;
-      break;
+      if (place(edge)) break;
     }
   }
 

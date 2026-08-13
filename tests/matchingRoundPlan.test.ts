@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { DEFAULT_MATCHING_CONFIG } from '../src/matching/config.ts';
+import { DEFAULT_MATCHING_CONFIG, resolveConfig } from '../src/matching/config.ts';
 import {
   liveFinalizationArgs,
   planRound,
@@ -165,4 +165,72 @@ test('a repeat arrives at the allocator already handicapped for having been show
     utilityOf(shownTwice) < utilityOf(shownOnce),
     'and the handicap should compound with each further showing'
   );
+});
+
+test('Matcher V3 carries both directional estimates into first-choice allocation', () => {
+  const ids = {
+    m1: '00000000-0000-4000-8000-000000000011',
+    m2: '00000000-0000-4000-8000-000000000012',
+    f1: '00000000-0000-4000-8000-000000000013',
+    f2: '00000000-0000-4000-8000-000000000014',
+  };
+  const member = (user_id: string, gender: 'male' | 'female'): MemberSignalRow => ({
+    user_id,
+    gender,
+    tier: 'free',
+    times_shown: 0,
+    times_kept: 0,
+    rounds_since_last_mutual: 0,
+    rounds_since_last_served: 1,
+    exposures_in_window: 0,
+    introductions_per_round: 1,
+  });
+  const memberRows: MemberSignalRow[] = [
+    member(ids.m1, 'male'),
+    member(ids.m2, 'male'),
+    member(ids.f1, 'female'),
+    member(ids.f2, 'female'),
+  ];
+  const candidate = (
+    user_low: string,
+    user_high: string,
+    compat_low_to_high: number,
+    compat_high_to_low: number
+  ): CandidateEdgeRow => ({
+    user_low,
+    user_high,
+    compat_low_to_high,
+    compat_high_to_low,
+    pair_times_shown: 0,
+    pair_first_score: null,
+    pair_last_score: null,
+    pair_cooldown_until: null,
+    pair_retired_at: null,
+  });
+  const context: MatchingPlanContext = {
+    seed: 77,
+    evaluatedAt: new Date(NOW).toISOString(),
+    fairnessWindow: {
+      timeZone: 'Asia/Riyadh',
+      startsOn: '2026-07-26',
+      endsOn: '2026-08-01',
+      roundsElapsed: 1,
+    },
+  };
+
+  const result = planRound(
+    [
+      candidate(ids.m1, ids.f1, 0.8, 0.8),
+      candidate(ids.m1, ids.f2, 0.7, 0.99),
+      candidate(ids.m2, ids.f1, 0.99, 0.2),
+      candidate(ids.m2, ids.f2, 0.4, 0.4),
+    ],
+    memberRows,
+    resolveConfig({ allocator: 'anchored_maxmin_v1', rotation_min_set_size: 1 }),
+    context,
+    () => NOW
+  );
+
+  assert.ok(result.edges.some((edge) => edge.a === ids.m1 && edge.b === ids.f1));
+  assert.ok(!result.edges.some((edge) => edge.a === ids.m1 && edge.b === ids.f2));
 });

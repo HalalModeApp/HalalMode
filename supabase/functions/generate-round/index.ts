@@ -1,16 +1,24 @@
 /** Creates the daily introduction round at the planned Madinah Fajr time. */
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
-import { resolveStoredConfig, type MatchingConfig } from '../../../src/matching/config.ts';
+import {
+  algorithmVersionForConfig,
+  resolveStoredConfig,
+  type MatchingConfig,
+} from '../../../src/matching/config.ts';
 import { nextFajrAfter } from '../../../src/lib/prayerTimes.ts';
 import {
-  ALGORITHM_VERSION,
   liveFinalizationArgs,
   planRound,
   type RoundPlan,
   type CandidateEdgeRow,
   type MemberSignalRow,
 } from './matching.ts';
+import {
+  completeCandidateSnapshot,
+  parseCountPayload,
+  prepareCandidateSnapshot,
+} from './candidateSnapshot.ts';
 import {
   matchingPlanContext,
   matchingSeedForCycleDate,
@@ -128,7 +136,8 @@ async function planTomorrowFajr(now = new Date()) {
 }
 
 /**
- * Runs the v1 pipeline.
+ * Runs the version selected by the active matching configuration. Matcher V2
+ * remains the default; Matcher V3 is only reached by an inactive shadow config.
  *
  * A shadow run computes the identical round and writes it to
  * `shadow_round_edges` only. Its finalizer has no outcomes, expiry or
@@ -153,13 +162,14 @@ async function runMatchingV1Attempt(
     throw new Error('Matching configuration version is invalid');
   }
   const params: MatchingConfig = resolveStoredConfig(payload);
+  const algorithm = algorithmVersionForConfig(params);
 
   // The seed only breaks ties. Fairness-window position comes from the
   // database-bound Asia/Riyadh run context below, never from seed arithmetic.
   const seed = matchingSeedForCycleDate(cycleDate);
 
   const run = await client.rpc('matching_run_start_service', {
-    p_algorithm_version: ALGORITHM_VERSION,
+    p_algorithm_version: algorithm,
     p_config_version: configVersion,
     p_seed: seed,
     p_mode: mode,
@@ -179,15 +189,18 @@ async function runMatchingV1Attempt(
 
   try {
     const started = Date.now();
-    const snapshot = await client.rpc('matching_candidate_snapshot_prepare_service', {
-      p_run_id: runId,
-      p_fail_limit: params.fail_edges_after_filter,
-    });
-    if (snapshot.error) throw new Error(snapshot.error.message);
-    const snapshotMetrics = parseCountPayload(snapshot.data, [
-      'candidate_edge_count',
-      'potential_edge_count',
-    ]);
+    const snapshotMetrics = await prepareCandidateSnapshot(
+      client,
+      runId,
+      params.fail_edges_after_filter,
+      runContext.poolMemberCount
+    );
+    await completeCandidateSnapshot(
+      client,
+      runId,
+      snapshotMetrics.candidate_edge_count,
+      snapshotMetrics.scoring_complete
+    );
     const [edgeRows, members] = await Promise.all([
       fetchCandidateEdges(client, runId, snapshotMetrics.candidate_edge_count),
       client.rpc('matching_member_signals_service', { p_run_id: runId }),
@@ -232,6 +245,7 @@ async function runMatchingV1Attempt(
     return {
       runId,
       mode,
+      algorithm,
       pairsCreated: finalized.pairs_created,
       deferred: plan.deferredMembers,
       breaches: plan.thresholdBreaches,
@@ -289,18 +303,10 @@ async function runMatchingV1(
 /**
  * Writes a shadow round in batches, each its own short transaction.
  *
- * Small, and deliberately so. Validation is not linear in batch size — 25
- * pairs validate in 0.43s and 150 take about thirty, which is the shape of a
- * cost that grows with the square. So a bigger batch is worse than two smaller
- * ones, and the intuition that fewer round trips must be faster is exactly
- * backwards here.
- *
- * At forty, each call is well under a second and the whole round is a few
- * dozen quick calls. That is what makes it finish rather than get cut off
- * part-written, and it is why the number is this low rather than this high.
- *
- * The superlinearity itself is worth fixing at some point; until it is, this
- * keeps every unit of work small enough that it cannot matter.
+ * Keep this deliberately small: validation still takes locks and the caller
+ * giving up does not cancel a statement already running in Postgres. Small
+ * idempotent batches keep each transaction short and avoid a large retry
+ * holding the matching pool hostage.
  *
  * Batches are idempotent, so a retry re-sends rather than repairs. `close`
  * refuses to mark the run finished unless every declared pair arrived, which
@@ -409,25 +415,6 @@ async function fetchCandidateEdges(
     afterHigh = last.user_high;
   }
   return rows;
-}
-
-function parseCountPayload<T extends readonly string[]>(
-  payload: unknown,
-  keys: T
-): { [K in T[number]]: number } {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    throw new Error('Matching count payload is invalid');
-  }
-  const record = payload as Record<string, unknown>;
-  const result: Record<string, number> = {};
-  for (const key of keys) {
-    const parsed = typeof record[key] === 'number' ? record[key] : Number(record[key]);
-    if (!Number.isSafeInteger(parsed) || parsed < 0) {
-      throw new Error(`Matching count ${key} is invalid`);
-    }
-    result[key] = parsed;
-  }
-  return result as { [K in T[number]]: number };
 }
 
 interface FinalizationResult {
@@ -540,7 +527,7 @@ Deno.serve(async (request: Request) => {
     await client.from('round_generation_runs').delete().eq('cycle_date', timing.cycleDate);
     return Response.json({ error: passes.error.message }, { status: 500 });
   }
-  // The v1 pipeline is behind a release flag so the cohort can be widened
+  // The reciprocal pipeline is behind a release flag so the cohort can be widened
   // deliberately. Until it is enabled the previous generator still runs.
   const flag = await client.rpc('release_flag_active', { p_key: 'reciprocal_matching_v1' });
   const useV1 = !flag.error && flag.data === true;
@@ -559,7 +546,7 @@ Deno.serve(async (request: Request) => {
         pairsCreated: result.pairsCreated,
         deferredMembers: result.deferred,
         thresholdBreaches: result.breaches,
-        algorithm: ALGORITHM_VERSION,
+        algorithm: result.algorithm,
         expiresAt,
         cycleDate: timing.cycleDate,
       });
