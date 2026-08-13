@@ -290,6 +290,26 @@ function stableRounds(input: {
     if (committed.size === 0) break;
   }
 
+  // Anyone the rounds left short, filled from whatever is still free.
+  //
+  // Pairing can strand a member whose whole shortlist was taken by others —
+  // rare, but it showed up on thin shortlists, where two members finished with
+  // nothing while the greedy allocator left none. Nobody should end a round
+  // empty because the algorithm ran out of turns, so this sweeps up the
+  // remainder. Still pairs, so reciprocity and capacity are unaffected, and it
+  // only ever adds edges the rounds declined to reach.
+  for (const edge of ordered) {
+    const roomA = remaining.get(edge.a) ?? 0;
+    const roomB = remaining.get(edge.b) ?? 0;
+    if (roomA <= 0 || roomB <= 0) continue;
+    if (taken.has(pairKey(edge.a, edge.b))) continue;
+
+    remaining.set(edge.a, roomA - 1);
+    remaining.set(edge.b, roomB - 1);
+    taken.add(pairKey(edge.a, edge.b));
+    assigned.push(edge);
+  }
+
   return { assigned, anchored };
 }
 

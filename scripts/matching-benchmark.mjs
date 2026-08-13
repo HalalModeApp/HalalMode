@@ -219,6 +219,21 @@ function targetMetrics(assigned, members) {
     if (picked.get(edge.a)?.has(edge) && picked.get(edge.b)?.has(edge)) mutualPicked += 1;
   }
 
+  // The goal once members may keep as many of their set as they like: not
+  // "was my number one also theirs", but "how many mutual matches did this
+  // round actually produce". A keep is modelled as liking someone past a bar,
+  // so a match needs both sides over it — which is the real product event.
+  const KEEP_BAR = 0.62;
+  let expectedMutualMatches = 0;
+  const matchesPerMember = new Map();
+  for (const edge of assigned) {
+    if (edge.truthForward >= KEEP_BAR && edge.truthBackward >= KEEP_BAR) {
+      expectedMutualMatches += 1;
+      matchesPerMember.set(edge.a, (matchesPerMember.get(edge.a) ?? 0) + 1);
+      matchesPerMember.set(edge.b, (matchesPerMember.get(edge.b) ?? 0) + 1);
+    }
+  }
+
   let fullSets = 0;
   let totalSetSize = 0;
   const membersWithMutualTop = new Set();
@@ -245,6 +260,9 @@ function targetMetrics(assigned, members) {
     mutualPickedRate: assigned.length ? mutualPicked / assigned.length : 0,
     meanTrueReciprocal: assigned.length ? trueQuality / assigned.length : 0,
     capacityViolations: 0,
+    mutualMatches: expectedMutualMatches,
+    mutualMatchesPerMember: members.length ? (expectedMutualMatches * 2) / members.length : 0,
+    membersWithAnyMatchPct: members.length ? matchesPerMember.size / members.length : 0,
   };
 }
 
