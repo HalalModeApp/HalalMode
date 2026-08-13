@@ -159,11 +159,18 @@ can produce trustworthy measurements.
 ### Phase 2A — investigate incremental coverage before considering a rewrite
 
 Do not assume the matcher must compare the entire world in one run. A simpler
-and potentially cheaper model is to process a bounded, never-before-visited
-slice of the eligible universe on each job/day, retain only the best bounded
-private candidates per member, and move to another slice on the next cycle.
-Over many cycles, the app can cover the eligible universe without ever holding
-billions of pairs in memory at once.
+and potentially cheaper model is to split the giant member pool into bounded
+**discovery buckets** before pair eligibility is known. A job/day processes a
+small selection of raw buckets, evaluates real two-way eligibility inside them,
+retains only the best bounded private candidates per member, and moves to other
+raw buckets on later cycles. Over many cycles, the app can cover the eligible
+universe without ever holding billions of possible pairs in memory at once.
+
+These buckets are not claims that their pairs are eligible. They are only an
+efficient way to divide a huge search space. Eligibility is still evaluated
+after a bucket is opened, using the existing server-side rules in both
+directions. Do not discard a promising worldwide match merely because its raw
+bucket was not today's first bucket.
 
 This is an investigation first, not permission to invent a second matcher.
 Reuse the existing set-based eligibility, V2 scoring, V2 invariants, chunk
@@ -172,35 +179,57 @@ do not replace the system with a fresh general-purpose rewrite.
 
 The design must answer these questions with a small prototype and numbers:
 
-1. **How is a pair assigned to a slice?** Prefer a symmetric deterministic
-   pair-bucket key (for example, a seeded hash of the ordered member IDs),
-   combined with region/eligibility partitions. Both endpoints of a pair must
-   be considered in the same slice so reciprocity cannot be broken.
-2. **How does coverage advance?** Persist an epoch, bucket/cursor, seed, and
-   completion state. A retry must be idempotent; a restart must resume; a new
-   epoch must use a new deterministic shuffle so the same popular profiles are
-   not always processed first.
-3. **How are the best candidates retained?** Keep a bounded private top-K
-   reservoir or equivalent per member across processed slices. A later slice
-   must be able to replace an earlier candidate; otherwise “eventually” does
-   not improve the set. Never expose this reservoir or its scores to clients.
-4. **How is a daily round built?** Allocate only from the current private
-   reservoir plus the current slice, then persist reciprocal edges in one
-   bounded finalization step. The selected set must still have zero one-sided
-   edges, no duplicate pairs, and valid capacities.
-5. **What does “everyone eventually” mean?** Measure coverage over the eligible,
-   non-blocked, non-hidden, non-retired pair universe. Do not promise exposure
-   to pairs excluded by preferences, safety, age, distance, consent, or churn.
-6. **Does it improve the product target?** Compare incremental coverage with V2
+1. **How are raw discovery buckets formed?** Start with cheap indexed member
+   attributes: gender direction, broad age bands, language, country/region,
+   relocation openness, and other reviewed must-have signals. Use them to avoid
+   obviously hopeless searches (for example, mutually closed countries or an
+   impossible age range), but do not treat a bucket as an eligibility decision.
+   Soft preferences such as ideal age, distance, practice, or timing remain
+   scoring signals unless explicitly marked must-have.
+2. **How are buckets ordered?** Give each raw bucket a cheap upper bound on
+   possible two-way quality. Process the buckets most likely to contain a truly
+   strong worldwide match first, not merely the easiest local matches. A simple
+   first version may use reviewed compatibility bands plus a seeded shuffle;
+   a later version may use branch-and-bound-style upper bounds. Include a small
+   deterministic exploration share so the scheduler cannot become a filter
+   bubble.
+3. **How is pair work owned?** Once a raw bucket is opened, evaluate both
+   directions and score the actual pair with existing V2 code. A stable shared
+   bucket/pair key may assign work to one job, but it must never imply that the
+   pair was eligible before evaluation. Final assignment still requires a
+   reciprocal edge and both endpoints' capacities.
+4. **How does coverage advance?** Persist an epoch, raw-bucket cursor, seed,
+   upper-bound state, and completion state. A retry must be idempotent; a
+   restart must resume; a new epoch must use a new deterministic shuffle so the
+   same popular profiles are not always processed first. Revisit buckets after
+   profile changes, new members, or a scheduled refresh.
+5. **How are worldwide best candidates retained?** Keep a bounded private
+   top-K reservoir per member across all assessed buckets. A later bucket must
+   be able to replace an earlier candidate. At round time, select from the
+   best-known reservoir, not from whatever mediocre options happened to be in
+   the latest bucket. If unseen buckets still have a higher possible upper
+   bound, the system must mark the result provisional and continue searching on
+   later jobs rather than claim a global optimum.
+6. **How is a daily round built?** Allocate from the private reservoir plus the
+   current raw bucket, then persist reciprocal edges in one bounded finalization
+   step. The selected set must have zero one-sided edges, no duplicate pairs,
+   valid capacities, and no weak filler merely to reach five.
+7. **What does “everyone eventually” mean?** Measure coverage over the eligible,
+   non-blocked, non-hidden, non-retired pair universe after evaluation. Do not
+   promise exposure to pairs excluded by preferences, safety, age, distance,
+   consent, or churn. A 100-million-member pool may need many epochs; that is
+   acceptable if each job is bounded and coverage is visible and resumable.
+8. **Does it improve the product target?** Compare incremental coverage with V2
    on the same frozen graph: set-local mutual-first-choice rate, full-set
    coverage, mean reciprocal quality, exposure fairness, repeat rate, memory,
-   and time per slice. Include interrupted jobs, pool changes, imbalanced pools,
-   and cross-timezone members.
+   and time per bucket. Include interrupted jobs, pool changes, imbalanced pools,
+   worldwide/cross-timezone members, and multiple scheduler seeds.
 
-A viable slice design is allowed to take days or weeks to cover a very large
+A viable bucket design is allowed to take days or weeks to cover a very large
 eligible universe, but it must provide a measurable coverage guarantee,
-bounded per-job cost, and useful rounds every day. Do not trade away today's
-reciprocal safety merely to claim eventual reach.
+bounded per-job cost, useful rounds every day, and a path toward genuinely
+worldwide top candidates. Do not trade away today's reciprocal safety or the
+global-quality goal merely to claim eventual reach.
 
 ### Phase 3 — optimize the real product objective
 
@@ -292,11 +321,16 @@ exposure. Synthetic truth models are only regression tools.
 Use Occam's razor. Preserve and adapt the strongest working parts of Legacy V1,
 V2, and V3 instead of writing a fresh matcher. Investigate this alternative
 scale strategy explicitly: the app does not need to score every possible person
-before serving today's round. It can process a bounded, randomized, symmetric
-pair slice, retain the best private candidates, and advance to an untouched
-slice over later days or weeks. Prove that the slice schedule is resumable,
-eventually covers the eligible universe, keeps both endpoints together, and
-does not reduce reciprocal quality or fairness before implementing it.
+before serving today's round. Start with a giant pool of members, divide it
+into cheap discovery buckets using broad indexed attributes, and only then
+evaluate real two-way eligibility inside the selected buckets. Process the most
+promising worldwide buckets first using a simple reviewed compatibility bound,
+retain the best private candidates across buckets, and advance to untouched
+buckets over later days or weeks. Do not call raw bucket membership
+eligibility, and do not settle for mediocre local options just because they are
+easy to find. Prove that the schedule is resumable, eventually covers the
+eligible universe, can revisit buckets, keeps reciprocal safety, and does not
+reduce global-quality or fairness before implementing it.
 
 Work in this order:
 1. Finish a shadow-only hosted proof and fix the batched finalizer. Verify
@@ -307,9 +341,13 @@ Work in this order:
    and eliminate repeated ordered.find/indexOf scans with adjacency indexes or
    bounded queues. Preserve reciprocity, capacity, score floor, fairness
    boost_cap, privacy, and shadow write isolation.
-3. Investigate the incremental pair-slice/reservoir strategy described above.
+3. Investigate the raw discovery-bucket/reservoir strategy described above.
    Reuse the current SQL, V2 scoring, chunk progress, and finalization code;
    prototype the smallest measurable version before adding new abstractions.
+   The bucket is only a search partition: evaluate actual two-way eligibility
+   after opening it. Order buckets by a cheap upper bound for worldwide
+   reciprocal quality, include deterministic exploration, and keep a private
+   top-K reservoir so later buckets can replace weak earlier candidates.
 4. Only then test a small set-local improvement to V2. Do not ship another
    global anchor heuristic without proving mutual-first-choice lift across
    multiple seeds, truth models, imbalanced pools, genders, tiers, and regions.
