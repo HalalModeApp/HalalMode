@@ -289,18 +289,25 @@ async function runMatchingV1(
 /**
  * Writes a shadow round in batches, each its own short transaction.
  *
- * The size is a compromise between round trips and transaction length. Five
- * hundred pairs is a thousand rows, which lands well inside a second, so no
- * batch can approach the gateway's 125-second ceiling or hold a lock long
- * enough to block the run behind it. A round of a million pairs is two
- * thousand of these rather than one call that cannot finish.
+ * Small, and deliberately so. Validation is not linear in batch size — 25
+ * pairs validate in 0.43s and 150 take about thirty, which is the shape of a
+ * cost that grows with the square. So a bigger batch is worse than two smaller
+ * ones, and the intuition that fewer round trips must be faster is exactly
+ * backwards here.
+ *
+ * At forty, each call is well under a second and the whole round is a few
+ * dozen quick calls. That is what makes it finish rather than get cut off
+ * part-written, and it is why the number is this low rather than this high.
+ *
+ * The superlinearity itself is worth fixing at some point; until it is, this
+ * keeps every unit of work small enough that it cannot matter.
  *
  * Batches are idempotent, so a retry re-sends rather than repairs. `close`
  * refuses to mark the run finished unless every declared pair arrived, which
  * is what stops a lost batch becoming a round that quietly introduced fewer
  * people than it planned to.
  */
-const FINALIZE_BATCH_PAIRS = 500;
+const FINALIZE_BATCH_PAIRS = 40;
 
 async function finalizeShadowInBatches(
   client: SupabaseClient,
