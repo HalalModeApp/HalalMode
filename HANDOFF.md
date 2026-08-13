@@ -298,3 +298,8 @@ region is large enough for the comparison to be meaningful on its own.
   reciprocal edges and zero one-sided edges before the existing batched shadow
   finalizer stalled at 1,600 edges. Do not enable the release flag until the
   finalizer completes a full run and the outcome metrics are measured.
+- The local comparison now includes a privacy-safe deterministic cohort of 455
+  profiles and about 9,120 shortlist edges. V2 and V3 both finish in under a
+  second on that graph; the legacy V1 simulator and V2 also run on 454
+  profiles. These are capacity and completion checks, not evidence that the
+  estimator predicts real preferences.
