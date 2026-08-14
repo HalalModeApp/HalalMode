@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.finalize-account-deletions]
 verify_jwt = false
+
+[functions.send-notifications]
+verify_jwt = false

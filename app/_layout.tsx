@@ -18,6 +18,7 @@ import { AppState, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { installErrorReporting } from '@/lib/errorReporting';
 import { queryClient } from '@/lib/queryClient';
 import { I18nProvider } from '@/i18n';
 import { AuthGate, AuthProvider } from '@/state/auth';
@@ -39,6 +40,13 @@ export default function RootLayout() {
     Beiruti_600SemiBold,
     Beiruti_700Bold,
   });
+
+  // Before anything else can break. A crash on the very first screen is the
+  // one you can least afford to lose, so this is installed ahead of fonts,
+  // navigation and auth rather than alongside them.
+  useEffect(() => {
+    installErrorReporting();
+  }, []);
 
   useEffect(() => {
     // Hide on error too — a missing webfont should degrade, not deadlock launch.
